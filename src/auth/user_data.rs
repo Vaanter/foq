@@ -1,7 +1,13 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 pub(crate) struct UserData {
-  username: String,
-  acl: HashMap<PathBuf, bool>
+    pub(crate) username: String,
+    pub(crate) acl: BTreeMap<PathBuf, bool>,
+}
+
+impl UserData {
+    pub(crate) fn new(username: String, acl: BTreeMap<PathBuf, bool>) -> Self {
+        UserData { username, acl }
+    }
 }

@@ -1,3 +1,1 @@
-struct AuthProvider {
-
-}
+struct AuthProvider {}

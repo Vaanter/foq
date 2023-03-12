@@ -1,38 +1,35 @@
 use std::error::Error;
 use std::net::SocketAddr;
+use std::net::TcpListener as StdTcpListener;
+
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::broadcast::Receiver;
+
 use crate::handlers::standard_connection_handler::StandardConnectionHandler;
 
-use tokio::net::TcpListener;
-use std::net::TcpListener as StdTcpListener;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::listeners::listenable::Listenable;
-
 pub(crate) struct StandardListener {
-  listener: TcpListener,
-  handlers: Vec<StandardConnectionHandler>,
+    listener: TcpListener,
+    handlers: Vec<StandardConnectionHandler>,
+    shutdown_receiver: Receiver<()>,
 }
 
-impl Listenable for StandardListener {
-  fn listen(addr: SocketAddr) -> Result<Arc<Mutex<dyn Listenable>>, Box<dyn Error>> where Self: Sized {
-    let listener = Arc::from(Mutex::from(StandardListener {
-      listener: TcpListener::from_std(StdTcpListener::bind(addr)?)?,
-      handlers: vec![],
-    }));
-
-    {
-      let listener = listener.clone();
-      tokio::spawn(async move {
-        println!("Listening on TCP!");
-        listener.lock().await.listener.accept().await.unwrap();
-        println!("No longer listening on TCP!");
-      });
+impl StandardListener {
+    pub(crate) fn new(
+        addr: SocketAddr,
+        shutdown_receiver: Receiver<()>,
+    ) -> Result<Self, Box<dyn Error>> {
+        Ok(StandardListener {
+            listener: TcpListener::from_std(StdTcpListener::bind(addr)?)?,
+            handlers: vec![],
+            shutdown_receiver,
+        })
     }
 
-    Ok(listener)
-  }
-
-  fn stop_listening(&self) -> Result<(), Box<dyn Error>> {
-    todo!()
-  }
+    pub(crate) async fn accept(&mut self) -> Result<TcpStream, anyhow::Error> {
+        let value = tokio::select! {
+          stream = self.listener.accept() => Ok(stream.unwrap().0),
+          _ = self.shutdown_receiver.recv() => Err(anyhow::anyhow!("Standard listener shutdown!"))
+        };
+        value
+    }
 }

@@ -1,10 +1,15 @@
-use std::error::Error;
+use async_trait::async_trait;
+use s2n_quic::stream::BidirectionalStream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use crate::io::session::Session;
-use crate::io::connection_mode::ConnectionMode;
+use tokio::net::TcpStream;
+use tokio::sync::broadcast::Receiver;
 
+#[async_trait]
 pub(crate) trait ConnectionHandler {
-  fn send_control_message(&self, message: String) -> Result<(), Box<dyn Error>> where Self: Sized;
-  fn get_data_stream<T: AsyncRead + AsyncWrite>(&self, mode: ConnectionMode) -> Result<T, Box<dyn Error>> where Self: Sized;
-  fn get_session(&self) -> &Session where Self: Sized;
+    async fn handle(&mut self, mut receiver: Receiver<()>) -> Result<(), anyhow::Error>;
 }
+
+pub(crate) trait AsyncReadWrite: AsyncRead + AsyncWrite + Sync + Send + Unpin {}
+
+impl AsyncReadWrite for TcpStream {}
+impl AsyncReadWrite for BidirectionalStream {}

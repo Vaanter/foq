@@ -1,4 +1,4 @@
 pub(crate) enum ConnectionMode {
-  ACTIVE,
-  PASSIVE,
+    ACTIVE,
+    PASSIVE,
 }

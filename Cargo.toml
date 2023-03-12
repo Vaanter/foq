@@ -6,9 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.64"
+anyhow = "1.0.69"
+async-trait = "0.1.66"
 bytes = "1.4.0"
 rustls = {version = "0.20.8", features = ["quic", "dangerous_configuration"]}
 rustls-pemfile = "1.0.2"
 s2n-quic = {version = "1.16.0", default-features = false, features = ["provider-address-token-default", "provider-tls-rustls"] }
-tokio = {version = "1.25.0", features = ["full"]}
+strum = "0.24.1"
+strum_macros = "0.24.3"
+tokio = {version = "1.26.0", features = ["full"]}
