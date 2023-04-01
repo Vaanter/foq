@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+#[derive(Clone, Debug)]
 pub(crate) struct UserData {
     pub(crate) username: String,
     pub(crate) acl: BTreeMap<PathBuf, bool>,
