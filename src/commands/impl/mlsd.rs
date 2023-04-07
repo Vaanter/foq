@@ -14,38 +14,6 @@ use crate::io::session::Session;
 
 pub(crate) struct Mlsd;
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Display)]
-#[strum(serialize_all = "lowercase")]
-pub(crate) enum EntryType {
-  FILE,
-  DIR,
-  CDIR,
-  PDIR,
-  LINK,
-}
-
-pub(crate) struct EntryData {
-  size: u64,
-  entry_type: EntryType,
-  perm: String,
-  modify: u128,
-  name: String,
-}
-
-impl ToString for EntryData {
-  fn to_string(&self) -> String {
-    let mut buffer = String::new();
-    buffer.push_str(&format!("size={};", self.size));
-    buffer.push_str(&format!("type={};", self.entry_type));
-    buffer.push_str(&format!("modify={};", self.modify));
-    buffer.push_str(&format!("perm={};", self.perm));
-    buffer.push_str(&format!(" {}", self.name));
-    buffer.push('\r');
-    buffer.push('\n');
-    buffer
-  }
-}
-
 impl Mlsd {
   fn get_formatted_dir_listing(path: &Path) -> Vec<EntryData> {
     let directory_contents = path.read_dir();
@@ -78,13 +46,6 @@ impl Mlsd {
               panic!("Unknown file type!");
             }
           };
-          listing.push(EntryData {
-            size: metadata.len(),
-            entry_type,
-            perm: perm.to_string(),
-            modify: metadata.modified().unwrap().elapsed().unwrap().as_nanos(),
-            name: entry.as_ref().unwrap().file_name().into_string().unwrap(),
-          });
         }
         return listing;
       }
