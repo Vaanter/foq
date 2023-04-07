@@ -8,6 +8,7 @@ use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
 use crate::io::command_processor::CommandProcessor;
 
+#[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub(crate) struct Feat;
 
 const FEATURES: [&str; 1] = ["MLSD"];
@@ -37,13 +38,14 @@ impl Executable for Feat {
 mod tests {
   use std::sync::Arc;
   use tokio::sync::mpsc::channel;
-  use tokio::sync::Mutex;
+  use tokio::sync::{Mutex, RwLock};
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::feat::Feat;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::command_processor::CommandProcessor;
+  use crate::io::session_properties::SessionProperties;
   use crate::utils::test_utils::TestReplySender;
 
   #[tokio::test]
@@ -55,7 +57,8 @@ mod tests {
   #[tokio::test]
   async fn full_reply() {
     const EXPECTED: &str = "211-Features supported: \r\n MLSD\r\n211 END\r\n";
-    let mut session = Session::new_with_defaults(Arc::new(Mutex::new(
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let mut session = CommandProcessor::new(session_properties.clone(), Arc::new(Mutex::new(
       StandardDataChannelWrapper::new("127.0.0.1:0".parse().unwrap()),
     )));
     let (tx, mut rx) = channel(1024);

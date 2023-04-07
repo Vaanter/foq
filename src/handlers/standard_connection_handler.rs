@@ -5,8 +5,7 @@ use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::mpsc::{channel, Sender};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 
 use crate::commands::executable::Executable;
@@ -16,14 +15,15 @@ use crate::handlers::reply_sender::ReplySender;
 use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::session::Session;
+use crate::io::command_processor::CommandProcessor;
+use crate::io::session_properties::SessionProperties;
 
 pub(crate) struct StandardConnectionHandler {
   data_channel_wrapper: Arc<Mutex<StandardDataChannelWrapper>>,
-  session: Arc<Mutex<Session>>,
+  command_processor: Arc<Mutex<CommandProcessor>>,
   control_channel: BufReader<ReadHalf<TcpStream>>,
   reply_sender: ReplySender<TcpStream>,
-  tx: Sender<Reply>,
+  session_properties: Arc<RwLock<SessionProperties>>,
 }
 
 impl StandardConnectionHandler {
@@ -33,20 +33,23 @@ impl StandardConnectionHandler {
     )));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
-    let (tx, rx) = channel(8096);
     let reply_sender = ReplySender::new(stream_halves.1);
-    let session = Arc::new(Mutex::new(Session::new_with_defaults(wrapper.clone())));
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let command_processor = Arc::new(Mutex::new(CommandProcessor::new(
+      session_properties.clone(),
+      wrapper.clone(),
+    )));
     StandardConnectionHandler {
       data_channel_wrapper: wrapper,
-      session,
+      command_processor,
       control_channel,
       reply_sender,
-      tx,
+      session_properties,
     }
   }
 
-  pub(crate) fn get_session(&self) -> Arc<Mutex<Session>> {
-    self.session.clone()
+  pub(crate) fn get_command_processor(&self) -> Arc<Mutex<CommandProcessor>> {
+    self.command_processor.clone()
   }
 
   pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
@@ -67,7 +70,7 @@ impl StandardConnectionHandler {
       anyhow::bail!("Connection closed!");
     }
 
-    let session = self.session.clone();
+    let session = self.command_processor.clone();
     //tokio::spawn(async move {
     session
       .lock()

@@ -1,9 +1,7 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
-use crate::auth::user_data::UserData;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
@@ -21,33 +19,23 @@ use crate::commands::r#impl::syst::Syst;
 use crate::commands::r#impl::user::User;
 use crate::handlers::data_channel_wrapper::DataChannelWrapper;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::data_type::DataType;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::transfer_mode::TransferMode;
 use crate::io::session_properties::SessionProperties;
 
-  pub(crate) cwd: PathBuf,
-  pub(crate) mode: TransferMode,
-  pub(crate) data_type: DataType,
-  pub(crate) user_data: Option<UserData>,
 #[derive(Clone)]
 pub(crate) struct CommandProcessor {
+  pub(crate) session_properties: Arc<RwLock<SessionProperties>>,
   pub(crate) data_wrapper: Arc<Mutex<dyn DataChannelWrapper + Send + Sync>>,
 }
 
-  pub(crate) fn new_with_defaults(
 impl CommandProcessor {
+  pub(crate) fn new(
+    session_properties: Arc<RwLock<SessionProperties>>,
     data_wrapper: Arc<Mutex<dyn DataChannelWrapper + Send + Sync>>,
   ) -> Self {
-    let cwd = std::env::current_dir().unwrap_or_else(|e| {
-      panic!("Directory where the executable is stored must be accessible! Error: {e}")
-    });
-      cwd,
-      mode: TransferMode::Block,
-      data_type: DataType::BINARY,
-      user_data: None,
     CommandProcessor {
+      session_properties,
       data_wrapper,
     }
   }
@@ -89,28 +77,5 @@ impl CommandProcessor {
         .await
       }
     };
-  }
-
-  pub(crate) fn is_logged_in(&self) -> bool {
-    return self.user_data.is_some();
-  }
-
-  pub(crate) fn set_user(&mut self, user: UserData) {
-    self.user_data = Some(user);
-  }
-
-  pub(crate) fn set_path(&mut self, new_path: PathBuf) -> bool {
-    let accessible = self.is_logged_in()
-      && self
-        .user_data
-        .as_ref()
-        .expect("User should be logged in here!")
-        .acl
-        .iter()
-        .any(|ac| new_path.starts_with(ac.0) && *ac.1);
-    if accessible {
-      self.cwd = new_path;
-    }
-    accessible
   }
 }

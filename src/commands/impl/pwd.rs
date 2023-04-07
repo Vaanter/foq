@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use async_trait::async_trait;
 
 use crate::commands::command::Command;
@@ -21,20 +18,36 @@ impl Executable for Pwd {
     reply_sender: &mut impl ReplySend,
   ) {
     debug_assert_eq!(command.command, Commands::PWD);
-    if command.argument.is_empty() {
+
+    if !command.argument.is_empty() {
       Pwd::reply(
-        Reply::new(ReplyCode::CommandOkay, session.cwd.to_str().unwrap()),
+        Reply::new(
+          ReplyCode::SyntaxErrorInParametersOrArguments,
+          "PWD must not have an argument!",
+        ),
         reply_sender,
       )
       .await;
       return;
     }
 
-    let new_path = PathBuf::from_str(&command.argument).unwrap();
-    let reply = match session.set_path(new_path) {
-      true => Reply::new(ReplyCode::CommandOkay, session.cwd.to_str().unwrap()),
-      false => Reply::new(ReplyCode::FileUnavailable, ""),
-    };
-    Pwd::reply(reply, reply_sender).await;
+    if !command_processor.session_properties.read().await.is_logged_in() {
+      Pwd::reply(
+        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
+        reply_sender,
+      )
+      .await;
+      return;
+    }
+
+    let session_properties = command_processor.session_properties.read().await;
+    let reply_message = session_properties
+      .file_system_view_root
+      .get_current_working_directory();
+    Pwd::reply(
+      Reply::new(ReplyCode::CommandOkay, reply_message),
+      reply_sender,
+    )
+    .await;
   }
 }

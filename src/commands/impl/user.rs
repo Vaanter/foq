@@ -1,9 +1,5 @@
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 
-use crate::auth::user_data::UserData;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
@@ -35,20 +31,14 @@ impl Executable for User {
       return;
     }
 
-    let acl = BTreeMap::from([(PathBuf::from("C:/"), true)]);
+    let mut session_properties = command_processor.session_properties.write().await;
+    let _ = session_properties
+      .login_form
+      .username
+      .insert(command.argument.clone());
 
-    // Test implementation!
-    let user_data = UserData {
-      username: username.to_string(),
-      acl,
-    };
-
-    session.set_user(user_data);
     User::reply(
-      Reply::new(
-        ReplyCode::UserNameOkay,
-        &format!("Password required for {}", username),
-      ),
+      Reply::new(ReplyCode::UserNameOkay, "User name okay, need password."),
       reply_sender,
     )
     .await;

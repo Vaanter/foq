@@ -30,6 +30,7 @@ impl TestReplySender {
 #[async_trait]
 impl ReplySend for TestReplySender {
     async fn send_control_message(&self, reply: Reply) {
+        println!("TestReplySender: received reply: {}", reply.to_string().trim_end());
         self.tx.send(reply).await.unwrap();
     }
 }

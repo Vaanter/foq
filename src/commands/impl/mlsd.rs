@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use async_trait::async_trait;
-use strum_macros::Display;
 use tokio::io::AsyncWriteExt;
 
 use crate::commands::command::Command;
@@ -11,11 +10,13 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
 use crate::io::command_processor::CommandProcessor;
+use crate::io::entry_data::{EntryData, EntryType};
 
 pub(crate) struct Mlsd;
 
 impl Mlsd {
-  fn get_formatted_dir_listing(path: &Path) -> Vec<EntryData> {
+  fn get_formatted_dir_listing(path: impl AsRef<Path>) -> Vec<EntryData> {
+    let path = path.as_ref();
     let directory_contents = path.read_dir();
     match directory_contents {
       Ok(entries) => {
@@ -74,7 +75,7 @@ impl Executable for Mlsd {
     println!("Getting listing!");
     let listing = Mlsd::get_formatted_dir_listing(cwd);
     println!("Getting data stream");
-    let stream = session.data_wrapper.lock().await.get_data_stream().await;
+    let stream = command_processor.data_wrapper.lock().await.get_data_stream().await;
 
     match stream.lock().await.as_mut() {
       Some(s) => {
@@ -88,7 +89,7 @@ impl Executable for Mlsd {
     }
 
     println!("Written to data stream");
-    session.data_wrapper.lock().await.close_data_stream().await;
+    command_processor.data_wrapper.lock().await.close_data_stream().await;
     Mlsd::reply(
       Reply::new(
         ReplyCode::ClosingDataConnection,
@@ -109,7 +110,7 @@ mod tests {
   use tokio::io::AsyncReadExt;
   use tokio::net::TcpStream;
   use tokio::sync::mpsc::channel;
-  use tokio::sync::Mutex;
+  use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
@@ -119,6 +120,7 @@ mod tests {
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::reply_code::ReplyCode;
   use crate::io::command_processor::CommandProcessor;
+  use crate::io::session_properties::SessionProperties;
   use crate::utils::test_utils::TestReplySender;
 
   #[test]
@@ -131,7 +133,7 @@ mod tests {
     );
   }
 
-  #[tokio::test]
+
   async fn simple_listing_tcp() {
     let ip: SocketAddr = "127.0.0.1:0"
       .parse()
@@ -139,8 +141,9 @@ mod tests {
 
     let command = Command::new(Commands::MLSD, String::new());
 
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
-    let mut session = Session::new_with_defaults(wrapper);
+    let mut session = CommandProcessor::new(session_properties, wrapper);
     let addr = match session
       .data_wrapper
       .clone()

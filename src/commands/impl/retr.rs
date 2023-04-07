@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use async_trait::async_trait;
 use tokio::fs::OpenOptions;
 
@@ -10,7 +7,7 @@ use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::session::Session;
+use crate::io::command_processor::CommandProcessor;
 
 pub(crate) struct Retr;
 
@@ -28,52 +25,20 @@ impl Executable for Retr {
       return;
     }
 
-    //TODO path handling
-
-    let mut file_path = PathBuf::from_str(&command.argument).unwrap(); // Cannot fail
-
-    // Check if file exists and server has permissions to access it
-    if let Err(_) | Ok(false) = file_path.try_exists() {
-      reply_sender
-        .send_control_message(Reply::new(
-          ReplyCode::FileUnavailable,
-          "File does not exist or insufficient permissions!",
-        ))
-        .await;
+    let session_properties = command_processor.session_properties.read().await;
+    
+    if !session_properties.is_logged_in() {
+      Retr::reply(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"), reply_sender).await;
       return;
     }
 
-    if file_path.is_relative() {
-      file_path = session.cwd.clone().join(file_path);
+    let file_path = session_properties.file_system_view_root.get_file(&command.argument);
+    if file_path.is_err() {
+      Retr::reply(Reply::new(ReplyCode::FileUnavailable, format!("Insufficient permissions! {}", file_path.unwrap_err())), reply_sender).await;
+      return;
     }
+    let file_path = file_path.unwrap();
 
-    // Check if user is logged in and has access permissions
-    match &session.user_data {
-      Some(user_data) => {
-        let acl = &user_data.acl;
-        let access = acl.iter().any(|ac| {
-          file_path
-            .parent()
-            .expect("File must have parent!")
-            .starts_with(ac.0)
-            && *ac.1
-        });
-        if !access {
-          reply_sender
-            .send_control_message(Reply::new(
-              ReplyCode::FileUnavailable,
-              "User has no permissions for this file",
-            ))
-            .await;
-          return;
-        }
-      }
-      None => {
-        reply_sender
-          .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "Log in first!"))
-          .await;
-        return;
-      }
     if let Err(_) | Ok(false) = file_path.try_exists() {
       Retr::reply(Reply::new(ReplyCode::FileUnavailable, "File does not exist!"), reply_sender).await;
       return;
@@ -172,10 +137,11 @@ mod tests {
   use tokio::io::AsyncReadExt;
   use tokio::net::TcpStream;
   use tokio::sync::mpsc::channel;
-  use tokio::sync::Mutex;
+  use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
-
   use crate::auth::user_data::UserData;
+  use crate::auth::user_permission::UserPermission;
+
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
@@ -183,6 +149,8 @@ mod tests {
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::reply_code::ReplyCode;
   use crate::io::command_processor::CommandProcessor;
+  use crate::io::file_system_view::FileSystemView;
+  use crate::io::session_properties::SessionProperties;
   use crate::utils::test_utils::TestReplySender;
 
   async fn common(file_name: &'static str) {
@@ -196,13 +164,16 @@ mod tests {
 
     let command = Command::new(Commands::RETR, file_name);
 
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let mut user_data = UserData::new(String::from("test"), String::from("test"));
+    let label = "test";
+    let view = FileSystemView::new(current_dir().unwrap(), label.clone(), HashSet::from([UserPermission::READ]));
+    user_data.add_view(view);
+    session_properties.write().await.login(user_data);
+    session_properties.write().await.file_system_view_root.change_working_directory(label);
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
-    let mut session = Session::new_with_defaults(wrapper);
-    let user = UserData::new(
-      "Test".to_string(),
-      BTreeMap::from([(PathBuf::from("C:\\"), true)]),
-    );
-    session.set_user(user);
+    let mut session = CommandProcessor::new(session_properties.clone(), wrapper);
     let addr = match session
       .data_wrapper
       .clone()

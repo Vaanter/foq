@@ -25,7 +25,7 @@ impl Reply {
 
 impl ToString for Reply {
   fn to_string(&self) -> String {
-    let mut buffer = String::new();
+    let mut buffer;
     if self.lines.len() < 2 {
       buffer = format!(
         "{} {}\r\n",

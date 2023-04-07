@@ -6,26 +6,26 @@ use s2n_quic::stream::BidirectionalStream;
 use s2n_quic::Connection;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
 use crate::handlers::reply_sender::ReplySender;
+use crate::io::command_processor::CommandProcessor;
 use crate::io::reply::Reply;
-use crate::io::session::Session;
+use crate::io::session_properties::SessionProperties;
 
 pub(crate) struct QuicOnlyConnectionHandler {
   pub(crate) connection: Arc<Mutex<Connection>>,
   data_channel_wrapper: Arc<Mutex<QuicOnlyDataChannelWrapper>>,
-  session: Arc<Mutex<Session>>,
+  command_processor: Arc<Mutex<CommandProcessor>>,
   shutdown_receiver: Receiver<()>,
   control_channel: Option<BufReader<ReadHalf<BidirectionalStream>>>,
   reply_loop: Option<JoinHandle<()>>,
   reply_sender: Option<ReplySender<BidirectionalStream>>,
-  tx: Option<Sender<Reply>>,
+  session_properties: Arc<RwLock<SessionProperties>>,
 }
 
 impl QuicOnlyConnectionHandler {
@@ -36,22 +36,27 @@ impl QuicOnlyConnectionHandler {
       addr,
       connection.clone(),
     )));
-    let session = Arc::new(Mutex::new(Session::new_with_defaults(wrapper.clone())));
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let command_processor = Arc::new(Mutex::new(CommandProcessor::new(
+      session_properties.clone(),
+      wrapper.clone(),
+    )));
 
     QuicOnlyConnectionHandler {
       connection,
       data_channel_wrapper: wrapper,
-      session,
+      command_processor,
       shutdown_receiver,
       control_channel: None,
       reply_loop: None,
       reply_sender: None,
-      tx: None,
+      session_properties,
     }
   }
 
-  pub(crate) fn get_session(&self) -> Arc<Mutex<Session>> {
-    self.session.clone()
+  pub(crate) fn get_command_processor(&self) -> Arc<Mutex<CommandProcessor>> {
+    self.command_processor.clone()
   }
 
   async fn await_command(&mut self) -> Option<Reply> {
@@ -72,12 +77,9 @@ impl QuicOnlyConnectionHandler {
       }
     };
     if bytes > 0usize {
-      let session = self.get_session();
-      session
-        .lock()
-        .await
-        .evaluate(buf, self.reply_sender.as_mut().unwrap())
-        .await;
+      let session = self.command_processor.clone();
+      let reply_sender = self.reply_sender.as_mut().unwrap();
+      session.lock().await.evaluate(buf, reply_sender).await;
       return None;
     }
     None
@@ -85,21 +87,8 @@ impl QuicOnlyConnectionHandler {
 
   async fn create_control_channel(&mut self) -> Result<(), anyhow::Error> {
     let conn = self.connection.clone();
-    let result = match timeout(
-      Duration::from_secs(10),
-      conn.lock().await.accept_bidirectional_stream(),
-    )
-    .await
-    {
-      Ok(Ok(Some(stream))) => Ok(stream),
-      Ok(Ok(None)) => Err(anyhow::anyhow!(
-        "Connection closed while awaiting control stream!"
-      )),
-      Ok(Err(e)) => Err(anyhow::anyhow!(e)),
-      Err(e) => Err(anyhow::anyhow!(e)),
-    };
 
-    return match result {
+    return match conn.lock().await.open_bidirectional_stream().await {
       Ok(control_channel) => {
         let (reader, writer) = tokio::io::split(control_channel);
         let control_channel = BufReader::new(reader);
@@ -108,14 +97,8 @@ impl QuicOnlyConnectionHandler {
         let _ = self.reply_sender.insert(reply_sender);
         Ok(())
       }
-      Err(e) => Err(e),
+      Err(e) => Err(e.into()),
     };
-  }
-}
-
-impl Drop for QuicOnlyConnectionHandler {
-  fn drop(&mut self) {
-    println!("QuicOnlyConnectionHandler dropped");
   }
 }
 
@@ -219,10 +202,13 @@ mod tests {
       }
     };
 
-    let client_cc = match connection.open_bidirectional_stream().await {
-      Ok(c) => c,
+    let client_cc = match connection.accept_bidirectional_stream().await {
+      Ok(Some(c)) => c,
+      Ok(None) => {
+        panic!("Connection closed when accepting control channel!")
+      }
       Err(e) => {
-        panic!("Client failed to open control channel bidi! {}", e);
+        panic!("Client failed to accept control channel! {}", e);
       }
     };
 
