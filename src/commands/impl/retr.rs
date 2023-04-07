@@ -16,15 +16,14 @@ pub(crate) struct Retr;
 
 #[async_trait]
 impl Executable for Retr {
-  async fn execute(session: &mut Session, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
     debug_assert_eq!(command.command, Commands::RETR);
 
     if command.argument.is_empty() {
-      reply_sender
-        .send_control_message(Reply::new(
+      Retr::reply(Reply::new(
           ReplyCode::SyntaxErrorInParametersOrArguments,
           "No file specified!",
-        ))
+        ), reply_sender)
         .await;
       return;
     }
@@ -75,9 +74,12 @@ impl Executable for Retr {
           .await;
         return;
       }
+    if let Err(_) | Ok(false) = file_path.try_exists() {
+      Retr::reply(Reply::new(ReplyCode::FileUnavailable, "File does not exist!"), reply_sender).await;
+      return;
     }
 
-    let data_channel = session
+    let data_channel = command_processor
       .data_wrapper
       .clone()
       .lock()
@@ -87,11 +89,10 @@ impl Executable for Retr {
     let mut data_channel = match data_channel.try_lock() {
       Ok(dc) => {
         if dc.is_none() {
-          reply_sender
-            .send_control_message(Reply::new(
+          Retr::reply(Reply::new(
               ReplyCode::BadSequenceOfCommands,
               "Data channel must be open first!",
-            ))
+            ), reply_sender)
             .await;
           return;
         }
@@ -99,11 +100,10 @@ impl Executable for Retr {
       }
       Err(e) => {
         eprintln!("Data channel is not available! {e}");
-        reply_sender
-          .send_control_message(Reply::new(
+        Retr::reply(Reply::new(
             ReplyCode::BadSequenceOfCommands,
             "Data channel must be open first!",
-          ))
+          ), reply_sender)
           .await;
         return;
       }
@@ -112,21 +112,19 @@ impl Executable for Retr {
     let mut file = match OpenOptions::new().read(true).open(file_path).await {
       Ok(file) => file,
       Err(_) => {
-        reply_sender
-          .send_control_message(Reply::new(
+        Retr::reply(Reply::new(
             ReplyCode::RequestedFileActionNotTaken,
             "File inaccessible!",
-          ))
+          ), reply_sender)
           .await;
         return;
       }
     };
 
-    reply_sender
-      .send_control_message(Reply::new(
+    Retr::reply(Reply::new(
         ReplyCode::FileStatusOkay,
         "Starting file transfer!",
-      ))
+      ), reply_sender)
       .await;
 
     let success = match tokio::io::copy(&mut file, data_channel.as_mut().unwrap()).await {
@@ -141,32 +139,31 @@ impl Executable for Retr {
     };
 
     if success {
-      reply_sender
-        .send_control_message(Reply::new(
+      Retr::reply(Reply::new(
           ReplyCode::ClosingDataConnection,
           "Transfer complete!",
-        ))
+        ), reply_sender)
         .await;
     } else {
-      reply_sender
-        .send_control_message(Reply::new(
+      Retr::reply(Reply::new(
           ReplyCode::ConnectionClosedTransferAborted,
           "Error occurred during transfer!",
-        ))
+        ), reply_sender)
         .await;
     }
 
     // Needed to release the lock. Maybe find a better way to do this?
     drop(data_channel);
-    session.data_wrapper.lock().await.close_data_stream().await;
+    command_processor.data_wrapper.lock().await.close_data_stream().await;
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::collections::BTreeMap;
+  use std::collections::HashSet;
+  use std::env::current_dir;
   use std::net::SocketAddr;
-  use std::path::{Path, PathBuf};
+  use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -185,7 +182,7 @@ mod tests {
   use crate::commands::r#impl::retr::Retr;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::reply_code::ReplyCode;
-  use crate::io::session::Session;
+  use crate::io::command_processor::CommandProcessor;
   use crate::utils::test_utils::TestReplySender;
 
   async fn common(file_name: &'static str) {

@@ -6,7 +6,7 @@ use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::session::Session;
+use crate::io::command_processor::CommandProcessor;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub(crate) struct Auth;
@@ -14,7 +14,7 @@ pub(crate) struct Auth;
 #[async_trait]
 impl Executable for Auth {
   async fn execute(
-    session: &mut Session,
+    command_processor: &mut CommandProcessor,
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {

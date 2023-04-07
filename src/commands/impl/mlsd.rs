@@ -10,7 +10,7 @@ use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::session::Session;
+use crate::io::command_processor::CommandProcessor;
 
 pub(crate) struct Mlsd;
 
@@ -59,7 +59,7 @@ impl Mlsd {
 
 #[async_trait]
 impl Executable for Mlsd {
-  async fn execute(session: &mut Session, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
     debug_assert_eq!(command.command, Commands::MLSD);
 
     Mlsd::reply(
@@ -118,7 +118,7 @@ mod tests {
   use crate::commands::r#impl::mlsd::Mlsd;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::reply_code::ReplyCode;
-  use crate::io::session::Session;
+  use crate::io::command_processor::CommandProcessor;
   use crate::utils::test_utils::TestReplySender;
 
   #[test]

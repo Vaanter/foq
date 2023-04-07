@@ -19,33 +19,35 @@ use crate::commands::r#impl::r#type::Type;
 use crate::commands::r#impl::stor::Stor;
 use crate::commands::r#impl::syst::Syst;
 use crate::commands::r#impl::user::User;
-use crate::handlers::data_wrapper::DataChannelWrapper;
+use crate::handlers::data_channel_wrapper::DataChannelWrapper;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::data_type::DataType;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
 use crate::io::transfer_mode::TransferMode;
+use crate::io::session_properties::SessionProperties;
 
-pub(crate) struct Session {
   pub(crate) cwd: PathBuf,
   pub(crate) mode: TransferMode,
   pub(crate) data_type: DataType,
   pub(crate) user_data: Option<UserData>,
+#[derive(Clone)]
+pub(crate) struct CommandProcessor {
   pub(crate) data_wrapper: Arc<Mutex<dyn DataChannelWrapper + Send + Sync>>,
 }
 
-impl Session {
   pub(crate) fn new_with_defaults(
+impl CommandProcessor {
     data_wrapper: Arc<Mutex<dyn DataChannelWrapper + Send + Sync>>,
   ) -> Self {
     let cwd = std::env::current_dir().unwrap_or_else(|e| {
       panic!("Directory where the executable is stored must be accessible! Error: {e}")
     });
-    Session {
       cwd,
       mode: TransferMode::Block,
       data_type: DataType::BINARY,
       user_data: None,
+    CommandProcessor {
       data_wrapper,
     }
   }

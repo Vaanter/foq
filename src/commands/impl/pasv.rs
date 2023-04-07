@@ -10,16 +10,16 @@ use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::session::Session;
+use crate::io::command_processor::CommandProcessor;
 
 pub(crate) struct Pasv;
 
 #[async_trait]
 impl Executable for Pasv {
-  async fn execute(session: &mut Session, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
     debug_assert_eq!(command.command, Commands::PASV);
 
-    match timeout(Duration::from_secs(5), session.data_wrapper.clone().lock()).await {
+    match timeout(Duration::from_secs(5), command_processor.data_wrapper.clone().lock()).await {
       Ok(mut wrapper) => {
         let reply = match wrapper.open_data_stream().await.unwrap() {
           SocketAddr::V4(addr) => Reply::new(
@@ -65,15 +65,14 @@ mod tests {
   use tokio::sync::mpsc::channel;
   use tokio::sync::Mutex;
   use tokio::time::timeout;
+
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
-
   use crate::commands::r#impl::pasv::Pasv;
-  use crate::handlers::data_wrapper::DataChannelWrapper;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::reply_code::ReplyCode;
-  use crate::io::session::Session;
+  use crate::io::command_processor::CommandProcessor;
   use crate::utils::test_utils::TestReplySender;
 
   #[test]

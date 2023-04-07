@@ -8,23 +8,26 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
+use crate::io::command_processor::CommandProcessor;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::session::Session;
 
 pub(crate) struct User;
 
 #[async_trait]
 impl Executable for User {
-  async fn execute(session: &mut Session, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(
+    command_processor: &mut CommandProcessor,
+    command: &Command,
+    reply_sender: &mut impl ReplySend,
+  ) {
     debug_assert_eq!(command.command, Commands::USER);
 
-    let username = command.argument.as_str();
-    if username.is_empty() {
+    if command.argument.is_empty() {
       User::reply(
         Reply::new(
           ReplyCode::SyntaxErrorInParametersOrArguments,
-          "No password supplied",
+          "No username specified!",
         ),
         reply_sender,
       )
