@@ -118,7 +118,7 @@ mod tests {
   use tokio::net::{TcpListener, TcpStream};
   use tokio::time::timeout;
 
-  use crate::handlers::data_wrapper::DataChannelWrapper;
+  use crate::handlers::data_channel_wrapper::DataChannelWrapper;
   use crate::handlers::standard_connection_handler::StandardConnectionHandler;
 
   #[tokio::test]

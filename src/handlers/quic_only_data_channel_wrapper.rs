@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
 use crate::handlers::connection_handler::AsyncReadWrite;
-use crate::handlers::data_wrapper::DataChannelWrapper;
+use crate::handlers::data_channel_wrapper::DataChannelWrapper;
 
 pub(crate) struct QuicOnlyDataChannelWrapper {
     addr: SocketAddr,

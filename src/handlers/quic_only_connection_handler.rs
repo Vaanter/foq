@@ -156,13 +156,13 @@ mod tests {
   use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
   use tokio::time::timeout;
 
-  use crate::handlers::data_wrapper::DataChannelWrapper;
+  use crate::handlers::data_channel_wrapper::DataChannelWrapper;
   use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
 
   pub static CERT_PEM: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../foq/certs/server-cert.pem"
+    "/certs/server-cert.pem"
   ));
 
   #[tokio::test]
