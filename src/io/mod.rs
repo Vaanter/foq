@@ -4,4 +4,7 @@ pub(crate) mod reply;
 pub(crate) mod reply_code;
 pub(crate) mod command_processor;
 pub(crate) mod transfer_mode;
+pub(crate) mod file_system_view;
+pub(crate) mod file_system_view_root;
+pub(crate) mod entry_data;
 pub(crate) mod error;
