@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 
@@ -7,61 +5,82 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
+use crate::io::command_processor::CommandProcessor;
+use crate::io::error::Error;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::command_processor::CommandProcessor;
-use crate::io::entry_data::{EntryData, EntryType};
 
+#[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub(crate) struct Mlsd;
-
-impl Mlsd {
-  fn get_formatted_dir_listing(path: impl AsRef<Path>) -> Vec<EntryData> {
-    let path = path.as_ref();
-    let directory_contents = path.read_dir();
-    match directory_contents {
-      Ok(entries) => {
-        let mut listing: Vec<EntryData> = vec![];
-        // TODO make this normal
-        let entries = path
-          .parent()
-          .unwrap()
-          .read_dir()
-          .unwrap()
-          .filter(|e| e.as_ref().unwrap().path() == path)
-          .chain(entries);
-        for entry in entries {
-          let metadata = entry.as_ref().unwrap().metadata().unwrap();
-          let (entry_type, perm) = {
-            // TODO better permission lookup
-            if entry.as_ref().unwrap().path() == path {
-              (EntryType::CDIR, "cdefp")
-            } else if entry.as_ref().unwrap().path() == path.parent().unwrap() {
-              (EntryType::PDIR, "cdefp")
-            } else if metadata.is_dir() {
-              (EntryType::DIR, "cdefp")
-            } else if metadata.is_file() {
-              (EntryType::FILE, "adefrw")
-            } else if metadata.is_symlink() {
-              (EntryType::LINK, "fr")
-            } else {
-              panic!("Unknown file type!");
-            }
-          };
-        }
-        return listing;
-      }
-      Err(e) => {
-        eprintln!("Directory listing failed! That's a big problem! {e}");
-        panic!("Listing failed TF?");
-      }
-    }
-  }
-}
 
 #[async_trait]
 impl Executable for Mlsd {
-  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(
+    command_processor: &mut CommandProcessor,
+    command: &Command,
+    reply_sender: &mut impl ReplySend,
+  ) {
     debug_assert_eq!(command.command, Commands::MLSD);
+
+    println!("Getting listing!");
+    let session_properties = command_processor.session_properties.read().await;
+    let listing = session_properties
+      .file_system_view_root
+      .list_dir(&command.argument);
+
+    let listing = match listing {
+      Ok(l) => l,
+      Err(Error::UserError) => {
+        Self::reply(
+          Reply::new(ReplyCode::NotLoggedIn, Error::UserError.to_string()),
+          reply_sender,
+        )
+        .await;
+        return;
+      }
+      Err(Error::OsError(_)) | Err(Error::SystemError) => {
+        Self::reply(
+          Reply::new(
+            ReplyCode::RequestedActionAborted,
+            "Requested action aborted: local error in processing.",
+          ),
+          reply_sender,
+        )
+        .await;
+        return;
+      }
+      Err(Error::NotADirectoryError) => {
+        Self::reply(
+          Reply::new(
+            ReplyCode::SyntaxErrorInParametersOrArguments,
+            Error::NotADirectoryError.to_string(),
+          ),
+          reply_sender,
+        )
+        .await;
+        return;
+      }
+      Err(Error::PermissionError) => {
+        Self::reply(
+          Reply::new(
+            ReplyCode::FileUnavailable,
+            Error::PermissionError.to_string(),
+          ),
+          reply_sender,
+        )
+        .await;
+        return;
+      }
+      Err(Error::NotFoundError(message)) | Err(Error::InvalidPathError(message)) => {
+        Self::reply(
+          Reply::new(ReplyCode::FileUnavailable, message),
+          reply_sender,
+        )
+        .await;
+        return;
+      }
+      Err(_) => unreachable!(),
+    };
 
     Mlsd::reply(
       Reply::new(
@@ -71,11 +90,13 @@ impl Executable for Mlsd {
       reply_sender,
     )
     .await;
-    let cwd = &session.cwd;
-    println!("Getting listing!");
-    let listing = Mlsd::get_formatted_dir_listing(cwd);
     println!("Getting data stream");
-    let stream = command_processor.data_wrapper.lock().await.get_data_stream().await;
+    let stream = command_processor
+      .data_wrapper
+      .lock()
+      .await
+      .get_data_stream()
+      .await;
 
     match stream.lock().await.as_mut() {
       Some(s) => {
@@ -89,7 +110,12 @@ impl Executable for Mlsd {
     }
 
     println!("Written to data stream");
-    command_processor.data_wrapper.lock().await.close_data_stream().await;
+    command_processor
+      .data_wrapper
+      .lock()
+      .await
+      .close_data_stream()
+      .await;
     Mlsd::reply(
       Reply::new(
         ReplyCode::ClosingDataConnection,
@@ -103,7 +129,7 @@ impl Executable for Mlsd {
 
 #[cfg(test)]
 mod tests {
-  use std::net::SocketAddr;
+  use std::collections::HashSet;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -113,38 +139,41 @@ mod tests {
   use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
+  use crate::auth::user_data::UserData;
+  use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::mlsd::Mlsd;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::reply_code::ReplyCode;
   use crate::io::command_processor::CommandProcessor;
+  use crate::io::file_system_view::FileSystemView;
+  use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
   use crate::utils::test_utils::TestReplySender;
 
-  #[test]
-  fn smoke() {
-    let cwd = std::env::current_dir().unwrap();
-    let listing = Mlsd::get_formatted_dir_listing(&cwd);
-    println!(
-      "{}",
-      listing.iter().map(|l| l.to_string()).collect::<String>()
-    );
-  }
-
-
+  #[tokio::test]
   async fn simple_listing_tcp() {
-    let ip: SocketAddr = "127.0.0.1:0"
+    let ip = "127.0.0.1:0"
       .parse()
       .expect("Test listener requires available IP:PORT");
 
     let command = Command::new(Commands::MLSD, String::new());
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let root_path = std::env::current_dir().unwrap().join("test_files");
+    let label = "test_files";
+    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view);
+
+    session_properties.write().await.login(user_data);
+
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
-    let mut session = CommandProcessor::new(session_properties, wrapper);
-    let addr = match session
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let addr = match command_processor
       .data_wrapper
       .clone()
       .lock()
@@ -168,34 +197,37 @@ mod tests {
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(e) = timeout(
-      Duration::from_secs(2),
-      Mlsd::execute(&mut session, &command, &mut reply_sender),
+      Duration::from_secs(3),
+      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
     {
       panic!("Command timeout!");
     };
-    let mut buffer = [0; 1024];
-    match timeout(Duration::from_secs(5), client_dc.read(&mut buffer)).await {
-      Ok(Ok(len)) => {
-        let msg = String::from_utf8_lossy(&buffer[..len]);
-        assert!(!msg.is_empty());
 
-        let file_count = std::env::current_dir()
-          .expect("Current path should be available")
-          .read_dir()
-          .expect("Failed to read current path!")
-          .count()
-          + 1; // Add 1 to account for current path (.)
-        assert_eq!(file_count, msg.lines().count());
-      }
-      Ok(Err(e)) => {
-        assert!(false, "{}", e);
-      }
-      Err(e) => {
-        assert!(false, "{}", e);
-      }
-    };
+    let dc_fut = tokio::spawn(async move {
+      let mut buffer = [0; 1024];
+      match timeout(Duration::from_secs(5), client_dc.read(&mut buffer)).await {
+        Ok(Ok(len)) => {
+          let msg = String::from_utf8_lossy(&buffer[..len]);
+          assert!(!msg.is_empty());
+
+          let file_count = root_path
+            .read_dir()
+            .expect("Failed to read current path!")
+            .count()
+            + 1; // Add 1 to account for current path (.)
+          assert_eq!(file_count, msg.lines().count());
+        }
+        Ok(Err(e)) => {
+          assert!(false, "{}", e);
+        }
+        Err(e) => {
+          assert!(false, "{}", e);
+        }
+      };
+    });
+
     match timeout(Duration::from_secs(2), rx.recv()).await {
       Ok(Some(result)) => {
         assert_eq!(result.code, ReplyCode::FileStatusOkay);
@@ -213,5 +245,176 @@ mod tests {
         panic!("Failed to receive reply in time!");
       }
     };
+
+    if let Err(e) = timeout(Duration::from_secs(3), dc_fut).await {
+      panic!("Data channel future reached deadline!");
+    };
   }
+
+  #[tokio::test]
+  async fn not_logged_in_test() {
+    let ip = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let command = Command::new(Commands::MLSD, String::new());
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(e) = timeout(
+      Duration::from_secs(3),
+      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+      .await
+    {
+      panic!("Command timeout!");
+    };
+
+    match timeout(Duration::from_secs(2), rx.recv()).await {
+      Ok(Some(result)) => {
+        assert_eq!(result.code, ReplyCode::NotLoggedIn);
+      }
+      Err(_) | Ok(None) => {
+        panic!("Failed to receive reply in time!");
+      }
+    };
+  }
+
+  #[tokio::test]
+  async fn not_directory_test() {
+    let ip = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let command = Command::new(Commands::MLSD, String::from("1MiB.txt"));
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let root_path = std::env::current_dir().unwrap().join("test_files");
+    let label = "test_files";
+    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view);
+
+    session_properties.write().await.login(user_data);
+    session_properties.write().await.file_system_view_root.change_working_directory(label.clone());
+
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(e) = timeout(
+      Duration::from_secs(3),
+      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+      .await
+    {
+      panic!("Command timeout!");
+    };
+
+    match timeout(Duration::from_secs(2), rx.recv()).await {
+      Ok(Some(result)) => {
+        assert_eq!(result.code, ReplyCode::SyntaxErrorInParametersOrArguments);
+      }
+      Err(_) | Ok(None) => {
+        panic!("Failed to receive reply in time!");
+      }
+    };
+  }
+
+  #[tokio::test]
+  async fn nonexistent_test() {
+    let ip = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let command = Command::new(Commands::MLSD, String::from("NONEXISTENT"));
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let root_path = std::env::current_dir().unwrap().join("test_files");
+    let label = "test_files";
+    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view);
+
+    session_properties.write().await.login(user_data);
+
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(e) = timeout(
+      Duration::from_secs(3),
+      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+      .await
+    {
+      panic!("Command timeout!");
+    };
+
+    match timeout(Duration::from_secs(2), rx.recv()).await {
+      Ok(Some(result)) => {
+        assert_eq!(result.code, ReplyCode::FileUnavailable);
+      }
+      Err(_) | Ok(None) => {
+        panic!("Failed to receive reply in time!");
+      }
+    };
+  }
+
+  #[tokio::test]
+  async fn insufficient_permissions_test() {
+    let ip = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let command = Command::new(Commands::MLSD, String::new());
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let permissions = HashSet::from([]);
+    let root_path = std::env::current_dir().unwrap().join("test_files");
+    let label = "test_files";
+    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view);
+
+    session_properties.write().await.login(user_data);
+    session_properties.write().await.file_system_view_root.change_working_directory(label.clone());
+
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(e) = timeout(
+      Duration::from_secs(3),
+      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+      .await
+    {
+      panic!("Command timeout!");
+    };
+
+    match timeout(Duration::from_secs(2), rx.recv()).await {
+      Ok(Some(result)) => {
+        assert_eq!(result.code, ReplyCode::FileUnavailable);
+        assert!(result.to_string().contains("Insufficient permissions!"));
+      }
+      Err(_) | Ok(None) => {
+        panic!("Failed to receive reply in time!");
+      }
+    };
+  }
+
 }
