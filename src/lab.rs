@@ -65,7 +65,7 @@ async fn run_quic_listener() {
     match quic_only_listener.accept().await {
       Ok(conn) => {
         println!("Received connection!");
-        let handler = QuicOnlyConnectionHandler::new(conn, handler_shutdown_recv);
+        let handler = QuicOnlyConnectionHandler::new(conn);
       }
       Err(e) => {
         eprintln!("Error {e}")

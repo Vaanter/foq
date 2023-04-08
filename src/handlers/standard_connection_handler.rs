@@ -8,14 +8,12 @@ use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 
-use crate::commands::executable::Executable;
-use crate::commands::r#impl::noop::Noop;
 use crate::handlers::connection_handler::ConnectionHandler;
-use crate::handlers::reply_sender::ReplySender;
+use crate::handlers::reply_sender::{ReplySend, ReplySender};
 use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
+use crate::io::command_processor::CommandProcessor;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::command_processor::CommandProcessor;
 use crate::io::session_properties::SessionProperties;
 
 pub(crate) struct StandardConnectionHandler {
@@ -89,7 +87,7 @@ impl ConnectionHandler for StandardConnectionHandler {
     println!("Standard handler execute!");
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
-    Noop::reply(hello, &mut self.reply_sender).await;
+    let _ = &mut self.reply_sender.send_control_message(hello).await;
 
     loop {
       tokio::select! {
@@ -117,12 +115,14 @@ mod tests {
   use std::time::Duration;
 
   use tokio::io;
-  use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
+  use tokio::io::{AsyncBufReadExt, BufReader};
   use tokio::net::{TcpListener, TcpStream};
   use tokio::time::timeout;
 
+  use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::data_channel_wrapper::DataChannelWrapper;
   use crate::handlers::standard_connection_handler::StandardConnectionHandler;
+  use crate::io::reply_code::ReplyCode;
 
   #[tokio::test]
   async fn smoke() {
@@ -171,15 +171,15 @@ mod tests {
       }
     };
     println!("Connecting to passive listener");
-    let pass: io::Result<TcpStream> = TcpStream::connect(addr).await;
-    if let Err(e) = pass.as_ref() {
-      assert!(false, "{}", e);
+    let client_dc: io::Result<TcpStream> = TcpStream::connect(addr).await;
+    if let Err(e) = client_dc.as_ref() {
+      panic!("{}", e);
     }
     println!("Connection successful!");
   }
 
   #[tokio::test]
-  async fn test_command() {
+  async fn server_hello_test() {
     let ip: SocketAddr = "127.0.0.1:0"
       .parse()
       .expect("Test listener requires available IP:PORT");
@@ -192,96 +192,37 @@ mod tests {
     };
     let addr = listener.local_addr().unwrap();
     println!("Server port is {}", addr.port());
-    let (port_send, port_recv) = tokio::sync::oneshot::channel();
-    let fut = tokio::spawn(async move {
+    let (shutdown_send, shutdown_recv) = tokio::sync::broadcast::channel(8096);
+    let handler_fut = tokio::spawn(async move {
       let (server_cc, _) = listener.accept().await.unwrap();
       let mut handler = StandardConnectionHandler::new(server_cc);
 
-      let wrapper = handler.data_channel_wrapper.clone();
-      tokio::spawn(async move {
-        let result = wrapper.lock().await.open_data_stream().await;
-        assert!(result.is_ok());
-        port_send.send(result.unwrap())
-      });
-
-      match timeout(Duration::from_secs(5), handler.await_command()).await {
-        Ok(_) => {
-          println!("Command received!");
-        }
-        Err(e) => {
-          panic!("Failed to receive command!, {}", e);
-        }
-      };
+      handler.handle(shutdown_recv).await.expect("Handler should exit gracefully");
     });
 
     let mut client_cc = TcpStream::connect(addr).await.unwrap();
-    let port_msg = timeout(Duration::from_secs(3), port_recv).await;
-
-    let addr = match port_msg {
-      Ok(Ok(addr)) => {
-        println!("Address is {}", addr);
-        addr
-      }
-      Ok(Err(e)) => {
-        panic!("Failed to receive port: {}", e);
-      }
-      Err(e) => {
-        panic!("Failed to receive port: {}", e);
-      }
-    };
-
-    println!("Connecting to passive listener");
-    let mut client_dc = match TcpStream::connect(addr).await {
-      Ok(c) => c,
-      Err(e) => {
-        panic!("Client passive connection failed: {}", e);
-      }
-    };
-    println!("Client passive connection successful!");
 
     let (reader, writer) = client_cc.split();
-    let message = "MLSD\r\n";
-    let mut client_writer = BufWriter::new(writer);
-    match client_writer.write(message.as_ref()).await {
-      Ok(len) => {
-        client_writer
-          .flush()
-          .await
-          .expect("Flushing client message should work!");
-        println!("Client message sent! Bytes: {}", len);
-      }
-      Err(e) => {
-        panic!("Client message failed to send: {}", e);
-      }
-    };
-
     let mut client_reader = BufReader::new(reader);
     let mut buffer = String::new();
-    match client_reader.read_line(&mut buffer).await {
-      Ok(len) => {
+    match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
+      Ok(Ok(len)) => {
         println!("Received reply from server!: {}", buffer.trim());
-        assert!(buffer.trim().starts_with("150"));
+        assert!(buffer
+          .trim()
+          .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
+        assert!(buffer.trim().contains("Hello"));
         buffer.clear();
       }
-      Err(e) => {
+      Ok(Err(e)) => {
         panic!("Failed to read reply! {}", e);
       }
+      Err(e) => panic!("Timeout reading hello!"),
     }
+    shutdown_send.send(()).unwrap();
 
-    match client_reader.read_line(&mut buffer).await {
-      Ok(_len) => {
-        println!("Received reply from server!: {}", buffer.trim());
-        assert!(buffer.trim().starts_with("226"));
-      }
-      Err(e) => {
-        panic!("Failed to read reply! {}", e);
-      }
-    }
-
-    let mut data_buf = String::new();
-    client_dc.read_to_string(&mut data_buf).await.unwrap();
-    println!("{}", data_buf);
-
-    fut.await.expect("fut fail");
+    if let Err(e) = timeout(Duration::from_secs(3), handler_fut).await {
+      panic!("Handler future failed to finish!");
+    };
   }
 }
