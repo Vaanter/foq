@@ -545,7 +545,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     let mut root2 = std::env::current_dir().unwrap();
@@ -570,7 +570,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_dot_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     let mut root2 = std::env::current_dir().unwrap();
@@ -595,7 +595,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_parent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     root1.push("test_files");
@@ -614,7 +614,7 @@ mod tests {
 
   #[test]
   fn list_dir_current_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     let mut root2 = std::env::current_dir().unwrap();
@@ -636,7 +636,7 @@ mod tests {
 
   #[test]
   fn list_dir_relative_empty_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     let mut root2 = std::env::current_dir().unwrap();
@@ -658,7 +658,7 @@ mod tests {
 
   #[test]
   fn list_dir_absolute_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     let mut root2 = std::env::current_dir().unwrap();
@@ -679,7 +679,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_from_view_parent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     let mut root2 = std::env::current_dir().unwrap();
@@ -708,7 +708,7 @@ mod tests {
 
   #[test]
   fn list_dir_view_parent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
 
     let mut root1 = std::env::current_dir().unwrap();
     root1.push("test_files");

@@ -96,6 +96,9 @@ impl FileSystemView {
 
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
     let path = path.into();
+    if !self.permissions.contains(&UserPermission::LIST) {
+      return Err(Error::PermissionError);
+    }
 
     if path.is_empty() || path == "." {
       // List current dir
@@ -416,7 +419,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_current_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -429,7 +432,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_relative_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -441,7 +444,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_relative_multi_empty_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -453,7 +456,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_absolute_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -465,7 +468,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_absolute_multi_empty_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -477,7 +480,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_relative_nonexistent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -492,7 +495,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_absolute_nonexistent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -507,7 +510,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_parent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -520,7 +523,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_parent_from_root_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
@@ -534,7 +537,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_root_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root = std::env::current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
