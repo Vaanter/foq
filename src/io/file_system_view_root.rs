@@ -357,6 +357,51 @@ mod tests {
   }
 
   #[test]
+  fn get_file_relative_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+
+    let mut root1 = std::env::current_dir().unwrap();
+    let mut root2 = std::env::current_dir().unwrap();
+    root1.push("src");
+    root2.push("test_files");
+    let label1 = "src";
+    let label2 = "test_files";
+    let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
+    let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view1);
+    user_data.add_view(view2);
+
+    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let file = root.get_file(format!("{label2}/2KiB.txt"));
+    assert!(file.is_ok());
+    assert!(file.unwrap().exists());
+  }
+
+  #[test]
+  fn get_file_relative_nonexistent_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+
+    let mut root1 = std::env::current_dir().unwrap();
+    let mut root2 = std::env::current_dir().unwrap();
+    root1.push("src");
+    root2.push("test_files");
+    let label1 = "src";
+    let label2 = "test_files";
+    let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
+    let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view1);
+    user_data.add_view(view2);
+
+    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let file = root.get_file(format!("{label2}/NONEXISTENT"));
+    let Err(Error::NotFoundError(_)) = file else {
+      panic!("Expected NotFound error");
+    };
+  }
+
+  #[test]
   fn get_cwd_not_logged_in() {
     let root = FileSystemViewRoot::new(None);
 
@@ -537,9 +582,8 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("..");
-    match file {
-      Err(Error::UserError) => {}
-      _ => panic!("Expected User error"),
+    let Err(Error::UserError) = file else  {
+      panic!("Expected User error");
     };
   }
 
@@ -606,9 +650,8 @@ mod tests {
 
     let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
     let listing = root.list_dir("..");
-    match listing {
-      Err(Error::InvalidPathError(_)) => {}
-      _ => panic!("Expected InvalidPath error"),
+    let Err(Error::InvalidPathError(_)) = listing else {
+      panic!("Expected InvalidPath error");
     };
   }
 

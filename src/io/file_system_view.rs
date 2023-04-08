@@ -487,9 +487,8 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("NONEXISTENT");
     assert!(listing.is_err());
-    match listing {
-      Err(Error::NotFoundError(_)) => {}
-      _ => panic!("Expected NotFound error"),
+    let Err(Error::NotFoundError(_)) = listing else {
+      panic!("Expected NotFound error");
     };
   }
 
@@ -502,9 +501,8 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/NONEXISTENT");
     assert!(listing.is_err());
-    match listing {
-      Err(Error::NotFoundError(_)) => {}
-      _ => panic!("Expected NotFound error"),
+    let Err(Error::NotFoundError(_)) = listing else {
+      panic!("Expected NotFound error");
     };
   }
 
@@ -529,9 +527,8 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
     let listing = view.list_dir("..");
-    match listing {
-      Err(Error::InvalidPathError(_)) => {}
-      _ => panic!("Expcted InvalidPath error"),
+    let Err(Error::InvalidPathError(_)) = listing else {
+      panic!("Expected InvalidPath error");
     };
   }
 

@@ -20,4 +20,33 @@ impl Command {
             argument: argument.to_owned(),
         })
     }
+
+#[cfg(test)]
+mod tests {
+  use crate::commands::command::Command;
+  use crate::commands::commands::Commands;
+
+  #[test]
+  fn mlsd_test() {
+    let parsed = Command::parse("mlsd test");
+    assert!(parsed.is_ok());
+    assert_eq!(Commands::MLSD, parsed.as_ref().unwrap().command);
+    assert_eq!("test", parsed.as_ref().unwrap().argument);
+  }
+
+  #[test]
+  fn noop_test() {
+    let parsed = Command::parse("noop");
+    assert!(parsed.is_ok());
+    assert_eq!(Commands::NOOP, parsed.as_ref().unwrap().command);
+    assert!(parsed.as_ref().unwrap().argument.is_empty());
+  }
+
+  #[test]
+  fn user_test() {
+    let parsed = Command::parse("user test");
+    assert!(parsed.is_ok());
+    assert_eq!(Commands::USER, parsed.as_ref().unwrap().command);
+    assert_eq!("test", parsed.as_ref().unwrap().argument);
+  }
 }
