@@ -210,7 +210,7 @@ impl FileSystemViewRoot {
         let label = path.split("/").nth(0).expect("Path cannot be empty here!");
         let view = self.file_system_views.as_ref().unwrap().get(label);
         if view.is_none() {
-          return Err(Error::InvalidPathError(String::from("Path doesn't exist!")));
+          return Err(Error::NotFoundError(String::from("Path doesn't exist!")));
         }
         let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
         return view.unwrap().list_dir(sub_path);
@@ -233,6 +233,10 @@ impl FileSystemViewRoot {
   }
 
   fn list_root(&self) -> Result<Vec<EntryData>, Error> {
+    if self.file_system_views.is_none() {
+      return Err(Error::UserError);
+    }
+
     let mut entries: Vec<EntryData> =
       Vec::with_capacity(self.file_system_views.as_ref().unwrap().len() + 1);
     entries.push(EntryData::new(
@@ -285,7 +289,7 @@ impl FileSystemViewRoot {
           return Err(Error::InvalidPathError(String::from("Path doesn't exist!")));
         }
         let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
-        return Err(Error::InvalidPathError(String::from("")));
+        return view.unwrap().get_file(sub_path);
       }
       return self
         .file_system_views

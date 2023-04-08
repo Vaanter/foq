@@ -14,4 +14,10 @@ pub(crate) enum Error {
   OsError(#[from] io::Error),
   #[error("System error occurred!")]
   SystemError,
+  #[error("Not a directory!")]
+  NotADirectoryError,
+  #[error("Not a file!")]
+  NotAFileError,
+  #[error("Insufficient permissions!")]
+  PermissionError,
 }

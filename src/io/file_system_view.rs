@@ -166,6 +166,11 @@ impl FileSystemView {
         return Err(Error::NotFoundError(String::from("Directory not found!")));
       }
 
+      if !absolute.is_dir() {
+        // Path does not refer to a directory
+        return Err(Error::NotADirectoryError);
+      }
+
       let read_dir = absolute.read_dir();
       if read_dir.is_err() {
         // IO Error
@@ -182,6 +187,11 @@ impl FileSystemView {
       if !relative.exists() {
         // Path doesn't exist! Nothing to list
         return Err(Error::NotFoundError(String::from("Directory not found!")));
+      }
+
+      if !relative.is_dir() {
+        // Path does not refer to a directory
+        return Err(Error::NotADirectoryError);
       }
 
       let read_dir = relative.read_dir();
