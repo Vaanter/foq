@@ -97,4 +97,38 @@ mod tests {
       }
     };
   }
+
+  #[tokio::test]
+  async fn empty_username_test() {
+    let ip = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let command = Command::new(Commands::USER, "");
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(e) = timeout(
+      Duration::from_secs(3),
+      User::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+      .await
+    {
+      panic!("Command timeout!");
+    };
+
+    match timeout(Duration::from_secs(2), rx.recv()).await {
+      Ok(Some(result)) => {
+        assert_eq!(result.code, ReplyCode::SyntaxErrorInParametersOrArguments);
+      }
+      Err(_) | Ok(None) => {
+        panic!("Failed to receive reply in time!");
+      }
+    };
+  }
 }
