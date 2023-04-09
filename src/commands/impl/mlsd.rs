@@ -82,14 +82,6 @@ impl Executable for Mlsd {
       Err(_) => unreachable!(),
     };
 
-    Mlsd::reply(
-      Reply::new(
-        ReplyCode::FileStatusOkay,
-        "Transferring directory information!",
-      ),
-      reply_sender,
-    )
-    .await;
     println!("Getting data stream");
     let stream = command_processor
       .data_wrapper
@@ -100,12 +92,29 @@ impl Executable for Mlsd {
 
     match stream.lock().await.as_mut() {
       Some(s) => {
+        Mlsd::reply(
+          Reply::new(
+            ReplyCode::FileStatusOkay,
+            "Transferring directory information!",
+          ),
+          reply_sender,
+        )
+        .await;
         let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
         println!("Writing to data stream");
         let _ = s.write_all(mem.as_ref()).await;
       }
       None => {
         eprintln!("Data stream non existent!");
+        Self::reply(
+          Reply::new(
+            ReplyCode::BadSequenceOfCommands,
+            "Data connection is not open!",
+          ),
+          reply_sender,
+        )
+        .await;
+        return;
       }
     }
 
@@ -270,7 +279,7 @@ mod tests {
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -303,7 +312,11 @@ mod tests {
     user_data.add_view(view);
 
     session_properties.write().await.login(user_data);
-    session_properties.write().await.file_system_view_root.change_working_directory(label.clone());
+    session_properties
+      .write()
+      .await
+      .file_system_view_root
+      .change_working_directory(label.clone());
 
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
@@ -314,7 +327,7 @@ mod tests {
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -357,7 +370,7 @@ mod tests {
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -390,7 +403,11 @@ mod tests {
     user_data.add_view(view);
 
     session_properties.write().await.login(user_data);
-    session_properties.write().await.file_system_view_root.change_working_directory(label.clone());
+    session_properties
+      .write()
+      .await
+      .file_system_view_root
+      .change_working_directory(label.clone());
 
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
@@ -401,7 +418,7 @@ mod tests {
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -417,4 +434,46 @@ mod tests {
     };
   }
 
+  #[tokio::test]
+  async fn data_channel_not_open_tcp() {
+    let ip = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let command = Command::new(Commands::MLSD, String::new());
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let root_path = std::env::current_dir().unwrap().join("test_files");
+    let label = "test_files";
+    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let mut user_data = UserData::new("test", "test");
+    user_data.add_view(view);
+
+    session_properties.write().await.login(user_data);
+
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(e) = timeout(
+      Duration::from_secs(3),
+      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    {
+      panic!("Command timeout!");
+    };
+
+    match timeout(Duration::from_secs(2), rx.recv()).await {
+      Ok(Some(result)) => {
+        assert_eq!(result.code, ReplyCode::BadSequenceOfCommands);
+      }
+      Err(_) | Ok(None) => {
+        panic!("Failed to receive reply in time!");
+      }
+    };
+  }
 }
