@@ -1,10 +1,14 @@
 use std::collections::HashSet;
 use std::fs::ReadDir;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+
+use tokio::fs::{File, OpenOptions};
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::Error;
+use crate::io::open_options_flags::OpenOptionsWrapper;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct FileSystemView {
@@ -80,18 +84,42 @@ impl FileSystemView {
     self.change_working_directory("..")
   }
 
-  pub(crate) fn get_file(&self, path: impl Into<String>) -> Result<PathBuf, Error> {
+  pub(crate) async fn open_file(
+    &self,
+    path: impl Into<String>,
+    options: OpenOptionsWrapper,
+  ) -> Result<File, Error> {
+    if options.read() && !self.permissions.contains(&UserPermission::READ)
+      || (options.write() && !self.permissions.contains(&UserPermission::WRITE))
+      || (options.create() && !self.permissions.contains(&UserPermission::CREATE))
+      || (options.append()) && !self.permissions.contains(&UserPermission::APPEND)
+      || (options.truncate() && !self.permissions.contains(&UserPermission::WRITE))
+    {
+      return Err(Error::PermissionError);
+    }
+
     let path = path.into();
     let path = if path.starts_with("/") {
       self.root.join(PathBuf::from(&path[1..]))
     } else {
       self.current_path.join(PathBuf::from(path))
     };
-    return if path.exists() {
-      Ok(path)
-    } else {
-      Err(Error::NotFoundError(String::from("File doesn't exist")))
-    };
+
+    let result = OpenOptions::from(options).open(&path).await;
+    result.map_err(|e| {
+      eprintln!("Error: {}", e);
+      match e.kind() {
+        ErrorKind::NotFound => Error::NotFoundError(e.to_string()),
+        ErrorKind::PermissionDenied => {
+          if !path.is_file() {
+            Error::NotAFileError
+          } else {
+            Error::PermissionError
+          }
+        }
+        _ => Error::OsError(e),
+      }
+    })
   }
 
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
@@ -243,16 +271,18 @@ impl FileSystemView {
 #[cfg(test)]
 pub(crate) mod tests {
   use std::collections::HashSet;
+  use std::env::current_dir;
 
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::{EntryData, EntryType};
   use crate::io::error::Error;
   use crate::io::file_system_view::FileSystemView;
+  use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 
   #[test]
   fn derives_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -263,7 +293,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_sub_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -276,7 +306,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_sub_nonexistent_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -289,7 +319,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_absolute_nonexistent_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -302,7 +332,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_absolute_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -315,7 +345,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_absolute_multi_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -328,7 +358,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_dot_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -341,7 +371,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_parent_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -355,7 +385,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_parent_from_root_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap().join("test_files");
+    let root = current_dir().unwrap().join("test_files");
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -368,7 +398,7 @@ pub(crate) mod tests {
   #[test]
   fn cwd_to_home_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
@@ -380,47 +410,89 @@ pub(crate) mod tests {
     assert_eq!(root, view.root);
   }
 
-  #[test]
-  fn get_file_relative_test() {
+  #[tokio::test]
+  async fn open_file_relative_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
     assert!(view.change_working_directory("test_files"));
-    let file_path = view.get_file("1MiB.txt");
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let file_path = view.open_file("1MiB.txt", options).await;
     assert!(file_path.is_ok());
-    assert!(file_path.unwrap().exists());
   }
 
-  #[test]
-  fn get_file_relative_multi_test() {
+  #[tokio::test]
+  async fn open_file_relative_multi_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
-    let file_path = view.get_file("test_files/1MiB.txt");
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let file_path = view.open_file("test_files/1MiB.txt", options).await;
     assert!(file_path.is_ok());
-    assert!(file_path.unwrap().exists());
   }
 
-  #[test]
-  fn get_file_absolute_test() {
+  #[tokio::test]
+  async fn open_file_absolute_test() {
     let permissions = HashSet::from([UserPermission::READ]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions);
 
-    let file_path = view.get_file("/test_files/1MiB.txt");
-    assert!(file_path.is_ok());
-    assert!(file_path.unwrap().exists());
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let file = view.open_file("/test_files/1MiB.txt", options).await;
+    assert!(file.is_ok());
+  }
+
+  #[tokio::test]
+  async fn open_file_no_permissions_test() {
+    let root = current_dir().unwrap();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), HashSet::new());
+
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let file = view.open_file("/test_files/1MiB.txt", options).await;
+    let Err(Error::PermissionError) = file else {
+      panic!("Expected Permission error, got: {:?}", file);
+    };
+  }
+
+  #[tokio::test]
+  async fn open_file_directory_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+    let root = current_dir().unwrap();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let file = view.open_file("/test_files/subfolder", options).await;
+    let Err(Error::NotAFileError) = file else {
+      panic!("Expected NotAFile error, got: {:?}", file);
+    };
   }
 
   #[test]
   fn list_dir_current_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
     view.change_working_directory("test_files");
@@ -433,7 +505,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_relative_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -445,7 +517,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_relative_multi_empty_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -457,7 +529,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_absolute_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -469,7 +541,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_absolute_multi_empty_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -481,7 +553,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_relative_nonexistent_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -495,7 +567,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_absolute_nonexistent_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -509,7 +581,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_parent_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
     view.change_working_directory("test_files/subfolder");
@@ -522,7 +594,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_parent_from_root_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
@@ -535,7 +607,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_root_test() {
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root = std::env::current_dir().unwrap();
+    let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
     view.change_working_directory("test_files/subfolder");

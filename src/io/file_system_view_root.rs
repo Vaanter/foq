@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+
+use tokio::fs::File;
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::Error;
 use crate::io::file_system_view::FileSystemView;
+use crate::io::open_options_flags::OpenOptionsWrapper;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct FileSystemViewRoot {
   pub(crate) file_system_views: Option<BTreeMap<String, FileSystemView>>,
   current_view: Option<String>,
@@ -259,7 +261,11 @@ impl FileSystemViewRoot {
     Ok(entries)
   }
 
-  pub(crate) fn get_file(&self, path: impl Into<String>) -> Result<PathBuf, Error> {
+  pub(crate) async fn open_file(
+    &self,
+    path: impl Into<String>,
+    options: OpenOptionsWrapper,
+  ) -> Result<File, Error> {
     let path = path.into();
     if self.file_system_views.is_none() {
       return Err(Error::UserError);
@@ -279,7 +285,7 @@ impl FileSystemViewRoot {
 
       let mut sub_path = path.split("/").skip(2).collect::<Vec<&str>>().join("/");
       sub_path.insert(0, '/');
-      return view.unwrap().get_file(sub_path);
+      return view.unwrap().open_file(sub_path, options).await;
     } else {
       if self.current_view.is_none() {
         // relative of root
@@ -289,7 +295,7 @@ impl FileSystemViewRoot {
           return Err(Error::InvalidPathError(String::from("Path doesn't exist!")));
         }
         let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
-        return view.unwrap().get_file(sub_path);
+        return view.unwrap().open_file(sub_path, options).await;
       }
       return self
         .file_system_views
@@ -297,45 +303,41 @@ impl FileSystemViewRoot {
         .unwrap()
         .get(self.current_view.as_ref().unwrap())
         .unwrap()
-        .get_file(path);
+        .open_file(path, options)
+        .await;
     };
-  }
-}
-
-impl<'a> Default for FileSystemViewRoot {
-  fn default() -> Self {
-    FileSystemViewRoot {
-      file_system_views: Default::default(),
-      current_view: None,
-    }
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::collections::HashSet;
+  use std::collections::{BTreeMap, HashSet};
 
-  use crate::auth::user_data::UserData;
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::EntryData;
   use crate::io::error::Error;
   use crate::io::file_system_view::tests::validate_listing;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view_root::FileSystemViewRoot;
+  use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 
-  #[test]
-  fn get_file_not_logged_in_test() {
+  #[tokio::test]
+  async fn open_file_not_logged_in_test() {
     let root = FileSystemViewRoot::new(None);
 
-    let file = root.get_file("test_file");
-    match file {
-      Err(Error::UserError) => {}
-      _ => panic!("Expected User error"),
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+
+    let file = root.open_file("test_file", options).await;
+    let Err(Error::UserError) = file else {
+      panic!("Expected User error");
     };
   }
 
-  #[test]
-  fn get_file_absolute_test() {
+  #[tokio::test]
+  async fn open_file_absolute_test() {
     let permissions = HashSet::from([UserPermission::READ]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -346,18 +348,19 @@ mod tests {
     let label2 = "test_files";
     let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
     let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let views = create_root(vec![view1, view2]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
-    let file = root.get_file(format!("/{label2}/2KiB.txt"));
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let root = FileSystemViewRoot::new(Some(views));
+    let file = root.open_file(format!("/{label2}/2KiB.txt"), options).await;
     assert!(file.is_ok());
-    assert!(file.unwrap().exists());
   }
 
-  #[test]
-  fn get_file_relative_test() {
+  #[tokio::test]
+  async fn open_file_relative_test() {
     let permissions = HashSet::from([UserPermission::READ]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -368,18 +371,19 @@ mod tests {
     let label2 = "test_files";
     let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
     let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let views = create_root(vec![view1, view2]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
-    let file = root.get_file(format!("{label2}/2KiB.txt"));
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let root = FileSystemViewRoot::new(Some(views));
+    let file = root.open_file(format!("{label2}/2KiB.txt"), options).await;
     assert!(file.is_ok());
-    assert!(file.unwrap().exists());
   }
 
-  #[test]
-  fn get_file_relative_nonexistent_test() {
+  #[tokio::test]
+  async fn open_file_relative_nonexistent_test() {
     let permissions = HashSet::from([UserPermission::READ]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -390,14 +394,18 @@ mod tests {
     let label2 = "test_files";
     let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
     let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let views = create_root(vec![view1, view2]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
-    let file = root.get_file(format!("{label2}/NONEXISTENT"));
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let root = FileSystemViewRoot::new(Some(views));
+    let file = root
+      .open_file(format!("{label2}/NONEXISTENT"), options)
+      .await;
     let Err(Error::NotFoundError(_)) = file else {
-      panic!("Expected NotFound error");
+      panic!("Expected NotFound error, got: {:?}", file);
     };
   }
 
@@ -415,11 +423,9 @@ mod tests {
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
     let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
 
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root.change_working_directory(format!("{}/test_files", label.clone())));
     assert_eq!(
       root.get_current_working_directory(),
@@ -433,11 +439,9 @@ mod tests {
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
     let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
 
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root.change_working_directory(format!("{}/test_files", label.clone())));
     assert!(root.change_working_directory("~"));
     assert!(root.current_view.is_none());
@@ -449,11 +453,9 @@ mod tests {
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
     let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
 
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root.change_working_directory(label.clone()));
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
@@ -474,11 +476,9 @@ mod tests {
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
     let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
 
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root.change_working_directory(format!("{label}/test_files")));
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
@@ -499,11 +499,9 @@ mod tests {
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
     let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
 
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root.change_working_directory(format!("/{label}/test_files")));
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
@@ -524,11 +522,9 @@ mod tests {
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
     let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
 
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root.change_working_directory(format!("/{label}")));
     assert!(root.change_working_directory("test_files"));
     assert!(root.current_view.is_some());
@@ -549,9 +545,8 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("");
-    match file {
-      Err(Error::UserError) => {}
-      _ => panic!("Expected User error"),
+    let Err(Error::UserError) = file else {
+      panic!("Expected User error")
     };
   }
 
@@ -560,9 +555,8 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("test_files");
-    match file {
-      Err(Error::UserError) => {}
-      _ => panic!("Expected User error"),
+    let Err(Error::UserError) = file else {
+      panic!("Expected User error")
     };
   }
 
@@ -571,9 +565,8 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("/test_files");
-    match file {
-      Err(Error::UserError) => {}
-      _ => panic!("Expected User error"),
+    let Err(Error::UserError) = file else {
+      panic!("Expected User error")
     };
   }
 
@@ -582,7 +575,7 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("..");
-    let Err(Error::UserError) = file else  {
+    let Err(Error::UserError) = file else {
       panic!("Expected User error");
     };
   }
@@ -597,12 +590,9 @@ mod tests {
     root2.push("test_files");
     let view1 = FileSystemView::new(root1, "src", permissions.clone());
     let view2 = FileSystemView::new(root2, "test_files", permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let views = create_root(vec![view1, view2]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
-
+    let root = FileSystemViewRoot::new(Some(views));
     let listing = root.list_dir("/").unwrap();
     assert_eq!(3, listing.len());
     assert_eq!(
@@ -622,11 +612,9 @@ mod tests {
     root2.push("test_files");
     let view1 = FileSystemView::new(root1, "src", permissions.clone());
     let view2 = FileSystemView::new(root2, "test_files", permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let views = create_root(vec![view1, view2]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let root = FileSystemViewRoot::new(Some(views));
 
     let listing = root.list_dir(".").unwrap();
     assert_eq!(3, listing.len());
@@ -645,10 +633,9 @@ mod tests {
     root1.push("test_files");
     let label = "test_files";
     let view1 = FileSystemView::new(root1, label.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
+    let views = create_root(vec![view1]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let root = FileSystemViewRoot::new(Some(views));
     let listing = root.list_dir("..");
     let Err(Error::InvalidPathError(_)) = listing else {
       panic!("Expected InvalidPath error");
@@ -663,13 +650,13 @@ mod tests {
     let mut root2 = std::env::current_dir().unwrap();
     root1.push("src");
     root2.push("test_files");
-    let view1 = FileSystemView::new(root1, "src", permissions.clone());
-    let view2 = FileSystemView::new(root2, "test_files", permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let label1 = "src";
+    let label2 = "test_files";
+    let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
+    let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
+    let views = create_root(vec![view1, view2]);
 
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     root.change_working_directory("test_files");
 
     let listing = root.list_dir(".").unwrap();
@@ -685,13 +672,13 @@ mod tests {
     let mut root2 = std::env::current_dir().unwrap();
     root1.push("src");
     root2.push("test_files");
-    let view1 = FileSystemView::new(root1, "src", permissions.clone());
-    let view2 = FileSystemView::new(root2, "test_files", permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let label1 = "src";
+    let label2 = "test_files";
+    let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
+    let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
+    let views = create_root(vec![view1, view2]);
 
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     root.change_working_directory("test_files");
 
     let listing = root.list_dir("subfolder").unwrap();
@@ -707,13 +694,13 @@ mod tests {
     let mut root2 = std::env::current_dir().unwrap();
     root1.push("src");
     root2.push("test_files");
-    let view1 = FileSystemView::new(root1, "src", permissions.clone());
-    let view2 = FileSystemView::new(root2, "test_files", permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let label1 = "src";
+    let label2 = "test_files";
+    let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
+    let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
+    let views = create_root(vec![view1, view2]);
 
-    let root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let root = FileSystemViewRoot::new(Some(views));
 
     let listing = root.list_dir("/test_files").unwrap();
 
@@ -732,11 +719,9 @@ mod tests {
     let label2 = "test_files";
     let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
     let view2 = FileSystemView::new(root2, label2.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
-    user_data.add_view(view2);
+    let views = create_root(vec![view1, view2]);
 
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     root.change_working_directory(format!("/{}", label1.clone()));
 
     let listing = root.list_dir("..").map_err(|e| println!("{}", e)).unwrap();
@@ -757,14 +742,17 @@ mod tests {
     root1.push("test_files");
     let label1 = "test_files";
     let view1 = FileSystemView::new(root1, label1.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view1);
+    let views = create_root(vec![view1]);
 
-    let mut root = FileSystemViewRoot::new(Some(user_data.file_system_views));
+    let mut root = FileSystemViewRoot::new(Some(views));
     root.change_working_directory(format!("/{}/subfolder", label1.clone()));
 
     let listing = root.list_dir("..").unwrap();
 
     validate_listing(&listing, 5, permissions.len(), 3, 1);
+  }
+
+  pub(crate) fn create_root(views: Vec<FileSystemView>) -> BTreeMap<String, FileSystemView> {
+    views.into_iter().map(|v| (v.label.clone(), v)).collect()
   }
 }
