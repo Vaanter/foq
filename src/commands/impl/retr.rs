@@ -1,98 +1,84 @@
 use async_trait::async_trait;
-use tokio::fs::OpenOptions;
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
+use crate::commands::r#impl::shared::{
+  get_data_channel_lock, get_open_file_result, get_transfer_reply,
+};
 use crate::handlers::reply_sender::ReplySend;
+use crate::io::command_processor::CommandProcessor;
+use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::command_processor::CommandProcessor;
 
 pub(crate) struct Retr;
 
 #[async_trait]
 impl Executable for Retr {
-  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(
+    command_processor: &mut CommandProcessor,
+    command: &Command,
+    reply_sender: &mut impl ReplySend,
+  ) {
     debug_assert_eq!(command.command, Commands::RETR);
 
     if command.argument.is_empty() {
-      Retr::reply(Reply::new(
+      Self::reply(
+        Reply::new(
           ReplyCode::SyntaxErrorInParametersOrArguments,
           "No file specified!",
-        ), reply_sender)
-        .await;
+        ),
+        reply_sender,
+      )
+      .await;
       return;
     }
 
     let session_properties = command_processor.session_properties.read().await;
-    
+
     if !session_properties.is_logged_in() {
-      Retr::reply(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"), reply_sender).await;
+      Self::reply(
+        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
+        reply_sender,
+      )
+        .await;
       return;
     }
 
-    let file_path = session_properties.file_system_view_root.get_file(&command.argument);
-    if file_path.is_err() {
-      Retr::reply(Reply::new(ReplyCode::FileUnavailable, format!("Insufficient permissions! {}", file_path.unwrap_err())), reply_sender).await;
-      return;
-    }
-    let file_path = file_path.unwrap();
-
-    if let Err(_) | Ok(false) = file_path.try_exists() {
-      Retr::reply(Reply::new(ReplyCode::FileUnavailable, "File does not exist!"), reply_sender).await;
-      return;
-    }
-
-    let data_channel = command_processor
-      .data_wrapper
-      .clone()
-      .lock()
-      .await
-      .get_data_stream()
-      .await;
-    let mut data_channel = match data_channel.try_lock() {
-      Ok(dc) => {
-        if dc.is_none() {
-          Retr::reply(Reply::new(
-              ReplyCode::BadSequenceOfCommands,
-              "Data channel must be open first!",
-            ), reply_sender)
-            .await;
-          return;
-        }
-        dc
-      }
+    let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
+    let mut data_channel = match data_channel_lock {
+      Ok(dc) => dc,
       Err(e) => {
-        eprintln!("Data channel is not available! {e}");
-        Retr::reply(Reply::new(
-            ReplyCode::BadSequenceOfCommands,
-            "Data channel must be open first!",
-          ), reply_sender)
-          .await;
+        Self::reply(e, reply_sender).await;
         return;
       }
     };
 
-    let mut file = match OpenOptions::new().read(true).open(file_path).await {
-      Ok(file) => file,
-      Err(_) => {
-        Retr::reply(Reply::new(
-            ReplyCode::RequestedFileActionNotTaken,
-            "File inaccessible!",
-          ), reply_sender)
-          .await;
-        return;
-      }
-    };
-
-    Retr::reply(Reply::new(
-        ReplyCode::FileStatusOkay,
-        "Starting file transfer!",
-      ), reply_sender)
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let file = session_properties
+      .file_system_view_root
+      .open_file(&command.argument, options)
       .await;
 
-    let success = match tokio::io::copy(&mut file, data_channel.as_mut().unwrap()).await {
+    let mut file = match get_open_file_result(file) {
+      Ok(f) => f,
+      Err(reply) => {
+        Self::reply(reply, reply_sender).await;
+        return;
+      }
+    };
+
+    Self::reply(
+      Reply::new(ReplyCode::FileStatusOkay, "Starting file transfer!"),
+      reply_sender,
+    )
+    .await;
+
+    let success = match tokio::io::copy(&mut file, &mut data_channel.as_mut().unwrap()).await {
       Ok(len) => {
         println!("Sent {len} bytes.");
         true
@@ -103,23 +89,16 @@ impl Executable for Retr {
       }
     };
 
-    if success {
-      Retr::reply(Reply::new(
-          ReplyCode::ClosingDataConnection,
-          "Transfer complete!",
-        ), reply_sender)
-        .await;
-    } else {
-      Retr::reply(Reply::new(
-          ReplyCode::ConnectionClosedTransferAborted,
-          "Error occurred during transfer!",
-        ), reply_sender)
-        .await;
-    }
+    Self::reply(get_transfer_reply(success), reply_sender).await;
 
     // Needed to release the lock. Maybe find a better way to do this?
     drop(data_channel);
-    command_processor.data_wrapper.lock().await.close_data_stream().await;
+    command_processor
+      .data_wrapper
+      .lock()
+      .await
+      .close_data_stream()
+      .await;
   }
 }
 
@@ -139,25 +118,21 @@ mod tests {
   use tokio::sync::mpsc::channel;
   use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
+
   use crate::auth::user_data::UserData;
   use crate::auth::user_permission::UserPermission;
-
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::retr::Retr;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::reply_code::ReplyCode;
   use crate::io::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
+  use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::TestReplySender;
+  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
 
   async fn common(file_name: &'static str) {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     if !Path::new(&file_name).exists() {
       panic!("Test file does not exist! Cannot proceed!");
     }
@@ -168,13 +143,24 @@ mod tests {
 
     let mut user_data = UserData::new(String::from("test"), String::from("test"));
     let label = "test";
-    let view = FileSystemView::new(current_dir().unwrap(), label.clone(), HashSet::from([UserPermission::READ]));
+    let view = FileSystemView::new(
+      current_dir().unwrap(),
+      label.clone(),
+      HashSet::from([UserPermission::READ]),
+    );
     user_data.add_view(view);
     session_properties.write().await.login(user_data);
-    session_properties.write().await.file_system_view_root.change_working_directory(label);
+    session_properties
+      .write()
+      .await
+      .file_system_view_root
+      .change_working_directory(label);
+    let ip: SocketAddr = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
-    let mut session = CommandProcessor::new(session_properties.clone(), wrapper);
-    let addr = match session
+    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let addr = match command_processor
       .data_wrapper
       .clone()
       .lock()
@@ -203,7 +189,7 @@ mod tests {
         .len()
         .ilog10();
 
-    let _ = session
+    let _ = command_processor
       .data_wrapper
       .lock()
       .await
@@ -217,7 +203,7 @@ mod tests {
     let command_fut = tokio::spawn(async move {
       if let Err(e) = timeout(
         Duration::from_secs(timeout_secs as u64),
-        Retr::execute(&mut session, &command, &mut reply_sender),
+        Retr::execute(&mut command_processor, &command, &mut reply_sender),
       )
       .await
       {
@@ -225,14 +211,7 @@ mod tests {
       };
     });
 
-    match timeout(Duration::from_secs(2), rx.recv()).await {
-      Ok(Some(result)) => {
-        assert_eq!(result.code, ReplyCode::FileStatusOkay);
-      }
-      Err(_) | Ok(None) => {
-        panic!("Failed to receive reply!");
-      }
-    };
+    receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
     let transfer = async move {
       let mut local_file_hasher = Hasher::new();
@@ -264,7 +243,11 @@ mod tests {
         sent_file_hasher.update(&transfer_buffer[..transfer_len]);
         local_file_hasher.update(&local_buffer[..local_len]);
       }
-      assert_eq!(local_file_hasher.finalize(), sent_file_hasher.finalize(), "File hashes do not match!");
+      assert_eq!(
+        local_file_hasher.finalize(),
+        sent_file_hasher.finalize(),
+        "File hashes do not match!"
+      );
       println!("File hashes match!");
     };
 
@@ -273,14 +256,7 @@ mod tests {
       Err(e) => panic!("Transfer timed out!"),
     }
 
-    match timeout(Duration::from_secs(2), rx.recv()).await {
-      Ok(Some(result)) => {
-        assert_eq!(result.code, ReplyCode::ClosingDataConnection);
-      }
-      Err(_) | Ok(None) => {
-        panic!("Failed to receive reply!");
-      }
-    };
+    receive_and_verify_reply(2, &mut rx, ReplyCode::ClosingDataConnection, None).await;
 
     command_fut.await.expect("Command should complete!");
   }
@@ -301,5 +277,63 @@ mod tests {
   async fn test_ten_paragraphs() {
     const FILE_NAME: &'static str = "test_files/lorem_10_paragraphs.txt";
     common(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  async fn not_logged_in_test() {
+    let ip: SocketAddr = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let command = Command::new(Commands::RETR, "NONEXISTENT");
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(5),
+      Retr::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    .expect("Command timed out!");
+
+    receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
+  }
+
+  #[tokio::test]
+  async fn data_channel_not_open_test() {
+    let ip: SocketAddr = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+
+    let mut user_data = UserData::new(String::from("test"), String::from("test"));
+    let label = "test";
+    let view = FileSystemView::new(
+      current_dir().unwrap(),
+      label.clone(),
+      HashSet::from([UserPermission::READ]),
+    );
+    user_data.add_view(view);
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    session_properties.write().await.login(user_data);
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let command = Command::new(
+      Commands::RETR,
+      format!("{}/test_files/1MiB.txt", label.clone()),
+    );
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(5),
+      Retr::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    .expect("Command timed out!");
+
+    receive_and_verify_reply(2, &mut rx, ReplyCode::BadSequenceOfCommands, None).await;
   }
 }
