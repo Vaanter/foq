@@ -2,3 +2,5 @@
 /.idea
 /certs
 /coverage
+
+*.profraw

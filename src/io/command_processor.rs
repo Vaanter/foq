@@ -26,13 +26,13 @@ use crate::io::session_properties::SessionProperties;
 #[derive(Clone)]
 pub(crate) struct CommandProcessor {
   pub(crate) session_properties: Arc<RwLock<SessionProperties>>,
-  pub(crate) data_wrapper: Arc<Mutex<dyn DataChannelWrapper + Send + Sync>>,
+  pub(crate) data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
 }
 
 impl CommandProcessor {
   pub(crate) fn new(
     session_properties: Arc<RwLock<SessionProperties>>,
-    data_wrapper: Arc<Mutex<dyn DataChannelWrapper + Send + Sync>>,
+    data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
   ) -> Self {
     CommandProcessor {
       session_properties,

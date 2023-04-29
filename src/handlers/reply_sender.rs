@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::io::reply::Reply;
 
+#[derive(Clone, Debug)]
 pub(crate) struct ReplySender<T: AsyncWrite + Sync + Send> {
   writer: Arc<Mutex<BufWriter<WriteHalf<T>>>>,
 }
