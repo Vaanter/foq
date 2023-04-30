@@ -149,7 +149,6 @@ mod tests {
   use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
-  use crate::auth::user_data::UserData;
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
@@ -170,22 +169,20 @@ mod tests {
 
     let command = Command::new(Commands::MLSD, String::new());
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root_path = current_dir().unwrap().join("test_files");
     let label = "test_files";
     let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view);
 
-    session_properties.write().await.login(user_data);
+    let mut session_properties = SessionProperties::new();
     session_properties
-      .write()
-      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    session_properties
       .file_system_view_root
       .change_working_directory(label.clone());
 
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
     let addr = match command_processor
@@ -280,22 +277,21 @@ mod tests {
 
     let command = Command::new(Commands::MLSD, String::from("1MiB.txt"));
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root_path = current_dir().unwrap().join("test_files");
     let label = "test_files";
     let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view);
 
-    session_properties.write().await.login(user_data);
+    let mut session_properties = SessionProperties::new();
     session_properties
-      .write()
-      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    session_properties
       .file_system_view_root
       .change_working_directory(label.clone());
+    let _ = session_properties.username.insert("test".to_string());
 
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
@@ -327,17 +323,18 @@ mod tests {
 
     let command = Command::new(Commands::MLSD, String::from("NONEXISTENT"));
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root_path = current_dir().unwrap().join("test_files");
     let label = "test_files";
     let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view);
 
-    session_properties.write().await.login(user_data);
+    let mut session_properties = SessionProperties::new();
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties.username.insert("test".to_string());
 
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
@@ -361,22 +358,21 @@ mod tests {
 
     let command = Command::new(Commands::MLSD, String::new());
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
     let permissions = HashSet::from([]);
     let root_path = current_dir().unwrap().join("test_files");
     let label = "test_files";
     let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view);
 
-    session_properties.write().await.login(user_data);
+    let mut session_properties = SessionProperties::new();
     session_properties
-      .write()
-      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    session_properties
       .file_system_view_root
       .change_working_directory(label.clone());
+    let _ = session_properties.username.insert("test".to_string());
 
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
@@ -408,17 +404,18 @@ mod tests {
 
     let command = Command::new(Commands::MLSD, String::new());
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
     let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
     let root_path = current_dir().unwrap().join("test_files");
     let label = "test_files";
     let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view);
 
-    session_properties.write().await.login(user_data);
+    let mut session_properties = SessionProperties::new();
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties.username.insert("test".to_string());
 
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 

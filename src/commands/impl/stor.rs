@@ -127,7 +127,6 @@ mod tests {
 
   use uuid::Uuid;
 
-  use crate::auth::user_data::UserData;
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
@@ -156,7 +155,6 @@ mod tests {
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
 
-    let mut user_data = UserData::new(String::from("test"), String::from("test"));
     let label = "test";
     let view = FileSystemView::new(
       temp_dir(),
@@ -167,8 +165,9 @@ mod tests {
         UserPermission::WRITE,
       ]),
     );
-    user_data.add_view(view);
-    session_properties.write().await.login(user_data);
+
+    session_properties.write().await.file_system_view_root.set_views(vec![view]);
+    let _ = session_properties.write().await.username.insert("test".to_string());
     session_properties
       .write()
       .await
@@ -369,7 +368,6 @@ mod tests {
       .expect("Test listener requires available IP:PORT");
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
 
-    let mut user_data = UserData::new(String::from("test"), String::from("test"));
     let label = "test";
     let view = FileSystemView::new(
       current_dir().unwrap(),
@@ -380,10 +378,10 @@ mod tests {
         UserPermission::CREATE,
       ]),
     );
-    user_data.add_view(view);
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    session_properties.write().await.login(user_data);
+    session_properties.write().await.file_system_view_root.set_views(vec![view]);
+    let _ = session_properties.write().await.username.insert("test".to_string());
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::STOR, format!("NONEXISTENT"));

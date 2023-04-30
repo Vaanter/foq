@@ -1,7 +1,8 @@
-use strum_macros::{EnumIter, EnumMessage};
+use strum_macros::{EnumIter, EnumMessage, EnumString};
 use crate::io::entry_data::EntryType;
 
-#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, EnumMessage, EnumIter)]
+#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, EnumMessage, EnumIter, EnumString)]
+#[strum(ascii_case_insensitive)]
 pub(crate) enum UserPermission {
   #[strum(serialize = "r")]
   READ,

@@ -42,7 +42,7 @@ impl Executable for Retr {
         Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
         reply_sender,
       )
-        .await;
+      .await;
       return;
     }
 
@@ -83,7 +83,7 @@ impl Executable for Retr {
         println!("Sent {len} bytes.");
         true
       }
-      Err(e) => {
+      Err(_) => {
         eprintln!("Error sending file!");
         false
       }
@@ -119,7 +119,6 @@ mod tests {
   use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
-  use crate::auth::user_data::UserData;
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
@@ -139,25 +138,26 @@ mod tests {
 
     let command = Command::new(Commands::RETR, file_name);
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
-    let mut user_data = UserData::new(String::from("test"), String::from("test"));
     let label = "test";
     let view = FileSystemView::new(
       current_dir().unwrap(),
       label.clone(),
       HashSet::from([UserPermission::READ]),
     );
-    user_data.add_view(view);
-    session_properties.write().await.login(user_data);
+
+    let mut session_properties = SessionProperties::new();
     session_properties
-      .write()
-      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    session_properties
       .file_system_view_root
       .change_working_directory(label);
+    let _ = session_properties.username.insert("test".to_string());
+
     let ip: SocketAddr = "127.0.0.1:0"
       .parse()
       .expect("Test listener requires available IP:PORT");
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
     let addr = match command_processor
@@ -306,19 +306,22 @@ mod tests {
     let ip: SocketAddr = "127.0.0.1:0"
       .parse()
       .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
 
-    let mut user_data = UserData::new(String::from("test"), String::from("test"));
     let label = "test";
     let view = FileSystemView::new(
       current_dir().unwrap(),
       label.clone(),
       HashSet::from([UserPermission::READ]),
     );
-    user_data.add_view(view);
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    session_properties.write().await.login(user_data);
+    let mut session_properties = SessionProperties::new();
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties.username.insert("test".to_string());
+
+    let session_properties = Arc::new(RwLock::new(session_properties));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(

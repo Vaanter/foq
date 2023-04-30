@@ -24,8 +24,12 @@ impl FileSystemViewRoot {
     }
   }
 
-  pub(crate) fn set_views(&mut self, view: BTreeMap<String, FileSystemView>) {
-    self.file_system_views = Some(view);
+  pub(crate) fn set_views(&mut self, view: Vec<FileSystemView>) {
+    let views = view
+      .into_iter()
+      .map(|v| (v.label.clone(), v))
+      .collect();
+    self.file_system_views = Some(views);
   }
 
   // TODO better return

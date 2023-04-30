@@ -54,7 +54,6 @@ mod tests {
   use tokio::sync::{mpsc, Mutex, RwLock};
   use tokio::time::timeout;
 
-  use crate::auth::user_data::UserData;
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
@@ -63,7 +62,6 @@ mod tests {
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
-  use crate::io::file_system_view_root::FileSystemViewRoot;
   use crate::io::reply_code::ReplyCode;
   use crate::io::reply_code::ReplyCode::{RequestedFileActionNotTaken, RequestedFileActionOkay};
   use crate::io::session_properties::SessionProperties;
@@ -78,25 +76,28 @@ mod tests {
     expected_display_path: &str,
   ) {
     let command = Command::new(Commands::CDUP, "".to_string());
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+
+    let mut session_properties = SessionProperties::new();
+
+    let permissions = HashSet::from([UserPermission::READ]);
+    let view = FileSystemView::new(root, label.clone(), permissions);
+
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    session_properties
+      .file_system_view_root
+      .change_working_directory(change_path);
+    let _ = session_properties.username.insert("test".to_string());
+
+    let session_properties = Arc::new(RwLock::new(session_properties));
     let mut session = CommandProcessor::new(
       session_properties.clone(),
       Arc::new(Mutex::new(StandardDataChannelWrapper::new(
         "127.0.0.1:0".parse().unwrap(),
       ))),
     );
-    let permissions = HashSet::from([UserPermission::READ]);
-    let view = FileSystemView::new(root, label.clone(), permissions);
-    let mut user_data = UserData::new("test", "test");
-    user_data.add_view(view);
-    let root = FileSystemViewRoot::default();
-    session_properties.write().await.file_system_view_root = root;
-    session_properties.write().await.login(user_data);
-    session_properties
-      .write()
-      .await
-      .file_system_view_root
-      .change_working_directory(change_path);
+
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     Cdup::execute(&mut session, &command, &mut reply_sender).await;
