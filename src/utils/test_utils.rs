@@ -5,6 +5,11 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
 
+use crate::auth::auth_error::AuthError;
+use crate::auth::auth_provider::AuthProvider;
+use crate::auth::data_source::DataSource;
+use crate::auth::login_form::LoginForm;
+use crate::auth::user_data::UserData;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
@@ -37,6 +42,45 @@ impl ReplySend for TestReplySender {
     );
     self.tx.send(reply).await.unwrap();
   }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TestDataSource {
+  user_data: Vec<UserData>,
+}
+
+impl TestDataSource {
+  pub(crate) fn new() -> Self {
+    Self::default()
+  }
+
+  pub(crate) fn new_with_users(users: Vec<UserData>) -> Self {
+    TestDataSource { user_data: users }
+  }
+}
+
+#[async_trait]
+impl DataSource for TestDataSource {
+  async fn authenticate(&self, login_form: &LoginForm) -> Result<UserData, AuthError> {
+    eprintln!("Received: {:?}", login_form);
+    let user = self
+      .user_data
+      .iter()
+      .find(|&u| &u.username == login_form.username.as_ref().unwrap())
+      .ok_or(AuthError::UserNotFoundError)?;
+
+    return if &user.password == login_form.password.as_ref().unwrap() {
+      Ok(user.clone())
+    } else {
+      Err(AuthError::UserNotFoundError)
+    }
+  }
+}
+
+pub(crate) fn create_test_auth_provider(users: Vec<UserData>) -> AuthProvider {
+  let mut provider = AuthProvider::new();
+  provider.add_data_source(Box::new(TestDataSource::new_with_users(users)));
+  provider
 }
 
 pub(crate) async fn receive_and_verify_reply(

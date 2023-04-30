@@ -12,9 +12,9 @@ impl AuthProvider {
     Self::default()
   }
 
-  pub(crate) async fn authenticate(&self, login_form: &LoginForm) -> Option<UserData> {
+  pub(crate) async fn authenticate(&self, login_form: LoginForm) -> Option<UserData> {
     for data_source in self.data_sources.iter() {
-      if let Ok(ud) = data_source.authenticate(login_form).await {
+      if let Ok(ud) = data_source.authenticate(&login_form).await {
         return Some(ud);
       }
     }
@@ -43,7 +43,7 @@ mod tests {
     let mut form = LoginForm::default();
     let _ = form.username.insert("user1".to_string());
     let _ = form.password.insert("user1".to_string());
-    assert!(provider.authenticate(&form).await.is_some());
+    assert!(provider.authenticate(form).await.is_some());
   }
 
   #[sqlx::test]
@@ -54,6 +54,6 @@ mod tests {
     let mut form = LoginForm::default();
     let _ = form.username.insert("user1".to_string());
     let _ = form.password.insert("INVALID".to_string());
-    assert!(provider.authenticate(&form).await.is_none());
+    assert!(provider.authenticate(form).await.is_none());
   }
 }

@@ -22,8 +22,8 @@ impl SessionProperties {
     self.username.is_some()
   }
 
-  pub(crate) async fn login(&mut self, auth_provider: &AuthProvider) -> bool {
-    let user_data = match auth_provider.authenticate(&self.login_form).await {
+  pub(crate) async fn login(&mut self, auth_provider: &AuthProvider, login_form: LoginForm) -> bool {
+    let user_data = match auth_provider.authenticate(login_form).await {
       Some(data) => data,
       None => return false,
     };
