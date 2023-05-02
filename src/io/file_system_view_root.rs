@@ -253,7 +253,7 @@ impl FileSystemViewRoot {
       0,
       EntryType::CDIR,
       ROOT_PERMISSIONS.to_vec(),
-      0,
+      String::new(),
       "/",
     ));
     entries.extend(self.file_system_views.as_ref().unwrap().iter().map(|v| {
@@ -261,7 +261,7 @@ impl FileSystemViewRoot {
         0,
         EntryType::DIR,
         v.1.permissions.iter().cloned().collect(),
-        0,
+        String::new(),
         v.1.label.clone(),
       )
     }));

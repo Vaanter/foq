@@ -93,14 +93,6 @@ impl Executable for Mlsd {
 
     match stream.lock().await.as_mut() {
       Some(s) => {
-        Mlsd::reply(
-          Reply::new(
-            ReplyCode::FileStatusOkay,
-            "Transferring directory information!",
-          ),
-          reply_sender,
-        )
-        .await;
         let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
         debug!("Sending listing to client:\n{}", mem);
         let len = s.write_all(mem.as_ref()).await;
@@ -120,15 +112,17 @@ impl Executable for Mlsd {
       }
     }
 
-    println!("Written to data stream");
-    command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .close_data_stream()
-      .await;
+    Self::reply(
+      Reply::new(
+        ReplyCode::FileStatusOkay,
+        "Transferring directory information!",
+      ),
+      reply_sender,
+    )
+    .await;
+
     debug!("Listing sent to client!");
-    Mlsd::reply(
+    Self::reply(
       Reply::new(
         ReplyCode::ClosingDataConnection,
         "Directory information sent!",
@@ -136,6 +130,12 @@ impl Executable for Mlsd {
       reply_sender,
     )
     .await;
+    command_processor
+      .data_wrapper
+      .lock()
+      .await
+      .close_data_stream()
+      .await;
   }
 }
 

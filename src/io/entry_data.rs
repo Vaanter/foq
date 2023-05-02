@@ -1,8 +1,11 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::fs::Metadata;
 use std::io::Error;
 use std::time::SystemTime;
 
+use chrono::{DateTime, Local};
+use chrono::format::{DelayedFormat, StrftimeItems};
 use strum::EnumMessage;
 use strum_macros::Display;
 
@@ -23,7 +26,7 @@ pub(crate) struct EntryData {
   size: u64,
   entry_type: EntryType,
   perm: Vec<UserPermission>,
-  modify: u128,
+  modify: String,
   name: String,
 }
 
@@ -32,9 +35,14 @@ impl EntryData {
     size: u64,
     entry_type: EntryType,
     perm: Vec<UserPermission>,
-    modify: u128,
+    modify: impl Into<String>,
     name: impl Into<String>,
   ) -> Self {
+    let mut modify = modify.into();
+    if modify.is_empty() {
+      let new_modify: DateTime<Local> = SystemTime::now().into();
+      modify = new_modify.format("%Y%m%d%H%M%S").to_string();
+    }
     EntryData {
       size,
       entry_type,
@@ -55,12 +63,8 @@ impl EntryData {
   ) -> Result<Self, Error> {
     let metadata = metadata?;
     let size = metadata.len();
-    let modify = metadata
-      .modified()
-      .unwrap_or(SystemTime::UNIX_EPOCH)
-      .elapsed()
-      .unwrap()
-      .as_nanos();
+    let modify: DateTime<Local> = metadata.modified().unwrap_or(SystemTime::now()).into();
+    let modify_formatted: DelayedFormat<StrftimeItems> = modify.format("%Y%m%d%H%M%S");
 
     let entry_type = if metadata.is_file() {
       EntryType::FILE
@@ -77,7 +81,13 @@ impl EntryData {
       .filter_map(|p| permissions.get(p).map(|v| v.to_owned()))
       .collect();
 
-    Ok(EntryData::new(size, entry_type, permissions, modify, name))
+    Ok(EntryData::new(
+      size,
+      entry_type,
+      permissions,
+      modify_formatted.to_string(),
+      name,
+    ))
   }
   pub fn size(&self) -> u64 {
     self.size
@@ -88,8 +98,8 @@ impl EntryData {
   pub fn perm(&self) -> &Vec<UserPermission> {
     &self.perm
   }
-  pub fn modify(&self) -> u128 {
-    self.modify
+  pub fn modify(&self) -> &str {
+    &self.modify
   }
   pub fn name(&self) -> &str {
     &self.name
