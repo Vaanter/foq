@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use tokio::fs::File;
+use tracing::debug;
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
@@ -119,7 +120,9 @@ impl FileSystemViewRoot {
     self.change_working_directory("..")
   }
 
+  #[tracing::instrument(skip(self))]
   pub(crate) fn get_current_working_directory(&self) -> String {
+    debug!("Getting current working directory path");
     if self.current_view.is_none() || self.file_system_views.is_none() {
       return String::from("/");
     }
@@ -137,7 +140,9 @@ impl FileSystemViewRoot {
     );
   }
 
+  #[tracing::instrument(skip(self, path))]
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
+    debug!("Listing directory, path: {}", path);
     if self.file_system_views.is_none() {
       // not logged in
       return Err(Error::UserError);
@@ -265,6 +270,7 @@ impl FileSystemViewRoot {
     Ok(entries)
   }
 
+  #[tracing::instrument(skip(self, path, options))]
   pub(crate) async fn open_file(
     &self,
     path: impl Into<String>,
@@ -275,6 +281,7 @@ impl FileSystemViewRoot {
       return Err(Error::UserError);
     }
 
+    debug!("Opening file: {}.", path);
     if path.is_empty() || path == "/" {
       return Err(Error::InvalidPathError(String::from(
         "Path references a directory, not a file!",

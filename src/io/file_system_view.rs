@@ -4,6 +4,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use tokio::fs::{File, OpenOptions};
+use tracing::{debug, warn};
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
@@ -84,6 +85,7 @@ impl FileSystemView {
     self.change_working_directory("..")
   }
 
+  #[tracing::instrument(skip(self, path, options))]
   pub(crate) async fn open_file(
     &self,
     path: impl Into<String>,
@@ -108,6 +110,8 @@ impl FileSystemView {
     let result = OpenOptions::from(options).open(&path).await;
     result.map_err(|e| {
       eprintln!("Error: {}", e);
+    debug!("Opening: {:?}", &path);
+      warn!("Error opening file: {}", e);
       match e.kind() {
         ErrorKind::NotFound => Error::NotFoundError(e.to_string()),
         ErrorKind::PermissionDenied => {

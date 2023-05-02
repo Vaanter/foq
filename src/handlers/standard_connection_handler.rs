@@ -6,7 +6,8 @@ use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::sleep;
+use tokio::time::timeout;
+use tracing::{debug, error, info, warn};
 
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::reply_sender::{ReplySend, ReplySender};
@@ -50,17 +51,21 @@ impl StandardConnectionHandler {
     self.command_processor.clone()
   }
 
+  #[tracing::instrument(skip(self))]
   pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
     let reader = &mut self.control_channel;
     let mut buf = String::new();
-    println!("Server reading command!");
+    debug!("Reading message from client.");
     let bytes = match reader.read_line(&mut buf).await {
       Ok(len) => {
-        println!("Server command read! {}", len);
+        debug!(
+          "[TCP] Received message from client, length: {len}, content: {}",
+          buf.trim()
+        );
         len
       }
       Err(e) => {
-        eprintln!("Failed to read command! {}", e);
+        error!("[TCP] Reading client message failed! Error: {e}");
         0
       }
     };
@@ -85,20 +90,23 @@ impl StandardConnectionHandler {
 impl ConnectionHandler for StandardConnectionHandler {
   async fn handle(&mut self, mut receiver: Receiver<()>) -> Result<(), anyhow::Error> {
     println!("Standard handler execute!");
+  #[tracing::instrument(skip(self, token))]
+    debug!("[TCP] Handler started.");
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
+    debug!("[TCP] Sending hello to client.");
     let _ = &mut self.reply_sender.send_control_message(hello).await;
 
     loop {
       tokio::select! {
+          info!("[TCP] Shutdown received!");
         result = self.await_command() => {
           if let Err(e) = result {
-            println!("{}", e);
+            warn!("[TCP] Error awaiting command!");
             break;
           }
         },
         _ = receiver.recv() => {
-          println!("Shutdown received!");
           //let _ = timeout(Duration::from_secs(2), self.control_channel.0.shutdown());
           //let _ = timeout(Duration::from_secs(2), self.control_channel.1.shutdown());
           break;

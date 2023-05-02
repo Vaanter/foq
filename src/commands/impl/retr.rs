@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tracing::debug;
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -16,6 +17,7 @@ pub(crate) struct Retr;
 
 #[async_trait]
 impl Executable for Retr {
+  #[tracing::instrument(skip(command_processor, reply_sender))]
   async fn execute(
     command_processor: &mut CommandProcessor,
     command: &Command,
@@ -46,6 +48,7 @@ impl Executable for Retr {
       return;
     }
 
+    debug!("Locking data channel!");
     let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
     let mut data_channel = match data_channel_lock {
       Ok(dc) => dc,
@@ -71,6 +74,7 @@ impl Executable for Retr {
         return;
       }
     };
+    debug!("File opened successfully.");
 
     Self::reply(
       Reply::new(ReplyCode::FileStatusOkay, "Starting file transfer!"),
@@ -78,6 +82,7 @@ impl Executable for Retr {
     )
     .await;
 
+    debug!("Sending file!");
     let success = match tokio::io::copy(&mut file, &mut data_channel.as_mut().unwrap()).await {
       Ok(len) => {
         println!("Sent {len} bytes.");

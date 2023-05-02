@@ -5,6 +5,7 @@ use std::sync::Arc;
 use s2n_quic::{provider::io::tokio::Builder as IoBuilder, Connection, Server};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::Mutex;
+use tracing::info;
 
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
 
@@ -43,9 +44,11 @@ impl QuicOnlyListener {
   }
 
   pub(crate) async fn accept(&mut self) -> Result<Connection, anyhow::Error> {
+  #[tracing::instrument(skip(self))]
     let value = tokio::select! {
       conn = self.server.accept() => Ok(conn.unwrap()),
       _ = self.shutdown_receiver.recv() => Err(anyhow::anyhow!("Quic listener shutdown!"))
+        info!("Quic listener shutdown!");
     };
     value
   }

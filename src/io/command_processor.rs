@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
+use tracing::{info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -40,11 +41,12 @@ impl CommandProcessor {
     }
   }
 
+  #[tracing::instrument(skip(self, reply_sender))]
   pub(crate) async fn evaluate(&mut self, message: String, reply_sender: &mut impl ReplySend) {
+    trace!("Evaluating command");
     let command = match Command::parse(&message.trim()) {
       Ok(c) => c,
       Err(e) => {
-        eprintln!("Failed to parse command: '{}', {}", &message, e);
         Noop::reply(
           Reply::new(
             ReplyCode::SyntaxErrorCommandUnrecognized,
@@ -53,6 +55,7 @@ impl CommandProcessor {
           reply_sender,
         )
         .await;
+        info!("Failed to parse command! Error: {e}");
         return;
       }
     };

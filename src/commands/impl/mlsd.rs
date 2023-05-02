@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
+use tracing::{debug, info};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -15,6 +16,7 @@ pub(crate) struct Mlsd;
 
 #[async_trait]
 impl Executable for Mlsd {
+  #[tracing::instrument(skip(command_processor, reply_sender))]
   async fn execute(
     command_processor: &mut CommandProcessor,
     command: &Command,
@@ -22,7 +24,6 @@ impl Executable for Mlsd {
   ) {
     debug_assert_eq!(command.command, Commands::MLSD);
 
-    println!("Getting listing!");
     let session_properties = command_processor.session_properties.read().await;
     let listing = session_properties
       .file_system_view_root
@@ -82,7 +83,7 @@ impl Executable for Mlsd {
       Err(_) => unreachable!(),
     };
 
-    println!("Getting data stream");
+    debug!("Locking data stream!");
     let stream = command_processor
       .data_wrapper
       .lock()
@@ -101,11 +102,12 @@ impl Executable for Mlsd {
         )
         .await;
         let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
-        println!("Writing to data stream");
-        let _ = s.write_all(mem.as_ref()).await;
+        debug!("Sending listing to client:\n{}", mem);
+        let len = s.write_all(mem.as_ref()).await;
+        debug!("Sending listing result: {:?}", len);
       }
       None => {
-        eprintln!("Data stream non existent!");
+        info!("Data stream is not open!");
         Self::reply(
           Reply::new(
             ReplyCode::BadSequenceOfCommands,
@@ -125,6 +127,7 @@ impl Executable for Mlsd {
       .await
       .close_data_stream()
       .await;
+    debug!("Listing sent to client!");
     Mlsd::reply(
       Reply::new(
         ReplyCode::ClosingDataConnection,

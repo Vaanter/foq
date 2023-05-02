@@ -6,6 +6,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast::Receiver;
 
 use crate::handlers::standard_connection_handler::StandardConnectionHandler;
+use tracing::info;
 
 pub(crate) struct StandardListener {
     listener: TcpListener,
@@ -32,4 +33,6 @@ impl StandardListener {
         };
         value
     }
+  #[tracing::instrument(skip(self))]
+        info!("Quic listener shutdown!");
 }
