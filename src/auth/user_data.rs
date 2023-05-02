@@ -3,6 +3,7 @@ use crate::io::file_system_view::FileSystemView;
 #[derive(Clone, Debug)]
 pub(crate) struct UserData {
   pub(crate) username: String,
+  #[allow(unused)]
   pub(crate) password: String,
   pub(crate) file_system_views: Vec<FileSystemView>,
 }
@@ -20,6 +21,7 @@ impl UserData {
     self.file_system_views.push(view);
   }
 
+  #[allow(unused)]
   pub(crate) fn remove_view(&mut self, view: &FileSystemView) {
     if let Some(pos) = self.file_system_views.iter().position(|x| *x == *view) {
       self.file_system_views.remove(pos);

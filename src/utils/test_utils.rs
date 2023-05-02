@@ -1,3 +1,4 @@
+use std::io::Error;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -42,6 +43,10 @@ impl ReplySend for TestReplySender {
     );
     self.tx.send(reply).await.unwrap();
   }
+
+  async fn close(&mut self) -> Result<(), Error> {
+    Ok(())
+  }
 }
 
 #[derive(Clone, Default)]
@@ -49,6 +54,7 @@ pub(crate) struct TestDataSource {
   user_data: Vec<UserData>,
 }
 
+#[allow(unused)]
 impl TestDataSource {
   pub(crate) fn new() -> Self {
     Self::default()

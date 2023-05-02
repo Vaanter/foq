@@ -142,13 +142,12 @@ impl FileSystemViewRoot {
 
   #[tracing::instrument(skip(self, path))]
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
+    let path = path.into();
     debug!("Listing directory, path: {}", path);
     if self.file_system_views.is_none() {
       // not logged in
       return Err(Error::UserError);
     }
-
-    let path = path.into();
 
     if path.is_empty() || path == "." {
       if self.current_view.is_none() {

@@ -60,7 +60,7 @@ mod tests {
   use crate::io::command_processor::CommandProcessor;
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::TestReplySender;
+  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
 
   #[tokio::test]
   async fn set_username_test() {
@@ -87,15 +87,8 @@ mod tests {
       panic!("Command timeout!");
     };
 
-    match timeout(Duration::from_secs(2), rx.recv()).await {
-      Ok(Some(result)) => {
-        assert_eq!(result.code, ReplyCode::UserNameOkay);
-        assert_eq!(session_properties.read().await.login_form.username, Some(name));
-      }
-      Err(_) | Ok(None) => {
-        panic!("Failed to receive reply in time!");
-      }
-    };
+    receive_and_verify_reply(2, &mut rx, ReplyCode::UserNameOkay, None).await;
+    assert_eq!(session_properties.read().await.login_form.username, Some(name));
   }
 
   #[tokio::test]
@@ -122,13 +115,6 @@ mod tests {
       panic!("Command timeout!");
     };
 
-    match timeout(Duration::from_secs(2), rx.recv()).await {
-      Ok(Some(result)) => {
-        assert_eq!(result.code, ReplyCode::SyntaxErrorInParametersOrArguments);
-      }
-      Err(_) | Ok(None) => {
-        panic!("Failed to receive reply in time!");
-      }
-    };
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 }
