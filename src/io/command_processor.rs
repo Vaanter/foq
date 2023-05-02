@@ -8,6 +8,7 @@ use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::commands::r#impl::auth::Auth;
 use crate::commands::r#impl::cdup::Cdup;
+use crate::commands::r#impl::cwd::Cwd;
 use crate::commands::r#impl::feat::Feat;
 use crate::commands::r#impl::mlsd::Mlsd;
 use crate::commands::r#impl::noop::Noop;
@@ -15,6 +16,7 @@ use crate::commands::r#impl::pass::Pass;
 use crate::commands::r#impl::pasv::Pasv;
 use crate::commands::r#impl::pwd::Pwd;
 use crate::commands::r#impl::r#type::Type;
+use crate::commands::r#impl::retr::Retr;
 use crate::commands::r#impl::stor::Stor;
 use crate::commands::r#impl::syst::Syst;
 use crate::commands::r#impl::user::User;
@@ -47,15 +49,15 @@ impl CommandProcessor {
     let command = match Command::parse(&message.trim()) {
       Ok(c) => c,
       Err(e) => {
-        Noop::reply(
-          Reply::new(
-            ReplyCode::SyntaxErrorCommandUnrecognized,
-            "Command not parseable!",
-          ),
-          reply_sender,
-        )
-        .await;
         info!("Failed to parse command! Error: {e}");
+        if !message.trim().is_empty() {
+          reply_sender
+            .send_control_message(Reply::new(
+              ReplyCode::SyntaxErrorCommandUnrecognized,
+              "Command not parseable!",
+            ))
+            .await;
+        }
         return;
       }
     };
@@ -63,21 +65,25 @@ impl CommandProcessor {
     match command.command {
       Commands::AUTH => Auth::execute(self, &command, reply_sender).await,
       Commands::CDUP => Cdup::execute(self, &command, reply_sender).await,
+      Commands::CWD => Cwd::execute(self, &command, reply_sender).await,
       Commands::FEAT => Feat::execute(self, &command, reply_sender).await,
       Commands::MLSD => Mlsd::execute(self, &command, reply_sender).await,
+      Commands::NOOP => Noop::execute(self, &command, reply_sender).await,
       Commands::PASS => Pass::execute(self, &command, reply_sender).await,
       Commands::PASV => Pasv::execute(self, &command, reply_sender).await,
       Commands::PWD => Pwd::execute(self, &command, reply_sender).await,
+      Commands::RETR => Retr::execute(self, &command, reply_sender).await,
       Commands::STOR => Stor::execute(self, &command, reply_sender).await,
       Commands::SYST => Syst::execute(self, &command, reply_sender).await,
       Commands::TYPE => Type::execute(self, &command, reply_sender).await,
       Commands::USER => User::execute(self, &command, reply_sender).await,
       _ => {
-        Noop::reply(
-          Reply::new(ReplyCode::CommandNotImplemented, "Command not implemented!"),
-          reply_sender,
-        )
-        .await
+        reply_sender
+          .send_control_message(Reply::new(
+            ReplyCode::CommandNotImplemented,
+            "Command not implemented!",
+          ))
+          .await
       }
     };
   }
