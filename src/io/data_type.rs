@@ -1,6 +1,21 @@
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum DataType {
-    #[default]
-    ASCII,
-    BINARY,
+  ASCII { sub_type: SubType },
+  BINARY,
+}
+
+impl Default for DataType {
+  fn default() -> Self {
+    DataType::ASCII {
+      sub_type: SubType::default(),
+    }
+  }
+}
+
+#[derive(Copy, Clone, Debug, Default, Ord, PartialOrd, Eq, PartialEq)]
+pub(crate) enum SubType {
+  #[default]
+  NonPrint,
+  TelnetFormatEffectors,
+  CarriageControl,
 }

@@ -107,23 +107,22 @@ impl FileSystemView {
       self.current_path.join(PathBuf::from(path))
     };
 
-    let result = OpenOptions::from(options).open(&path).await;
-    result.map_err(|e| {
-      eprintln!("Error: {}", e);
     debug!("Opening: {:?}", &path);
+
+    let file = OpenOptions::from(options).open(&path).await.map_err(|e| {
       warn!("Error opening file: {}", e);
       match e.kind() {
         ErrorKind::NotFound => Error::NotFoundError(e.to_string()),
-        ErrorKind::PermissionDenied => {
-          if !path.is_file() {
-            Error::NotAFileError
-          } else {
-            Error::PermissionError
-          }
-        }
+        ErrorKind::PermissionDenied => Error::PermissionError,
         _ => Error::OsError(e),
       }
-    })
+    });
+
+    return if path.is_dir() {
+      return Err(Error::NotAFileError);
+    } else {
+      file
+    }
   }
 
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
@@ -147,6 +146,7 @@ impl FileSystemView {
       }
 
       Ok(Self::create_listing(
+        &self.label,
         current,
         read_dir.unwrap(),
         &self.permissions,
@@ -171,7 +171,13 @@ impl FileSystemView {
         return Err(Error::OsError(read_dir.unwrap_err()));
       }
 
+      let parent_name = parent
+        .file_name()
+        .map(|n| n.to_str().unwrap())
+        .unwrap_or("");
+
       Ok(Self::create_listing(
+        parent_name,
         parent,
         read_dir.unwrap(),
         &self.permissions,
@@ -190,6 +196,7 @@ impl FileSystemView {
       }
 
       Ok(Self::create_listing(
+        "/",
         self.root.clone(),
         read_dir.unwrap(),
         &self.permissions,
@@ -213,12 +220,13 @@ impl FileSystemView {
       }
 
       Ok(Self::create_listing(
+        path.rsplit_once("/").unwrap().1,
         absolute,
         read_dir.unwrap(),
         &self.permissions,
       ))
     } else {
-      let relative = self.current_path.join(path);
+      let relative = self.current_path.join(&path);
       if !relative.exists() {
         // Path doesn't exist! Nothing to list
         return Err(Error::NotFoundError(String::from("Directory not found!")));
@@ -236,6 +244,7 @@ impl FileSystemView {
       }
 
       Ok(Self::create_listing(
+        path.rsplit_once("/").unwrap_or(("", &path)).1,
         relative,
         read_dir.unwrap(),
         &self.permissions,
@@ -244,12 +253,11 @@ impl FileSystemView {
   }
 
   fn create_listing(
+    name: impl Into<String>,
     path: impl AsRef<Path>,
     read_dir: ReadDir,
     permissions: &HashSet<UserPermission>,
   ) -> Vec<EntryData> {
-    let name = path.as_ref().file_name().unwrap().to_str().unwrap();
-
     let mut listing = Vec::with_capacity(read_dir.size_hint().0 + 1);
     let cdir = EntryData::create_from_metadata(path.as_ref().metadata(), name, permissions);
     if cdir.is_ok() {
@@ -580,6 +588,22 @@ pub(crate) mod tests {
     let Err(Error::NotFoundError(_)) = listing else {
       panic!("Expected NotFound error");
     };
+  }
+
+  #[test]
+  fn list_dir_fs_root_test() {
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let root = current_dir()
+      .unwrap()
+      .ancestors()
+      .last()
+      .unwrap()
+      .to_path_buf();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let listing = view.list_dir("").unwrap();
+    validate_listing(&listing, 1, permissions.len(), 0, 0);
   }
 
   #[test]
