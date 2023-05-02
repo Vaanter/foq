@@ -41,11 +41,11 @@ impl Executable for Pwd {
     }
 
     let session_properties = command_processor.session_properties.read().await;
-    let reply_message = session_properties
+    let reply_message = format!("\"{}\"", session_properties
       .file_system_view_root
-      .get_current_working_directory();
+      .get_current_working_directory());
     Pwd::reply(
-      Reply::new(ReplyCode::CommandOkay, reply_message),
+      Reply::new(ReplyCode::PathnameCreated, reply_message),
       reply_sender,
     )
     .await;
