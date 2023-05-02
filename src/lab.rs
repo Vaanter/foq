@@ -1,21 +1,17 @@
-use std::error::Error;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
+use std::str::FromStr;
 
-use bytes::Bytes;
-use s2n_quic::stream::BidirectionalStream;
-use s2n_quic::Server;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex;
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use tokio::net::TcpListener;
 
+use crate::auth::auth_error::AuthError;
+use crate::auth::login_form::LoginForm;
+use crate::auth::user_data::UserData;
+use crate::auth::user_permission::UserPermission;
+use crate::global_context::DB_LAZY;
 // src/bin/server.rs
-use crate::handlers::connection_handler::ConnectionHandler;
-use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
-use crate::handlers::standard_connection_handler::StandardConnectionHandler;
-use crate::listeners::quic_only_listener::QuicOnlyListener;
-use crate::listeners::standard_listener::StandardListener;
+use crate::io::file_system_view::FileSystemView;
 
 /// NOTE: this certificate is to be used for demonstration purposes only!
 pub static CERT_PEM: &str = include_str!(concat!(
@@ -32,161 +28,53 @@ pub(crate) async fn get_port() {
   println!("Port: {}", listener.unwrap().local_addr().unwrap().port());
 }
 
-pub(crate) async fn run() {
-  run_tcp_listener().await;
-}
+pub(crate) async fn sqlx_test() {
+  let mut pool = DB_LAZY.acquire().await.unwrap();
 
-#[allow(unused)]
-async fn run_tcp_listener() {
-  let (shutdown_send, shutdown_recv) = tokio::sync::broadcast::channel(1024);
-  let addr = "127.0.0.1:8765".parse().unwrap();
-  let mut standard_listener = StandardListener::new(addr, shutdown_send.subscribe()).unwrap();
-
-  match standard_listener.accept().await {
-    Ok(stream) => {
-      println!("Received connection");
-      let mut handler = StandardConnectionHandler::new(stream);
-      handler.handle(shutdown_send.subscribe()).await;
-    }
-    Err(e) => {
-      eprintln!("Error {e}")
-    }
-  }
-}
-
-#[allow(unused)]
-async fn run_quic_listener() {
-  let (shutdown_send, shutdown_recv) = tokio::sync::broadcast::channel(1024);
-  let addr = "127.0.0.1:9876".parse().unwrap();
-  let mut quic_only_listener = QuicOnlyListener::new(addr, shutdown_send.subscribe()).unwrap();
-
-  let handler_shutdown_recv = shutdown_send.subscribe();
-  tokio::spawn(async move {
-    match quic_only_listener.accept().await {
-      Ok(conn) => {
-        println!("Received connection!");
-        let handler = QuicOnlyConnectionHandler::new(conn);
-      }
-      Err(e) => {
-        eprintln!("Error {e}")
-      }
-    }
-  });
-
-  match tokio::signal::ctrl_c().await {
-    Ok(_) => {
-      shutdown_send.send(()).unwrap();
-    }
-    Err(_) => {}
-  }
-}
-
-#[allow(unused)]
-async fn run_tcp() -> Result<(), std::io::Error> {
-  let listener = TcpListener::bind("127.0.0.1:8080").await?;
-  println!("Listening on: {}", listener.local_addr().unwrap());
-
-  loop {
-    let (socket, _) = listener.accept().await?;
-
-    tokio::spawn(async move {
-      handle_tcp_connection(socket).await.unwrap();
-    });
-  }
-}
-
-async fn handle_tcp_connection(mut stream: TcpStream) -> Result<(), std::io::Error> {
-  let mut buffer = [0; 1024];
-  let len = stream.read(&mut buffer).await?;
-
-  let message = String::from_utf8_lossy(&buffer[..len]);
-  println!("Received: {}", message);
-
-  let _ = stream.write_all(message.as_bytes()).await;
-  println!("Sent: {}", message);
-
-  Ok(())
-}
-
-#[allow(unused)]
-async fn run_quic() -> Result<(), Box<dyn Error>> {
-  let mut server = Server::builder()
-    .with_tls((CERT_PEM, KEY_PEM))?
-    .with_io("127.0.0.1:4433")?
-    .start()?;
-
-  loop {
-    match server.accept().await {
-      Some(mut connection) => {
-        println!("Creating task for connection.");
-        // spawn a new task for the connection
-        tokio::spawn(async move {
-          eprintln!("Connection accepted from {:?}", connection.remote_addr());
-
-          loop {
-            eprintln!("Accepting stream!");
-            match connection.accept_bidirectional_stream().await {
-              Ok(Some(stream)) => {
-                handle_stream(stream);
-              }
-              Ok(None) => {
-                eprintln!("Connection closed when waiting for stream");
-                break;
-              }
-              Err(e) => {
-                eprintln!("Error opening stream! {}", e);
-                break;
-              }
-            }
-          }
-
-          eprintln!("Connection closed!");
-        });
-      }
-      None => {
-        eprintln!("server closed!");
-        break;
-      }
-    }
+  let argon = Argon2::default();
+  let mut login_form = LoginForm::default();
+  let username = login_form.username.insert("user1".to_string()).as_str();
+  let password = login_form.password.insert("user1".to_string()).as_str();
+  let query = sqlx::query!(
+    "SELECT user_id, username, password FROM users WHERE username = $1",
+    username
+  )
+  .fetch_one(&mut pool)
+  .await
+  .map_err(|e| AuthError::BackendError)
+  .unwrap();
+  let parsed_hash = PasswordHash::new(&query.password).unwrap();
+  if argon
+    .verify_password(password.as_bytes(), &parsed_hash)
+    .is_err()
+  {
+    panic!("ERROR");
   }
 
-  Ok(())
+  println!("{:#?}", query);
+  let views = sqlx::query!(
+    "SELECT root, label, permissions FROM views WHERE user_id = $1",
+    query.user_id
+  )
+  .fetch_all(&mut pool)
+  .await
+  .map_err(|e| AuthError::BackendError)
+  .unwrap();
+  println!("{:#?}", views);
+
+  let mut user_data = UserData::new(username.to_string(), parsed_hash.to_string());
+
+  for view in views.iter() {
+    let permissions = view
+      .permissions
+      .split(";")
+      .map(|p| {
+        println!("{}", p);
+        UserPermission::from_str(p).unwrap()
+      })
+      .collect();
+    let view = FileSystemView::new(PathBuf::from(&view.root), &view.label, permissions);
+    user_data.add_view(view);
+  }
+  println!("{:#?}", user_data);
 }
-
-#[allow(unused)]
-fn handle_stream(mut stream: BidirectionalStream) {
-  tokio::spawn(async move {
-    eprintln!("Stream opened from {:?}", stream.connection().remote_addr());
-
-    loop {
-      match stream.receive().await {
-        Ok(Some(data)) => {
-          println!("Data received!");
-          // echo any data back to the stream
-          eprintln!("Received: {}", std::str::from_utf8(&data).unwrap());
-          let current = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-            .to_string();
-          println!("Sent: {}", current);
-          let msg = Bytes::from(current);
-          stream.send(msg).await.expect("stream should be open");
-        }
-        Ok(None) => {
-          eprintln!("Stream closed!");
-          break;
-        }
-        Err(e) => {
-          eprintln!("Stream error: {}", e);
-          break;
-        }
-      }
-    }
-    //eprintln!("Closing stream!");
-    //stream.stop_sending(0u8.into()).unwrap();
-    //stream.close().await.unwrap();
-  });
-}
-
-fn impl_test(x: Arc<Mutex<impl ToString>>) {}
