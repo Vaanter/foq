@@ -4,9 +4,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::net::TcpStream;
-use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use crate::handlers::connection_handler::ConnectionHandler;
@@ -74,23 +74,19 @@ impl StandardConnectionHandler {
     }
 
     let session = self.command_processor.clone();
-    //tokio::spawn(async move {
     session
       .lock()
       .await
       .evaluate(buf, &mut self.reply_sender)
       .await;
-    sleep(Duration::from_secs(1)).await;
-    //});
     Ok(())
   }
 }
 
 #[async_trait]
 impl ConnectionHandler for StandardConnectionHandler {
-  async fn handle(&mut self, mut receiver: Receiver<()>) -> Result<(), anyhow::Error> {
-    println!("Standard handler execute!");
   #[tracing::instrument(skip(self, token))]
+  async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error> {
     debug!("[TCP] Handler started.");
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
@@ -99,17 +95,17 @@ impl ConnectionHandler for StandardConnectionHandler {
 
     loop {
       tokio::select! {
+        biased;
+        _ = token.cancelled() => {
           info!("[TCP] Shutdown received!");
+          let _ = timeout(Duration::from_secs(2), self.reply_sender.close());
+          break;
+        }
         result = self.await_command() => {
           if let Err(e) = result {
             warn!("[TCP] Error awaiting command!");
             break;
           }
-        },
-        _ = receiver.recv() => {
-          //let _ = timeout(Duration::from_secs(2), self.control_channel.0.shutdown());
-          //let _ = timeout(Duration::from_secs(2), self.control_channel.1.shutdown());
-          break;
         }
       }
     }
@@ -126,6 +122,7 @@ mod tests {
   use tokio::io::{AsyncBufReadExt, BufReader};
   use tokio::net::{TcpListener, TcpStream};
   use tokio::time::timeout;
+  use tokio_util::sync::CancellationToken;
 
   use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::data_channel_wrapper::DataChannelWrapper;
@@ -200,12 +197,16 @@ mod tests {
     };
     let addr = listener.local_addr().unwrap();
     println!("Server port is {}", addr.port());
-    let (shutdown_send, shutdown_recv) = tokio::sync::broadcast::channel(8096);
+    let token = CancellationToken::new();
+    let ct = token.clone();
     let handler_fut = tokio::spawn(async move {
       let (server_cc, _) = listener.accept().await.unwrap();
       let mut handler = StandardConnectionHandler::new(server_cc);
 
-      handler.handle(shutdown_recv).await.expect("Handler should exit gracefully");
+      handler
+        .handle(ct)
+        .await
+        .expect("Handler should exit gracefully");
     });
 
     let mut client_cc = TcpStream::connect(addr).await.unwrap();
@@ -227,7 +228,7 @@ mod tests {
       }
       Err(e) => panic!("Timeout reading hello!"),
     }
-    shutdown_send.send(()).unwrap();
+    token.cancel();
 
     if let Err(e) = timeout(Duration::from_secs(3), handler_fut).await {
       panic!("Handler future failed to finish!");

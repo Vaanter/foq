@@ -3,36 +3,31 @@ use std::net::SocketAddr;
 use std::net::TcpListener as StdTcpListener;
 
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::broadcast::Receiver;
-
-use crate::handlers::standard_connection_handler::StandardConnectionHandler;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 pub(crate) struct StandardListener {
-    listener: TcpListener,
-    handlers: Vec<StandardConnectionHandler>,
-    shutdown_receiver: Receiver<()>,
+  listener: TcpListener,
 }
 
 impl StandardListener {
-    pub(crate) fn new(
-        addr: SocketAddr,
-        shutdown_receiver: Receiver<()>,
-    ) -> Result<Self, Box<dyn Error>> {
-        Ok(StandardListener {
-            listener: TcpListener::from_std(StdTcpListener::bind(addr)?)?,
-            handlers: vec![],
-            shutdown_receiver,
-        })
-    }
+  pub(crate) async fn new(
+    addr: SocketAddr,
+  ) -> Result<Self, Box<dyn Error>> {
+    Ok(StandardListener {
+      listener: TcpListener::bind(addr).await?,
+    })
+  }
 
-    pub(crate) async fn accept(&mut self) -> Result<TcpStream, anyhow::Error> {
-        let value = tokio::select! {
-          stream = self.listener.accept() => Ok(stream.unwrap().0),
-          _ = self.shutdown_receiver.recv() => Err(anyhow::anyhow!("Standard listener shutdown!"))
-        };
-        value
-    }
   #[tracing::instrument(skip(self))]
+  pub(crate) async fn accept(&mut self, token: CancellationToken) -> Option<(TcpStream, SocketAddr)> {
+    let value = tokio::select! {
+      conn = self.listener.accept() => Some(conn.unwrap()),
+      _ = token.cancelled() => {
         info!("Quic listener shutdown!");
+        None
+      }
+    };
+    value
+  }
 }

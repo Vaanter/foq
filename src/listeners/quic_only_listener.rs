@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use s2n_quic::{provider::io::tokio::Builder as IoBuilder, Connection, Server};
-use tokio::sync::broadcast::Receiver;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
@@ -21,14 +21,10 @@ pub static KEY_PEM: &str =
 pub(crate) struct QuicOnlyListener {
   pub(crate) server: Server,
   pub(crate) handlers: Vec<Arc<Mutex<QuicOnlyConnectionHandler>>>,
-  shutdown_receiver: Receiver<()>,
 }
 
 impl QuicOnlyListener {
-  pub(crate) fn new(
-    addr: SocketAddr,
-    shutdown_receiver: Receiver<()>,
-  ) -> Result<Self, Box<dyn Error>> {
+  pub(crate) fn new(addr: SocketAddr) -> Result<Self, Box<dyn Error>> {
     let io = IoBuilder::default().with_receive_address(addr)?.build()?;
 
     let server = Server::builder()
@@ -39,16 +35,17 @@ impl QuicOnlyListener {
     Ok(QuicOnlyListener {
       server,
       handlers: vec![],
-      shutdown_receiver,
     })
   }
 
-  pub(crate) async fn accept(&mut self) -> Result<Connection, anyhow::Error> {
   #[tracing::instrument(skip(self))]
+  pub(crate) async fn accept(&mut self, token: CancellationToken) -> Option<Connection> {
     let value = tokio::select! {
-      conn = self.server.accept() => Ok(conn.unwrap()),
-      _ = self.shutdown_receiver.recv() => Err(anyhow::anyhow!("Quic listener shutdown!"))
+      conn = self.server.accept() => Some(conn.unwrap()),
+      _ = token.cancelled() => {
         info!("Quic listener shutdown!");
+        None
+      }
     };
     value
   }

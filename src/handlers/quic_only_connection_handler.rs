@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use s2n_quic::stream::BidirectionalStream;
 use s2n_quic::Connection;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
-use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
@@ -103,7 +103,7 @@ impl QuicOnlyConnectionHandler {
 
 #[async_trait]
 impl ConnectionHandler for QuicOnlyConnectionHandler {
-  async fn handle(&mut self, mut receiver: Receiver<()>) -> Result<(), anyhow::Error> {
+  async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error> {
     println!("Quic handler execute!");
 
     self.create_control_channel().await?;
@@ -113,17 +113,18 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
 
     loop {
       tokio::select! {
-        reply = self.await_command() => {
-          if reply.is_some() {
-
-          }
-        },
-        _ = receiver.recv() => {
+        biased;
+        _ = token.cancelled() => {
           println!("Shutdown received!");
           if let Ok(conn) = timeout(Duration::from_secs(2), self.connection.clone().lock_owned()).await {
             conn.close(0u32.into())
           };
           break;
+        },
+        reply = self.await_command() => {
+          if reply.is_some() {
+
+          }
         }
       }
     }
@@ -140,6 +141,7 @@ mod tests {
   use s2n_quic::Client;
   use tokio::io::{AsyncBufReadExt, BufReader};
   use tokio::time::timeout;
+  use tokio_util::sync::CancellationToken;
 
   use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
@@ -157,17 +159,18 @@ mod tests {
       .parse()
       .expect("Test listener requires available IP:PORT");
 
-    let (shutdown_send, shutdown_recv) = tokio::sync::broadcast::channel(1024);
-    let mut listener = QuicOnlyListener::new(server_addr, shutdown_send.subscribe()).unwrap();
+    let mut listener = QuicOnlyListener::new(server_addr).unwrap();
 
     let addr = listener.server.local_addr().unwrap();
     println!("Server port is {}", addr.port());
+    let token = CancellationToken::new();
+    let ct = token.clone();
     let handler_fut = tokio::spawn(async move {
-      let conn = listener.accept().await.unwrap();
+      let conn = listener.accept(ct.clone()).await.unwrap();
       let mut handler = QuicOnlyConnectionHandler::new(conn);
 
       handler
-        .handle(shutdown_recv)
+        .handle(ct)
         .await
         .expect("Handler should exit gracefully");
     });
@@ -215,7 +218,7 @@ mod tests {
       }
       Err(e) => panic!("Timeout reading hello!"),
     }
-    shutdown_send.send(()).unwrap();
+    token.cancel();
 
     if let Err(e) = timeout(Duration::from_secs(3), handler_fut).await {
       panic!("Handler future failed to finish!");
