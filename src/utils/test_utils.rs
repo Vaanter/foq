@@ -1,7 +1,11 @@
 use std::io::Error;
-use std::time::Duration;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
+use rustls::client::{ServerCertVerified, ServerCertVerifier};
+use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::time::timeout;
@@ -71,9 +75,13 @@ impl DataSource for TestDataSource {
       Ok(user.clone())
     } else {
       Err(AuthError::UserNotFoundError)
-    }
+    };
   }
 }
+
+pub static CERT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server-cert.pem");
+
+pub static KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server-key.pem");
 
 pub(crate) fn create_test_auth_provider(users: Vec<UserData>) -> AuthProvider {
   let mut provider = AuthProvider::new();
@@ -98,4 +106,45 @@ pub(crate) async fn receive_and_verify_reply(
       panic!("Failed to receive reply!");
     }
   };
+}
+
+pub(crate) struct NoCertificateVerification {}
+
+impl NoCertificateVerification {
+  pub(crate) fn new() -> Self {
+    NoCertificateVerification {}
+  }
+}
+
+impl ServerCertVerifier for NoCertificateVerification {
+  fn verify_server_cert(
+    &self,
+    end_entity: &Certificate,
+    intermediates: &[Certificate],
+    server_name: &ServerName,
+    scts: &mut dyn Iterator<Item = &[u8]>,
+    ocsp_response: &[u8],
+    now: SystemTime,
+  ) -> Result<ServerCertVerified, rustls::Error> {
+    Ok(ServerCertVerified::assertion())
+  }
+}
+
+#[cfg(test)]
+pub(crate) fn create_test_client_config() -> ClientConfig {
+  ClientConfig::builder()
+    .with_safe_defaults()
+    .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
+    .with_no_client_auth()
+}
+
+#[cfg(test)]
+pub(crate) fn create_test_server_config() -> ServerConfig {
+  let cert = load_certs(Path::new(CERT_PATH)).unwrap();
+  let mut key = load_keys(Path::new(KEY_PATH)).unwrap();
+  ServerConfig::builder()
+    .with_safe_defaults()
+    .with_no_client_auth()
+    .with_single_cert(cert, key.remove(0))
+    .unwrap()
 }
