@@ -250,4 +250,79 @@ mod tests {
       panic!("Handler future failed to finish!");
     };
   }
+
+  #[tokio::test]
+  async fn server_hello_quinn_test() {
+    let server_addr = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+
+    let mut listener = QuicOnlyListener::new(server_addr).unwrap();
+
+    let addr = listener.server.local_addr().unwrap();
+    let token = CancellationToken::new();
+    let ct = token.clone();
+    let handler_fut = tokio::spawn(async move {
+      let conn = listener.accept(ct.clone()).await.unwrap();
+      let mut handler = QuicOnlyConnectionHandler::new(conn);
+
+      handler
+        .handle(ct)
+        .await
+        .expect("Handler should exit gracefully");
+    });
+
+    let ca_chain = CONFIG
+      .get_string("ca_chain_file")
+      .expect("Chain should exist!");
+    let chain_certs = load_certs(Path::new(&ca_chain)).unwrap();
+
+    let mut root_store = RootCertStore::empty();
+    chain_certs.iter().for_each(|c| root_store.add(c).unwrap());
+    let mut client_config = ClientConfig::builder()
+      .with_safe_defaults()
+      .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
+      .with_no_client_auth();
+    client_config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
+
+    let mut quinn_client = quinn::Endpoint::client("127.0.0.1:0".parse().unwrap()).unwrap();
+
+    quinn_client.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_config)));
+
+    let connection = match quinn_client.connect(addr, "localhost").unwrap().await {
+      Ok(conn) => conn,
+      Err(e) => {
+        panic!("Client failed to connect to the server! {}", e);
+      }
+    };
+
+    let (writer, reader) = match connection.accept_bi().await {
+      Ok(c) => c,
+      Err(e) => {
+        panic!("Client failed to accept control channel! {}", e);
+      }
+    };
+
+    let mut client_reader = BufReader::new(reader);
+    let mut buffer = String::new();
+    match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
+      Ok(Ok(len)) => {
+        println!("Received reply from server!: {}", buffer.trim());
+        assert!(buffer
+          .trim()
+          .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
+        assert!(buffer.trim().contains("Hello"));
+        buffer.clear();
+      }
+      Ok(Err(e)) => {
+        panic!("Failed to read reply! {}", e);
+      }
+      Err(e) => panic!("Timeout reading hello!"),
+    }
+    token.cancel();
+
+    if let Err(e) = timeout(Duration::from_secs(3), handler_fut).await {
+      panic!("Handler future failed to finish!");
+    };
+  }
 }
