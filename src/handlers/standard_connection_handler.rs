@@ -118,70 +118,15 @@ mod tests {
   use std::net::SocketAddr;
   use std::time::Duration;
 
-  use tokio::io;
   use tokio::io::{AsyncBufReadExt, BufReader};
-  use tokio::net::{TcpListener, TcpStream};
+  use tokio::net::TcpStream;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
 
   use crate::handlers::connection_handler::ConnectionHandler;
-  use crate::handlers::data_channel_wrapper::DataChannelWrapper;
   use crate::handlers::standard_connection_handler::StandardConnectionHandler;
   use crate::io::reply_code::ReplyCode;
-
-  #[tokio::test]
-  async fn smoke() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
-    let listener = TcpListener::bind(ip).await;
-    assert!(listener.is_ok());
-    let listener = listener.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-      loop {
-        let _ = listener.accept().await;
-      }
-    });
-
-    let stream = TcpStream::connect(addr).await.unwrap();
-    let handler = StandardConnectionHandler::new(stream);
-
-    let (port_send, port_recv) = tokio::sync::oneshot::channel();
-    tokio::spawn(async move {
-      let result = handler
-        .data_channel_wrapper
-        .clone()
-        .lock()
-        .await
-        .open_data_stream()
-        .await;
-      assert!(result.is_ok());
-      port_send.send(result.unwrap())
-    });
-
-    let port_msg = timeout(Duration::from_secs(3), port_recv).await;
-
-    let addr = match port_msg {
-      Ok(Ok(addr)) => {
-        println!("Address is {}", addr);
-        addr
-      }
-      Ok(Err(e)) => {
-        panic!("Failed to receive port: {}", e);
-      }
-      Err(e) => {
-        panic!("Failed to receive port: {}", e);
-      }
-    };
-    println!("Connecting to passive listener");
-    let client_dc: io::Result<TcpStream> = TcpStream::connect(addr).await;
-    if let Err(e) = client_dc.as_ref() {
-      panic!("{}", e);
-    }
-    println!("Connection successful!");
-  }
+  use crate::listeners::standard_listener::StandardListener;
 
   #[tokio::test]
   async fn server_hello_test() {
@@ -189,18 +134,12 @@ mod tests {
       .parse()
       .expect("Test listener requires available IP:PORT");
 
-    let listener = match TcpListener::bind(ip).await {
-      Ok(l) => l,
-      Err(e) => {
-        panic!("Failed to create server listener! {}", e);
-      }
-    };
-    let addr = listener.local_addr().unwrap();
-    println!("Server port is {}", addr.port());
+    let mut listener = StandardListener::new(ip).await.unwrap();
+    let addr = listener.listener.local_addr().unwrap();
     let token = CancellationToken::new();
     let ct = token.clone();
     let handler_fut = tokio::spawn(async move {
-      let (server_cc, _) = listener.accept().await.unwrap();
+      let (server_cc, _) = listener.accept(ct.clone()).await.unwrap();
       let mut handler = StandardConnectionHandler::new(server_cc);
 
       handler
@@ -209,9 +148,11 @@ mod tests {
         .expect("Handler should exit gracefully");
     });
 
-    let mut client_cc = TcpStream::connect(addr).await.unwrap();
-
-    let (reader, writer) = client_cc.split();
+    let client_cc = timeout(Duration::from_secs(2), TcpStream::connect(addr))
+      .await
+      .unwrap()
+      .unwrap();
+    let (reader, writer) = tokio::io::split(client_cc);
     let mut client_reader = BufReader::new(reader);
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {

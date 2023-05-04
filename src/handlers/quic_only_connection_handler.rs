@@ -142,23 +142,28 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
 
 #[cfg(test)]
 mod tests {
+  use std::path::Path;
+  use std::sync::Arc;
   use std::time::Duration;
 
+  use rustls::RootCertStore;
   use s2n_quic::client::Connect;
+  use s2n_quic::provider::tls::default::rustls::ClientConfig;
+  use s2n_quic::provider::tls::default::Client as TlsClient;
   use s2n_quic::Client;
   use tokio::io::{AsyncBufReadExt, BufReader};
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
 
+  use crate::global_context::CONFIG;
   use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
   use crate::io::reply_code::ReplyCode;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
+  use crate::utils::test_utils::NoCertificateVerification;
+  use crate::utils::tls_utils::load_certs;
 
-  pub static CERT_PEM: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/certs/server-cert.pem"
-  ));
+  // TODO DRY
 
   #[tokio::test]
   async fn server_hello_test() {
@@ -169,7 +174,6 @@ mod tests {
     let mut listener = QuicOnlyListener::new(server_addr).unwrap();
 
     let addr = listener.server.local_addr().unwrap();
-    println!("Server port is {}", addr.port());
     let token = CancellationToken::new();
     let ct = token.clone();
     let handler_fut = tokio::spawn(async move {
@@ -182,8 +186,23 @@ mod tests {
         .expect("Handler should exit gracefully");
     });
 
+    let ca_chain = CONFIG
+      .get_string("ca_chain_file")
+      .expect("Chain should exist!");
+    let chain_certs = load_certs(Path::new(&ca_chain)).unwrap();
+
+    let mut root_store = RootCertStore::empty();
+    chain_certs.iter().for_each(|c| root_store.add(c).unwrap());
+    let mut client_config = ClientConfig::builder()
+      .with_safe_defaults()
+      .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
+      .with_no_client_auth();
+    client_config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
+
+    let tls_client = TlsClient::new(client_config);
+
     let client = Client::builder()
-      .with_tls(CERT_PEM)
+      .with_tls(tls_client)
       .expect("Client requires valid TLS settings!")
       .with_io("0.0.0.0:0")
       .expect("Client requires valid I/O settings!")
@@ -201,7 +220,7 @@ mod tests {
     let client_cc = match connection.accept_bidirectional_stream().await {
       Ok(Some(c)) => c,
       Ok(None) => {
-        panic!("Connection closed when accepting control channel!")
+        panic!("Connection closed when accepting control channel!");
       }
       Err(e) => {
         panic!("Client failed to accept control channel! {}", e);
