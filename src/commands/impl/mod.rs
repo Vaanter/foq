@@ -1,4 +1,3 @@
-pub(crate) mod auth;
 pub(crate) mod cdup;
 pub(crate) mod feat;
 pub(crate) mod mlsd;

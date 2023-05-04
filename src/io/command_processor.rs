@@ -6,7 +6,6 @@ use tracing::{info, trace};
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
-use crate::commands::r#impl::auth::Auth;
 use crate::commands::r#impl::cdup::Cdup;
 use crate::commands::r#impl::cwd::Cwd;
 use crate::commands::r#impl::feat::Feat;
@@ -63,7 +62,6 @@ impl CommandProcessor {
     };
 
     match command.command {
-      Commands::AUTH => Auth::execute(self, &command, reply_sender).await,
       Commands::CDUP => Cdup::execute(self, &command, reply_sender).await,
       Commands::CWD => Cwd::execute(self, &command, reply_sender).await,
       Commands::FEAT => Feat::execute(self, &command, reply_sender).await,
