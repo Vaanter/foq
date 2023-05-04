@@ -11,6 +11,7 @@ use strum_macros::Display;
 
 use crate::auth::user_permission::UserPermission;
 
+#[allow(unused)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Display, Hash)]
 #[strum(serialize_all = "lowercase")]
 pub(crate) enum EntryType {
@@ -30,6 +31,7 @@ pub(crate) struct EntryData {
   name: String,
 }
 
+#[allow(unused)]
 impl EntryData {
   pub(crate) fn new(
     size: u64,

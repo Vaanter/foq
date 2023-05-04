@@ -17,7 +17,7 @@ impl Command {
     };
   }
 
-  #[tracing::instrument]
+  #[tracing::instrument(skip(message))]
   pub(crate) fn parse(message: &str) -> Result<Self, anyhow::Error> {
     debug!("Parsing message to command.");
     let mut split = message.split(" ");

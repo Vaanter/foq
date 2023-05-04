@@ -6,9 +6,9 @@ use s2n_quic::stream::BidirectionalStream;
 use s2n_quic::Connection;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::sync::{Mutex, RwLock};
-use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info, warn};
 
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
@@ -18,12 +18,12 @@ use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
 use crate::io::session_properties::SessionProperties;
 
+#[allow(unused)]
 pub(crate) struct QuicOnlyConnectionHandler {
   pub(crate) connection: Arc<Mutex<Connection>>,
   data_channel_wrapper: Arc<Mutex<QuicOnlyDataChannelWrapper>>,
   command_processor: Arc<Mutex<CommandProcessor>>,
   control_channel: Option<BufReader<ReadHalf<BidirectionalStream>>>,
-  reply_loop: Option<JoinHandle<()>>,
   reply_sender: Option<ReplySender<BidirectionalStream>>,
   session_properties: Arc<RwLock<SessionProperties>>,
 }
@@ -48,40 +48,43 @@ impl QuicOnlyConnectionHandler {
       data_channel_wrapper: wrapper,
       command_processor,
       control_channel: None,
-      reply_loop: None,
       reply_sender: None,
       session_properties,
     }
   }
 
-  pub(crate) fn get_command_processor(&self) -> Arc<Mutex<CommandProcessor>> {
-    self.command_processor.clone()
-  }
-
-  async fn await_command(&mut self) -> Option<Reply> {
-    let mut buf = String::new();
-    println!("Server reading command!");
+  #[tracing::instrument(skip(self))]
+  pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
     let cc = self
       .control_channel
       .as_mut()
       .expect("Control channel must be open to receive commands!");
+    let mut buf = String::new();
+    debug!("Reading message from client.");
     let bytes = match cc.read_line(&mut buf).await {
       Ok(len) => {
-        println!("Server command read!");
+        debug!(
+          "[QUIC] Received message from client, length: {len}, content: {}",
+          buf.trim()
+        );
         len
       }
       Err(e) => {
-        eprintln!("Failed to read command! {}", e);
+        error!("[TCP] Reading client message failed! Error: {e}");
         0
       }
     };
-    if bytes > 0usize {
-      let session = self.command_processor.clone();
-      let reply_sender = self.reply_sender.as_mut().unwrap();
-      session.lock().await.evaluate(buf, reply_sender).await;
-      return None;
+    if bytes == 0 {
+      anyhow::bail!("Connection closed!");
     }
-    None
+
+    let session = self.command_processor.clone();
+    session
+      .lock()
+      .await
+      .evaluate(buf, self.reply_sender.as_mut().unwrap())
+      .await;
+    Ok(())
   }
 
   async fn create_control_channel(&mut self) -> Result<(), anyhow::Error> {
@@ -109,21 +112,25 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
     self.create_control_channel().await?;
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
-    let _ = &mut self.reply_sender.as_mut().unwrap().send_control_message(hello).await;
+    let _ = &mut self
+      .reply_sender
+      .as_mut()
+      .unwrap()
+      .send_control_message(hello)
+      .await;
 
     loop {
       tokio::select! {
         biased;
         _ = token.cancelled() => {
-          println!("Shutdown received!");
-          if let Ok(conn) = timeout(Duration::from_secs(2), self.connection.clone().lock_owned()).await {
-            conn.close(0u32.into())
-          };
+          info!("[QUIC] Shutdown received!");
+          let _ = timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close());
           break;
-        },
-        reply = self.await_command() => {
-          if reply.is_some() {
-
+        }
+        result = self.await_command() => {
+          if let Err(e) = result {
+            warn!("[QUIC] Error awaiting command!");
+            break;
           }
         }
       }

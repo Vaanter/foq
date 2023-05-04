@@ -14,15 +14,7 @@ use crate::auth::user_data::UserData;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-
-// pub(crate) struct TestHandler;
-//
-// #[async_trait]
-// impl ConnectionHandler for TestHandler {
-//     async fn handle(&mut self, receiver: Receiver<()>) -> Result<(), anyhow::Error> {
-//         todo!()
-//     }
-// }
+use crate::utils::tls_utils::{load_certs, load_keys};
 
 pub(crate) struct TestReplySender {
   tx: Sender<Reply>,

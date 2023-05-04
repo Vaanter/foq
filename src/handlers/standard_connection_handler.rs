@@ -17,6 +17,7 @@ use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
 use crate::io::session_properties::SessionProperties;
 
+#[allow(unused)]
 pub(crate) struct StandardConnectionHandler {
   data_channel_wrapper: Arc<Mutex<StandardDataChannelWrapper>>,
   command_processor: Arc<Mutex<CommandProcessor>>,
@@ -47,15 +48,11 @@ impl StandardConnectionHandler {
     }
   }
 
-  pub(crate) fn get_command_processor(&self) -> Arc<Mutex<CommandProcessor>> {
-    self.command_processor.clone()
-  }
-
   #[tracing::instrument(skip(self))]
   pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
     let reader = &mut self.control_channel;
     let mut buf = String::new();
-    debug!("Reading message from client.");
+    debug!("[TCP] Reading message from client.");
     let bytes = match reader.read_line(&mut buf).await {
       Ok(len) => {
         debug!(
@@ -98,12 +95,15 @@ impl ConnectionHandler for StandardConnectionHandler {
         biased;
         _ = token.cancelled() => {
           info!("[TCP] Shutdown received!");
-          let _ = timeout(Duration::from_secs(2), self.reply_sender.close());
+          let _ = timeout(Duration::from_secs(2), self.reply_sender.close()).await;
           break;
         }
         result = self.await_command() => {
           if let Err(e) = result {
             warn!("[TCP] Error awaiting command!");
+            if let Err(_) = timeout(Duration::from_secs(2), self.reply_sender.close()).await {
+              warn!("[TCP] Failed to clean up after connection shutdown!");
+            };
             break;
           }
         }

@@ -14,6 +14,7 @@ pub enum Commands {
     EPSV,
     FEAT,
     HELP,
+    LIST,
     LANG,
     MD5,
     MDTM,

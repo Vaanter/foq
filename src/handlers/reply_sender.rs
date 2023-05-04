@@ -1,10 +1,10 @@
 use std::io::Error;
 use std::sync::Arc;
-use async_trait::async_trait;
 
+use async_trait::async_trait;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter, WriteHalf};
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::io::reply::Reply;
 
@@ -22,7 +22,7 @@ impl<T: AsyncWrite + Sync + Send> ReplySender<T> {
 }
 
 #[async_trait]
-impl <T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
+impl<T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
   #[tracing::instrument(skip(self))]
   async fn send_control_message(&self, reply: Reply) {
     info!("Sending reply: {}", reply.to_string().trim());
@@ -36,6 +36,7 @@ impl <T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
   }
 
   async fn close(&mut self) -> Result<(), Error> {
+    debug!("Closing sender half.");
     self.writer.lock().await.shutdown().await
   }
 }

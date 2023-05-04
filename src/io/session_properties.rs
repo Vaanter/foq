@@ -4,6 +4,7 @@ use crate::io::data_type::DataType;
 use crate::io::file_system_view_root::FileSystemViewRoot;
 use crate::io::transfer_mode::TransferMode;
 
+#[allow(unused)]
 #[derive(Debug, Default)]
 pub(crate) struct SessionProperties {
   pub(crate) username: Option<String>,
