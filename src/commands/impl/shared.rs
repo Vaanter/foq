@@ -61,7 +61,7 @@ pub(crate) fn get_open_file_result(file: Result<File, Error>) -> Result<File, Re
       ReplyCode::SyntaxErrorInParametersOrArguments,
       Error::NotAFileError.to_string(),
     )),
-    Err(Error::OsError(e)) => Err(Reply::new(
+    Err(Error::OsError(_)) => Err(Reply::new(
       ReplyCode::RequestedActionAborted,
       "Requested action aborted: local error in processing.",
     )),

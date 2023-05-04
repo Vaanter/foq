@@ -78,7 +78,7 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(3),
       User::execute(&mut command_processor, &command, &mut reply_sender),
     )
@@ -106,7 +106,7 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(3),
       User::execute(&mut command_processor, &command, &mut reply_sender),
     )

@@ -129,7 +129,7 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
         }
         result = self.await_command() => {
           if let Err(e) = result {
-            warn!("[QUIC] Error awaiting command!");
+            warn!("[QUIC] Error awaiting command! {e}.");
             break;
           }
         }
@@ -227,12 +227,12 @@ mod tests {
       }
     };
 
-    let (reader, writer) = client_cc.split();
+    let (reader, _) = client_cc.split();
     let mut client_reader = BufReader::new(reader);
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
       Ok(Ok(len)) => {
-        println!("Received reply from server!: {}", buffer.trim());
+        println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
         assert!(buffer
           .trim()
           .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
@@ -242,11 +242,11 @@ mod tests {
       Ok(Err(e)) => {
         panic!("Failed to read reply! {}", e);
       }
-      Err(e) => panic!("Timeout reading hello!"),
+      Err(_) => panic!("Timeout reading hello!"),
     }
     token.cancel();
 
-    if let Err(e) = timeout(Duration::from_secs(3), handler_fut).await {
+    if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
       panic!("Handler future failed to finish!");
     };
   }
@@ -296,7 +296,7 @@ mod tests {
       }
     };
 
-    let (writer, reader) = match connection.accept_bi().await {
+    let (_, reader) = match connection.accept_bi().await {
       Ok(c) => c,
       Err(e) => {
         panic!("Client failed to accept control channel! {}", e);
@@ -307,7 +307,7 @@ mod tests {
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
       Ok(Ok(len)) => {
-        println!("Received reply from server!: {}", buffer.trim());
+        println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
         assert!(buffer
           .trim()
           .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
@@ -317,11 +317,11 @@ mod tests {
       Ok(Err(e)) => {
         panic!("Failed to read reply! {}", e);
       }
-      Err(e) => panic!("Timeout reading hello!"),
+      Err(_) => panic!("Timeout reading hello!"),
     }
     token.cancel();
 
-    if let Err(e) = timeout(Duration::from_secs(3), handler_fut).await {
+    if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
       panic!("Handler future failed to finish!");
     };
   }

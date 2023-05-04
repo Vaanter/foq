@@ -206,7 +206,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
 
     let command_fut = tokio::spawn(async move {
-      if let Err(e) = timeout(
+      if let Err(_) = timeout(
         Duration::from_secs(timeout_secs as u64),
         Retr::execute(&mut command_processor, &command, &mut reply_sender),
       )
@@ -258,7 +258,7 @@ mod tests {
 
     match timeout(Duration::from_secs(5), transfer).await {
       Ok(()) => println!("Transfer complete!"),
-      Err(e) => panic!("Transfer timed out!"),
+      Err(_) => panic!("Transfer timed out!"),
     }
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::ClosingDataConnection, None).await;

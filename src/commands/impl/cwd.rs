@@ -103,7 +103,7 @@ mod tests {
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(3),
       Cwd::execute(&mut command_processor, &command, &mut reply_sender),
     )

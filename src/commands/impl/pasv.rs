@@ -36,7 +36,7 @@ impl Executable for Pasv {
         };
         Pasv::reply(reply, reply_sender).await;
       }
-      Err(e) => {
+      Err(_) => {
         panic!("Wrapper is not available! TF?!");
       }
     }
@@ -101,7 +101,7 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(2),
       Pasv::execute(&mut session, &command, &mut reply_sender),
     )
@@ -135,11 +135,8 @@ mod tests {
     let addr = parse_socketaddr(reply);
 
     println!("Connecting to passive listener");
-    let client_dc = match TcpStream::connect(addr).await {
-      Ok(c) => c,
-      Err(e) => {
-        panic!("Client passive connection failed: {}", e);
-      }
+    if let Err(e) = TcpStream::connect(addr).await {
+      panic!("Client passive connection failed: {}", e);
     };
     println!("Client passive connection successful!");
   }

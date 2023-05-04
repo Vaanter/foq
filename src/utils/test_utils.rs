@@ -116,6 +116,7 @@ impl NoCertificateVerification {
   }
 }
 
+#[allow(unused)]
 impl ServerCertVerifier for NoCertificateVerification {
   fn verify_server_cert(
     &self,

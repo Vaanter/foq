@@ -149,7 +149,7 @@ mod tests {
     }
     println!("Remote file: {:?}", temp_dir().join(&remote_file));
 
-    let cleanup = Cleanup { 0: &remote_file };
+    let _cleanup = Cleanup { 0: &remote_file };
 
     let command = Command::new(Commands::STOR, remote_file);
 
@@ -303,7 +303,7 @@ mod tests {
 
     match timeout(Duration::from_secs(5), transfer).await {
       Ok(()) => println!("Transfer complete!"),
-      Err(e) => panic!("Transfer timed out!"),
+      Err(_) => panic!("Transfer timed out!"),
     }
   }
 

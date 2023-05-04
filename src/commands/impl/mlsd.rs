@@ -236,10 +236,10 @@ mod tests {
         assert_eq!(file_count, msg.lines().count());
       }
       Ok(Err(e)) => {
-        panic!("{}", e);
+        panic!("Transfer error: {}", e);
       }
-      Err(e) => {
-        panic!("{}", e);
+      Err(_) => {
+        panic!("Transfer timed out.");
       }
     };
 
@@ -261,7 +261,7 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
@@ -300,7 +300,7 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
@@ -381,7 +381,7 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(e) = timeout(
+    if let Err(_) = timeout(
       Duration::from_secs(3),
       Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
     )
