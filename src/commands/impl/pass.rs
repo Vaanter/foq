@@ -213,6 +213,40 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn no_password_test() {
+    let ip: SocketAddr = "127.0.0.1:0"
+      .parse()
+      .expect("Test listener requires available IP:PORT");
+    let mut session_properties = SessionProperties::new();
+    let _ = session_properties
+      .login_form
+      .username
+      .insert("test".to_string());
+
+    let session_properties = Arc::new(RwLock::new(session_properties));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let command = Command::new(Commands::PASS, "");
+
+    let users = vec![UserData::new("test", "test")];
+    AUTH_PROVIDER
+      .get_or_init(|| async { create_test_auth_provider(users) })
+      .await;
+
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(5),
+      Pass::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+      .await
+      .expect("Command timed out!");
+
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+  }
+
+  #[tokio::test]
   #[ignore] // Requires other tests that initialize DB to not run
   async fn database_not_setup_test() {
     let ip: SocketAddr = "127.0.0.1:0"
