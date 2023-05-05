@@ -49,9 +49,11 @@ impl Executable for User {
 mod tests {
   use std::sync::Arc;
   use std::time::Duration;
-  use tokio::sync::{Mutex, RwLock};
+
   use tokio::sync::mpsc::channel;
+  use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
+
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
@@ -78,13 +80,16 @@ mod tests {
       Duration::from_secs(3),
       User::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::UserNameOkay, None).await;
-    assert_eq!(session_properties.read().await.login_form.username, Some(name));
+    assert_eq!(
+      session_properties.read().await.login_form.username,
+      Some(name)
+    );
   }
 
   #[tokio::test]
@@ -102,11 +107,17 @@ mod tests {
       Duration::from_secs(3),
       User::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
 
-    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    receive_and_verify_reply(
+      2,
+      &mut rx,
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      None,
+    )
+    .await;
   }
 }

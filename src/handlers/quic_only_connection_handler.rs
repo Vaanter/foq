@@ -107,11 +107,12 @@ impl QuicOnlyConnectionHandler {
 #[async_trait]
 impl ConnectionHandler for QuicOnlyConnectionHandler {
   async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error> {
-    println!("Quic handler execute!");
+    debug!("[QUIC] Handler started.");
 
     self.create_control_channel().await?;
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
+    debug!("[TCP] Sending hello to client.");
     let _ = &mut self
       .reply_sender
       .as_mut()

@@ -23,13 +23,19 @@ impl SessionProperties {
     self.username.is_some()
   }
 
-  pub(crate) async fn login(&mut self, auth_provider: &AuthProvider, login_form: LoginForm) -> bool {
+  pub(crate) async fn login(
+    &mut self,
+    auth_provider: &AuthProvider,
+    login_form: LoginForm,
+  ) -> bool {
     let user_data = match auth_provider.authenticate(login_form).await {
       Some(data) => data,
       None => return false,
     };
     self.username.replace(user_data.username);
-    self.file_system_view_root.set_views(user_data.file_system_views);
+    self
+      .file_system_view_root
+      .set_views(user_data.file_system_views);
     true
   }
 }

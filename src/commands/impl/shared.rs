@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tokio::fs::File;
 use tokio::sync::{Mutex, OwnedMutexGuard};
+use tracing::{debug, info};
 
 use crate::handlers::connection_handler::AsyncReadWrite;
 use crate::handlers::data_channel_wrapper::DataChannelWrapper;
@@ -26,7 +27,7 @@ pub(crate) async fn get_data_channel_lock(
       }
     }
     Err(e) => {
-      eprintln!("Data channel is not available! {e}");
+      info!("Data channel is not available! {e}");
       Err(error_reply)
     }
   }
@@ -44,6 +45,7 @@ pub(crate) fn get_transfer_reply(success: bool) -> Reply {
 }
 
 pub(crate) fn get_open_file_result(file: Result<File, Error>) -> Result<File, Reply> {
+  debug!("Checking file open result.");
   match file {
     Ok(f) => Ok(f),
     Err(Error::UserError) => Err(Reply::new(

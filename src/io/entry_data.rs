@@ -4,8 +4,8 @@ use std::fs::Metadata;
 use std::io::Error;
 use std::time::SystemTime;
 
-use chrono::{DateTime, Local};
 use chrono::format::{DelayedFormat, StrftimeItems};
+use chrono::{DateTime, Local};
 use strum::EnumMessage;
 use strum_macros::Display;
 

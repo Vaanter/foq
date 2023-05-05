@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tracing::{error, info};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -13,6 +14,7 @@ pub(crate) struct Pass;
 
 #[async_trait]
 impl Executable for Pass {
+  #[tracing::instrument(skip(command_processor, reply_sender))]
   async fn execute(
     command_processor: &mut CommandProcessor,
     command: &Command,
@@ -56,7 +58,7 @@ impl Executable for Pass {
     let provider = match AUTH_PROVIDER.get() {
       Some(provider) => provider,
       None => {
-        eprintln!("Database connection not setup!");
+        error!("Database connection not setup!");
         Self::reply(
           Reply::new(
             ReplyCode::ServiceNotAvailableClosingControlConnection,
@@ -71,9 +73,12 @@ impl Executable for Pass {
 
     let mut form = session_properties.read().await.login_form.clone();
     let _ = form.password.insert(password.to_string());
+    let username = form.username.as_ref().unwrap().clone();
+    info!("User '{}' attempting login.", &username);
     let result = session_properties.write().await.login(provider, form).await;
 
     if result {
+      info!("User '{}' logged in successfully", &username);
       Self::reply(
         Reply::new(ReplyCode::UserLoggedIn, "Log in successful"),
         reply_sender,
@@ -81,6 +86,7 @@ impl Executable for Pass {
       .await;
       return;
     } else {
+      info!("User '{}' failed to login!", &username);
       Self::reply(
         Reply::new(ReplyCode::NotLoggedIn, "Incorrect credentials!"),
         reply_sender,
@@ -227,10 +233,16 @@ mod tests {
       Duration::from_secs(5),
       Pass::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timed out!");
+    .await
+    .expect("Command timed out!");
 
-    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    receive_and_verify_reply(
+      2,
+      &mut rx,
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      None,
+    )
+    .await;
   }
 
   #[tokio::test]

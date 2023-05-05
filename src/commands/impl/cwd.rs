@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
@@ -12,7 +13,11 @@ pub(crate) struct Cwd;
 
 #[async_trait]
 impl Executable for Cwd {
-  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(
+    command_processor: &mut CommandProcessor,
+    command: &Command,
+    reply_sender: &mut impl ReplySend,
+  ) {
     debug_assert_eq!(command.command, Commands::CWD);
 
     let mut session_properties = command_processor.session_properties.write().await;
@@ -22,7 +27,7 @@ impl Executable for Cwd {
         Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
         reply_sender,
       )
-        .await;
+      .await;
       return;
     }
 
@@ -35,16 +40,27 @@ impl Executable for Cwd {
         ),
         reply_sender,
       )
-        .await;
+      .await;
       return;
     }
 
-    if session_properties.file_system_view_root.change_working_directory(new_path) {
-      Self::reply(Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed."), reply_sender).await;
-      return
+    if session_properties
+      .file_system_view_root
+      .change_working_directory(new_path)
+    {
+      Self::reply(
+        Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed."),
+        reply_sender,
+      )
+      .await;
+      return;
     } else {
-      Self::reply(Reply::new(ReplyCode::RequestedFileActionOkay, "Path not changed!"), reply_sender).await;
-      return
+      Self::reply(
+        Reply::new(ReplyCode::RequestedFileActionOkay, "Path not changed!"),
+        reply_sender,
+      )
+      .await;
+      return;
     }
   }
 }
@@ -58,8 +74,8 @@ mod tests {
 
   use tokio::sync::{mpsc, Mutex, RwLock};
   use tokio::time::timeout;
-  use crate::auth::user_permission::UserPermission;
 
+  use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
@@ -95,19 +111,24 @@ mod tests {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
-
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(3),
       Cwd::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::RequestedFileActionOkay, None).await;
-    assert_eq!(session_properties.read().await.file_system_view_root.get_current_working_directory(), "/test");
+    assert_eq!(
+      session_properties
+        .read()
+        .await
+        .file_system_view_root
+        .get_current_working_directory(),
+      "/test"
+    );
   }
-}

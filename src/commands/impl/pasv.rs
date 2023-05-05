@@ -3,23 +3,34 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::time::timeout;
+use tracing::error;
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
+use crate::io::command_processor::CommandProcessor;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::command_processor::CommandProcessor;
 
 pub(crate) struct Pasv;
 
 #[async_trait]
 impl Executable for Pasv {
-  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
+  #[tracing::instrument(skip(command_processor, reply_sender))]
+  async fn execute(
+    command_processor: &mut CommandProcessor,
+    command: &Command,
+    reply_sender: &mut impl ReplySend,
+  ) {
     debug_assert_eq!(command.command, Commands::PASV);
 
-    match timeout(Duration::from_secs(5), command_processor.data_wrapper.clone().lock()).await {
+    match timeout(
+      Duration::from_secs(5),
+      command_processor.data_wrapper.clone().lock(),
+    )
+    .await
+    {
       Ok(mut wrapper) => {
         let reply = match wrapper.open_data_stream().await.unwrap() {
           SocketAddr::V4(addr) => Reply::new(
@@ -27,7 +38,7 @@ impl Executable for Pasv {
             &Pasv::create_pasv_response(&addr),
           ),
           SocketAddr::V6(_) => {
-            eprintln!("PASV: IPv6 is not supported!");
+            error!("PASV: IPv6 is not supported!");
             Reply::new(
               ReplyCode::CommandNotImplementedForThatParameter,
               "Server only supports IPv6!",
@@ -37,7 +48,7 @@ impl Executable for Pasv {
         Pasv::reply(reply, reply_sender).await;
       }
       Err(_) => {
-        panic!("Wrapper is not available! TF?!");
+        panic!("Wrapper is not available!");
       }
     }
   }
@@ -72,9 +83,9 @@ mod tests {
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::pasv::Pasv;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::io::command_processor::CommandProcessor;
   use crate::io::reply::Reply;
   use crate::io::reply_code::ReplyCode;
-  use crate::io::command_processor::CommandProcessor;
   use crate::io::session_properties::SessionProperties;
   use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
@@ -93,13 +104,13 @@ mod tests {
 
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut session = CommandProcessor::new(session_properties, wrapper.clone());
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper.clone());
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(2),
-      Pasv::execute(&mut session, &command, &mut reply_sender),
+      Pasv::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
     {

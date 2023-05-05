@@ -26,10 +26,7 @@ impl FileSystemViewRoot {
   }
 
   pub(crate) fn set_views(&mut self, view: Vec<FileSystemView>) {
-    let views = view
-      .into_iter()
-      .map(|v| (v.label.clone(), v))
-      .collect();
+    let views = view.into_iter().map(|v| (v.label.clone(), v)).collect();
     self.file_system_views = Some(views);
   }
 
@@ -280,7 +277,6 @@ impl FileSystemViewRoot {
       return Err(Error::UserError);
     }
 
-    debug!("Opening file: {}.", path);
     if path.is_empty() || path == "/" {
       return Err(Error::InvalidPathError(String::from(
         "Path references a directory, not a file!",

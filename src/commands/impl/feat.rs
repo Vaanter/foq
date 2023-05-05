@@ -4,9 +4,9 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
+use crate::io::command_processor::CommandProcessor;
 use crate::io::reply::Reply;
 use crate::io::reply_code::ReplyCode;
-use crate::io::command_processor::CommandProcessor;
 
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub(crate) struct Feat;
@@ -21,7 +21,11 @@ impl Feat {
 
 #[async_trait]
 impl Executable for Feat {
-  async fn execute(command_processor: &mut CommandProcessor, command: &Command, reply_sender: &mut impl ReplySend) {
+  async fn execute(
+    command_processor: &mut CommandProcessor,
+    command: &Command,
+    reply_sender: &mut impl ReplySend,
+  ) {
     debug_assert_eq!(command.command, Commands::FEAT);
     let mut lines: Vec<String> = vec!["Features supported: ".to_string()];
     lines.append(&mut Feat::format_features());
@@ -37,8 +41,10 @@ impl Executable for Feat {
 #[cfg(test)]
 mod tests {
   use std::sync::Arc;
+
   use tokio::sync::mpsc::channel;
   use tokio::sync::{Mutex, RwLock};
+
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
@@ -64,7 +70,12 @@ mod tests {
     );
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    Feat::execute(&mut session, &Command::new(Commands::FEAT, ""), &mut reply_sender).await;
+    Feat::execute(
+      &mut session,
+      &Command::new(Commands::FEAT, ""),
+      &mut reply_sender,
+    )
+    .await;
     match rx.recv().await {
       Some(reply) => assert_eq!(EXPECTED, reply.to_string()),
       None => panic!("Rx closed without reading reply!"),

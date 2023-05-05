@@ -61,7 +61,6 @@ impl FileSystemView {
       self.display_path = format!("/{}", self.label.clone());
       self.current_path = self.root.clone();
     } else if dir.starts_with("/") {
-      println!("Absolute path");
       let new_current = self.root.join(&dir[1..]);
       if !new_current.exists() {
         return false;
@@ -69,7 +68,6 @@ impl FileSystemView {
       self.current_path = new_current;
       self.display_path += &dir;
     } else {
-      println!("Relative path");
       let new_current = self.current_path.join(dir.clone());
       if !new_current.exists() {
         return false;
@@ -85,7 +83,7 @@ impl FileSystemView {
     self.change_working_directory("..")
   }
 
-  #[tracing::instrument(skip(self, path, options))]
+  #[tracing::instrument(skip_all)]
   pub(crate) async fn open_file(
     &self,
     path: impl Into<String>,
@@ -122,7 +120,7 @@ impl FileSystemView {
       return Err(Error::NotAFileError);
     } else {
       file
-    }
+    };
   }
 
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {

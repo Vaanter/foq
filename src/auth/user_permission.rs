@@ -1,4 +1,5 @@
 use strum_macros::{EnumIter, EnumMessage, EnumString};
+
 use crate::io::entry_data::EntryType;
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, EnumMessage, EnumIter, EnumString)]
@@ -19,15 +20,27 @@ pub(crate) enum UserPermission {
   #[strum(serialize = "l")]
   LIST,
   #[strum(serialize = "d")]
-  DELETE
+  DELETE,
 }
 
 impl UserPermission {
   pub(crate) fn get_applicable_permissions(entry_type: &EntryType) -> Vec<UserPermission> {
     match entry_type {
-      EntryType::FILE => Vec::from([UserPermission::READ, UserPermission::WRITE, UserPermission::APPEND, UserPermission::RENAME, UserPermission::DELETE]),
-      EntryType::DIR | EntryType::CDIR | EntryType::PDIR => Vec::from([UserPermission::CREATE, UserPermission::EXECUTE, UserPermission::RENAME, UserPermission::LIST, UserPermission::DELETE]),
-      EntryType::LINK => Vec::from([UserPermission::DELETE, UserPermission::RENAME])
+      EntryType::FILE => Vec::from([
+        UserPermission::READ,
+        UserPermission::WRITE,
+        UserPermission::APPEND,
+        UserPermission::RENAME,
+        UserPermission::DELETE,
+      ]),
+      EntryType::DIR | EntryType::CDIR | EntryType::PDIR => Vec::from([
+        UserPermission::CREATE,
+        UserPermission::EXECUTE,
+        UserPermission::RENAME,
+        UserPermission::LIST,
+        UserPermission::DELETE,
+      ]),
+      EntryType::LINK => Vec::from([UserPermission::DELETE, UserPermission::RENAME]),
     }
   }
 }
@@ -35,6 +48,7 @@ impl UserPermission {
 #[cfg(test)]
 mod test {
   use strum::{EnumMessage, IntoEnumIterator};
+
   use crate::auth::user_permission::UserPermission;
 
   #[test]

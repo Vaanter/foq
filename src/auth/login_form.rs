@@ -3,4 +3,3 @@ pub(crate) struct LoginForm {
   pub(crate) username: Option<String>,
   pub(crate) password: Option<String>,
 }
-

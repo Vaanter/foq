@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -66,7 +66,11 @@ impl Executable for Retr {
       .file_system_view_root
       .open_file(&command.argument, options)
       .await;
-
+    info!(
+      "User '{}' opening file '{}'.",
+      session_properties.username.as_ref().unwrap(),
+      &command.argument
+    );
     let mut file = match get_open_file_result(file) {
       Ok(f) => f,
       Err(reply) => {
@@ -82,14 +86,14 @@ impl Executable for Retr {
     )
     .await;
 
-    debug!("Sending file!");
+    debug!("Sending file data!");
     let success = match tokio::io::copy(&mut file, &mut data_channel.as_mut().unwrap()).await {
       Ok(len) => {
-        println!("Sent {len} bytes.");
+        debug!("Sent {len} bytes.");
         true
       }
       Err(_) => {
-        eprintln!("Error sending file!");
+        warn!("Error sending file!");
         false
       }
     };

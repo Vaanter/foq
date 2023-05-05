@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
+use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -62,6 +63,11 @@ impl Executable for Stor {
       .create(true)
       .build()
       .unwrap();
+    info!(
+      "User '{}' opening file '{}'.",
+      session_properties.username.as_ref().unwrap(),
+      &command.argument
+    );
     let file = session_properties
       .file_system_view_root
       .open_file(&command.argument, options)
@@ -81,18 +87,17 @@ impl Executable for Stor {
     )
     .await;
 
-    println!("Receiving file data!");
+    debug!("Receiving file data!");
     let success = match tokio::io::copy(&mut data_channel.as_mut().unwrap(), &mut file).await {
       Ok(len) => {
-        println!("Wrote {len} bytes.");
+        debug!("Received {len} bytes.");
         file.flush().await.is_ok()
       }
       Err(e) => {
-        eprintln!("Error sending file! {}", e);
+        warn!("Error sending file! {}", e);
         false
       }
     };
-    println!("File data received!");
 
     Self::reply(get_transfer_reply(success), reply_sender).await;
 
@@ -120,11 +125,9 @@ mod tests {
   use blake3::Hasher;
   use tokio::fs::OpenOptions;
   use tokio::io::{AsyncReadExt, AsyncWriteExt};
-  use tokio::net::TcpStream;
   use tokio::sync::mpsc::channel;
   use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
-
   use uuid::Uuid;
 
   use crate::auth::user_permission::UserPermission;
@@ -137,7 +140,9 @@ mod tests {
   use crate::io::file_system_view::FileSystemView;
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
+  use crate::utils::test_utils::{
+    open_tcp_data_channel, receive_and_verify_reply, TestReplySender, LOCALHOST,
+  };
 
   async fn common(local_file: &'static str, remote_file: &str) {
     if !Path::new(&local_file).exists() {
@@ -162,35 +167,25 @@ mod tests {
       ]),
     );
 
-    session_properties.write().await.file_system_view_root.set_views(vec![view]);
-    let _ = session_properties.write().await.username.insert("test".to_string());
+    session_properties
+      .write()
+      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties
+      .write()
+      .await
+      .username
+      .insert("test".to_string());
     session_properties
       .write()
       .await
       .file_system_view_root
       .change_working_directory(label);
-    let mut session = CommandProcessor::new(session_properties.clone(), wrapper);
-    let addr = match session
-      .data_wrapper
-      .clone()
-      .lock()
-      .await
-      .open_data_stream()
-      .await
-    {
-      Ok(addr) => addr,
-      Err(_) => panic!("Failed to open passive data listener!"),
-    };
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
-    println!("Connecting to passive listener");
-    let mut client_dc = match TcpStream::connect(addr).await {
-      Ok(c) => c,
-      Err(e) => {
-        panic!("Client passive connection failed: {}", e);
-      }
-    };
-    println!("Client passive connection successful!");
+    let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
 
     // TODO adjust timeout better maybe?
     let timeout_secs = 1
@@ -200,21 +195,13 @@ mod tests {
         .len()
         .ilog10();
 
-    let _ = session
-      .data_wrapper
-      .lock()
-      .await
-      .get_data_stream()
-      .await
-      .lock()
-      .await;
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
 
     let command_fut = tokio::spawn(async move {
       timeout(
         Duration::from_secs(timeout_secs as u64),
-        Stor::execute(&mut session, &command, &mut reply_sender),
+        Stor::execute(&mut command_processor, &command, &mut reply_sender),
       )
       .await
       .expect("Command timeout!");
@@ -341,6 +328,8 @@ mod tests {
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
+    let _ = open_tcp_data_channel(&mut command_processor).await;
+
     let command = Command::new(Commands::STOR, "NONEXISTENT");
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -370,8 +359,16 @@ mod tests {
     );
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    session_properties.write().await.file_system_view_root.set_views(vec![view]);
-    let _ = session_properties.write().await.username.insert("test".to_string());
+    session_properties
+      .write()
+      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties
+      .write()
+      .await
+      .username
+      .insert("test".to_string());
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::STOR, format!("NONEXISTENT"));

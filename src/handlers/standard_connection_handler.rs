@@ -154,7 +154,11 @@ mod tests {
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
       Ok(Ok(len)) => {
-        println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
+        println!(
+          "Received reply from server!: {}. Length: {}",
+          buffer.trim(),
+          len
+        );
         assert!(buffer
           .trim()
           .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));

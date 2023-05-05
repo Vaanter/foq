@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 
 #[async_trait]
 pub(crate) trait ConnectionHandler {
-    async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error>;
+  async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error>;
 }
 
 pub(crate) trait AsyncReadWrite: AsyncRead + AsyncWrite + Sync + Send + Unpin {}

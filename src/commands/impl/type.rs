@@ -277,7 +277,7 @@ mod tests {
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -288,7 +288,7 @@ mod tests {
       ReplyCode::CommandNotImplementedForThatParameter,
       None,
     )
-      .await;
+    .await;
     assert_eq!(session_properties.read().await.data_type, original_type);
   }
 }
