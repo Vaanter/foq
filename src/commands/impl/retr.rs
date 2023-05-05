@@ -115,32 +115,102 @@ impl Executable for Retr {
 mod tests {
   use std::collections::HashSet;
   use std::env::current_dir;
-  use std::net::SocketAddr;
   use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
 
   use blake3::Hasher;
+  use s2n_quic::client::Connect;
+  use s2n_quic::provider::tls::default::Client as TlsClient;
+  use s2n_quic::Client;
   use tokio::fs::OpenOptions;
-  use tokio::io::AsyncReadExt;
-  use tokio::net::TcpStream;
+  use tokio::io::{AsyncRead, AsyncReadExt};
   use tokio::sync::mpsc::channel;
   use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
+  use tokio_util::sync::CancellationToken;
 
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::retr::Retr;
+  use crate::handlers::data_channel_wrapper::DataChannelWrapper;
+  use crate::handlers::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
+  use crate::listeners::quic_only_listener::QuicOnlyListener;
+  use crate::utils::test_utils::{
+    create_tls_client_config, open_tcp_data_channel, receive_and_verify_reply, TestReplySender,
+    LOCALHOST,
+  };
 
-  async fn common(file_name: &'static str) {
+  async fn common_tcp(file_name: &'static str) {
+    let wrapper = StandardDataChannelWrapper::new(LOCALHOST);
+    let (command, mut command_processor) = setup(&file_name, wrapper);
+    let client_dc = open_tcp_data_channel(&mut command_processor).await;
+    transfer(&file_name, command, command_processor, client_dc).await;
+  }
+
+  async fn common_quic(file_name: &'static str) {
+    let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
+    let addr = listener.server.local_addr().unwrap();
+    let token = CancellationToken::new();
+    let test_handle = tokio::spawn(async move {
+      let connection = listener.accept(token.clone()).await.unwrap();
+      let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
+      let (command, command_processor) = setup(&file_name, wrapper);
+      (command, command_processor)
+    });
+
+    let tls_client = TlsClient::new(create_tls_client_config());
+
+    let client = Client::builder()
+      .with_tls(tls_client)
+      .expect("Client requires valid TLS settings!")
+      .with_io(LOCALHOST)
+      .expect("Client requires valid I/O settings!")
+      .start()
+      .expect("Client must be able to start");
+
+    let connect = Connect::new(addr).with_server_name("localhost");
+    let mut client_connection = match timeout(Duration::from_secs(2), client.connect(connect)).await
+    {
+      Ok(Ok(conn)) => conn,
+      Ok(Err(e)) => panic!("Client failed to connect to the server! {}", e),
+      Err(_) => panic!("Client failed to connect to the server in time!"),
+    };
+
+    let (command, command_processor) = match timeout(Duration::from_secs(1), test_handle).await {
+      Ok(Ok(c)) => c,
+      Ok(Err(e)) => panic!("Error 1"),
+      Err(e) => panic!("Connection setup failed!"),
+    };
+
+    let _ = command_processor
+      .data_wrapper
+      .lock()
+      .await
+      .open_data_stream()
+      .await
+      .unwrap();
+
+    let client_dc = match client_connection.open_bidirectional_stream().await {
+      Ok(client_dc) => client_dc,
+      Err(e) => panic!("Failed to open data channel! Error: {}", e),
+    };
+
+    transfer(&file_name, command, command_processor, client_dc).await;
+  }
+
+  fn setup<T: DataChannelWrapper + 'static>(
+    file_name: &str,
+    data_channel_wrapper: T,
+  ) -> (Command, CommandProcessor) {
+    eprintln!("Running setup.");
     if !Path::new(&file_name).exists() {
       panic!("Test file does not exist! Cannot proceed!");
     }
@@ -163,33 +233,20 @@ mod tests {
       .change_working_directory(label);
     let _ = session_properties.username.insert("test".to_string());
 
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
-    let addr = match command_processor
-      .data_wrapper
-      .clone()
-      .lock()
-      .await
-      .open_data_stream()
-      .await
-    {
-      Ok(addr) => addr,
-      Err(_) => panic!("Failed to open passive data listener!"),
-    };
+    let wrapper = Arc::new(Mutex::new(data_channel_wrapper));
+    let command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    println!("Setup completed.");
+    (command, command_processor)
+  }
 
-    println!("Connecting to passive listener");
-    let mut client_dc = match TcpStream::connect(addr).await {
-      Ok(c) => c,
-      Err(e) => {
-        panic!("Client passive connection failed: {}", e);
-      }
-    };
-    println!("Client passive connection successful!");
-
+  async fn transfer<T: AsyncRead + Unpin>(
+    file_name: &str,
+    command: Command,
+    mut command_processor: CommandProcessor,
+    mut client_dc: T,
+  ) {
+    println!("Running transfer.");
     // TODO adjust timeout better maybe?
     let timeout_secs = 1
       + Path::new(&file_name)
@@ -198,14 +255,6 @@ mod tests {
         .len()
         .ilog10();
 
-    let _ = command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .get_data_stream()
-      .await
-      .lock()
-      .await;
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
 
@@ -222,43 +271,7 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
-    let transfer = async move {
-      let mut local_file_hasher = Hasher::new();
-      let mut sent_file_hasher = Hasher::new();
-
-      let mut local_file = OpenOptions::new()
-        .read(true)
-        .open(&file_name)
-        .await
-        .expect("Test file must exist!");
-
-      let mut transfer_buffer = [0; 1024];
-      let mut local_buffer = [0; 1024];
-      loop {
-        let transfer_len = match client_dc.read(&mut transfer_buffer).await {
-          Ok(len) => len,
-          Err(e) => panic!("File transfer failed! {e}"),
-        };
-        let local_len = match local_file.read(&mut local_buffer).await {
-          Ok(len) => len,
-          Err(e) => panic!("Failed to read local file! {e}"),
-        };
-
-        assert_eq!(transfer_len, local_len);
-        if local_len == 0 || transfer_len == 0 {
-          break;
-        }
-
-        sent_file_hasher.update(&transfer_buffer[..transfer_len]);
-        local_file_hasher.update(&local_buffer[..local_len]);
-      }
-      assert_eq!(
-        local_file_hasher.finalize(),
-        sent_file_hasher.finalize(),
-        "File hashes do not match!"
-      );
-      println!("File hashes match!");
-    };
+    let transfer = verify_transfer(&file_name, &mut client_dc);
 
     match timeout(Duration::from_secs(5), transfer).await {
       Ok(()) => println!("Transfer complete!"),
@@ -270,30 +283,85 @@ mod tests {
     command_fut.await.expect("Command should complete!");
   }
 
+  async fn verify_transfer<T: AsyncRead + Unpin>(file_name: &str, client_dc: &mut T) {
+    let mut local_file_hasher = Hasher::new();
+    let mut sent_file_hasher = Hasher::new();
+
+    let mut local_file = OpenOptions::new()
+      .read(true)
+      .open(&file_name)
+      .await
+      .expect("Test file must exist!");
+
+    let mut transfer_buffer = [0; 1024];
+    let mut local_buffer = [0; 1024];
+    loop {
+      let transfer_len = match client_dc.read(&mut transfer_buffer).await {
+        Ok(len) => len,
+        Err(e) => panic!("File transfer failed! {e}"),
+      };
+      let local_len = match local_file.read(&mut local_buffer).await {
+        Ok(len) => len,
+        Err(e) => panic!("Failed to read local file! {e}"),
+      };
+
+      assert_eq!(transfer_len, local_len);
+      if local_len == 0 || transfer_len == 0 {
+        break;
+      }
+
+      sent_file_hasher.update(&transfer_buffer[..transfer_len]);
+      local_file_hasher.update(&local_buffer[..local_len]);
+    }
+    assert_eq!(
+      local_file_hasher.finalize(),
+      sent_file_hasher.finalize(),
+      "File hashes do not match!"
+    );
+    println!("File hashes match!");
+  }
+
   #[tokio::test]
   async fn test_two_kib() {
     const FILE_NAME: &'static str = "test_files/2KiB.txt";
-    common(FILE_NAME).await;
+    common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn test_one_mib() {
     const FILE_NAME: &'static str = "test_files/1MiB.txt";
-    common(FILE_NAME).await;
+    common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn test_ten_paragraphs() {
     const FILE_NAME: &'static str = "test_files/lorem_10_paragraphs.txt";
-    common(FILE_NAME).await;
+    common_tcp(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  async fn two_kib_quic_test() {
+    const FILE_NAME: &'static str = "test_files/2KiB.txt";
+    timeout(Duration::from_secs(2), common_quic(FILE_NAME))
+      .await
+      .unwrap();
+  }
+
+  #[tokio::test]
+  async fn one_mib_quic_test() {
+    const FILE_NAME: &'static str = "test_files/1MiB.txt";
+    common_quic(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  async fn ten_paragraphs_quic_test() {
+    const FILE_NAME: &'static str = "test_files/lorem_10_paragraphs.txt";
+    common_quic(FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
@@ -312,10 +380,6 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let label = "test";
     let view = FileSystemView::new(
       current_dir().unwrap(),
@@ -330,7 +394,7 @@ mod tests {
     let _ = session_properties.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(
@@ -347,5 +411,80 @@ mod tests {
     .expect("Command timed out!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::BadSequenceOfCommands, None).await;
+  }
+
+  #[tokio::test]
+  async fn no_file_specified_test() {
+    let label = "test";
+    let view = FileSystemView::new(
+      current_dir().unwrap(),
+      label.clone(),
+      HashSet::from([UserPermission::READ]),
+    );
+
+    let mut session_properties = SessionProperties::new();
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties.username.insert("test".to_string());
+
+    let session_properties = Arc::new(RwLock::new(session_properties));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let _ = open_tcp_data_channel(&mut command_processor).await;
+    let command = Command::new(Commands::RETR, "");
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(5),
+      Retr::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    .expect("Command timed out!");
+
+    receive_and_verify_reply(
+      2,
+      &mut rx,
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      None,
+    )
+    .await;
+  }
+
+  #[tokio::test]
+  async fn invalid_file_test() {
+    let label = "test";
+    let view = FileSystemView::new(
+      current_dir().unwrap(),
+      label.clone(),
+      HashSet::from([UserPermission::READ]),
+    );
+
+    let mut session_properties = SessionProperties::new();
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties.username.insert("test".to_string());
+
+    let session_properties = Arc::new(RwLock::new(session_properties));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let _ = open_tcp_data_channel(&mut command_processor).await;
+    let command = Command::new(
+      Commands::RETR,
+      format!("{}/test_files/NONEXISTENT", label.clone()),
+    );
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(5),
+      Retr::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    .expect("Command timed out!");
+
+    receive_and_verify_reply(2, &mut rx, ReplyCode::FileUnavailable, None).await;
   }
 }
