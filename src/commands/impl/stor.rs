@@ -383,4 +383,53 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::BadSequenceOfCommands, None).await;
   }
+
+  #[tokio::test]
+  async fn no_file_specified_test() {
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+
+    let label = "test";
+    let view = FileSystemView::new(
+      current_dir().unwrap(),
+      label.clone(),
+      HashSet::from([
+        UserPermission::READ,
+        UserPermission::WRITE,
+        UserPermission::CREATE,
+      ]),
+    );
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    session_properties
+      .write()
+      .await
+      .file_system_view_root
+      .set_views(vec![view]);
+    let _ = session_properties
+      .write()
+      .await
+      .username
+      .insert("test".to_string());
+    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+
+    let _ = open_tcp_data_channel(&mut command_processor).await;
+
+    let command = Command::new(Commands::STOR, "");
+    let (tx, mut rx) = channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(5),
+      Stor::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    .expect("Command timed out!");
+
+    receive_and_verify_reply(
+      2,
+      &mut rx,
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      None,
+    )
+    .await;
+  }
 }

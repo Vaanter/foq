@@ -132,3 +132,34 @@ mod tests {
       "/test"
     );
   }
+
+  #[tokio::test]
+  async fn not_logged_in_test() {
+    let command = Command::new(Commands::CWD, "/test");
+
+    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+
+    let (tx, mut rx) = mpsc::channel(1024);
+    let mut reply_sender = TestReplySender::new(tx);
+    if let Err(_) = timeout(
+      Duration::from_secs(3),
+      Cwd::execute(&mut command_processor, &command, &mut reply_sender),
+    )
+    .await
+    {
+      panic!("Command timeout!");
+    };
+
+    receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
+    assert_eq!(
+      session_properties
+        .read()
+        .await
+        .file_system_view_root
+        .get_current_working_directory(),
+      "/"
+    );
+  }
+}
