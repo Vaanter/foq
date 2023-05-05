@@ -142,64 +142,27 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
 
 #[cfg(test)]
 mod tests {
-  use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
 
-  use rustls::RootCertStore;
   use s2n_quic::client::Connect;
-  use s2n_quic::provider::tls::default::rustls::ClientConfig;
   use s2n_quic::provider::tls::default::Client as TlsClient;
   use s2n_quic::Client;
-  use tokio::io::{AsyncBufReadExt, BufReader};
+  use tokio::io::BufReader;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
 
-  use crate::global_context::CONFIG;
-  use crate::handlers::connection_handler::ConnectionHandler;
-  use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
   use crate::io::reply_code::ReplyCode;
-  use crate::listeners::quic_only_listener::QuicOnlyListener;
-  use crate::utils::test_utils::NoCertificateVerification;
-  use crate::utils::tls_utils::load_certs;
-
-  // TODO DRY
+  use crate::utils::test_utils::{
+    create_tls_client_config, receive_and_verify_reply_from_buf, run_quic_listener, LOCALHOST,
+  };
 
   #[tokio::test]
   async fn server_hello_test() {
-    let server_addr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
-    let mut listener = QuicOnlyListener::new(server_addr).unwrap();
-
-    let addr = listener.server.local_addr().unwrap();
     let token = CancellationToken::new();
-    let ct = token.clone();
-    let handler_fut = tokio::spawn(async move {
-      let conn = listener.accept(ct.clone()).await.unwrap();
-      let mut handler = QuicOnlyConnectionHandler::new(conn);
+    let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
-      handler
-        .handle(ct)
-        .await
-        .expect("Handler should exit gracefully");
-    });
-
-    let ca_chain = CONFIG
-      .get_string("ca_chain_file")
-      .expect("Chain should exist!");
-    let chain_certs = load_certs(Path::new(&ca_chain)).unwrap();
-
-    let mut root_store = RootCertStore::empty();
-    chain_certs.iter().for_each(|c| root_store.add(c).unwrap());
-    let mut client_config = ClientConfig::builder()
-      .with_safe_defaults()
-      .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
-      .with_no_client_auth();
-    client_config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
-
-    let tls_client = TlsClient::new(client_config);
+    let tls_client = TlsClient::new(create_tls_client_config());
 
     let client = Client::builder()
       .with_tls(tls_client)
@@ -229,21 +192,13 @@ mod tests {
 
     let (reader, _) = client_cc.split();
     let mut client_reader = BufReader::new(reader);
-    let mut buffer = String::new();
-    match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
-      Ok(Ok(len)) => {
-        println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
-        assert!(buffer
-          .trim()
-          .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
-        assert!(buffer.trim().contains("Hello"));
-        buffer.clear();
-      }
-      Ok(Err(e)) => {
-        panic!("Failed to read reply! {}", e);
-      }
-      Err(_) => panic!("Timeout reading hello!"),
-    }
+    receive_and_verify_reply_from_buf(
+      2,
+      &mut client_reader,
+      ReplyCode::ServiceReady,
+      Some("Hello"),
+    )
+    .await;
     token.cancel();
 
     if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
@@ -253,36 +208,12 @@ mod tests {
 
   #[tokio::test]
   async fn server_hello_quinn_test() {
-
-    let mut listener = QuicOnlyListener::new(server_addr).unwrap();
-
-    let addr = listener.server.local_addr().unwrap();
     let token = CancellationToken::new();
-    let ct = token.clone();
-    let handler_fut = tokio::spawn(async move {
-      let conn = listener.accept(ct.clone()).await.unwrap();
-      let mut handler = QuicOnlyConnectionHandler::new(conn);
+    let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
-      handler
-        .handle(ct)
-        .await
-        .expect("Handler should exit gracefully");
-    });
+    let client_config = create_tls_client_config();
 
-    let ca_chain = CONFIG
-      .get_string("ca_chain_file")
-      .expect("Chain should exist!");
-    let chain_certs = load_certs(Path::new(&ca_chain)).unwrap();
-
-    let mut root_store = RootCertStore::empty();
-    chain_certs.iter().for_each(|c| root_store.add(c).unwrap());
-    let mut client_config = ClientConfig::builder()
-      .with_safe_defaults()
-      .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
-      .with_no_client_auth();
-    client_config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
-
-    let mut quinn_client = quinn::Endpoint::client("127.0.0.1:0".parse().unwrap()).unwrap();
+    let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
 
     quinn_client.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_config)));
 
@@ -301,21 +232,13 @@ mod tests {
     };
 
     let mut client_reader = BufReader::new(reader);
-    let mut buffer = String::new();
-    match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
-      Ok(Ok(len)) => {
-        println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
-        assert!(buffer
-          .trim()
-          .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
-        assert!(buffer.trim().contains("Hello"));
-        buffer.clear();
-      }
-      Ok(Err(e)) => {
-        panic!("Failed to read reply! {}", e);
-      }
-      Err(_) => panic!("Timeout reading hello!"),
-    }
+    receive_and_verify_reply_from_buf(
+      2,
+      &mut client_reader,
+      ReplyCode::ServiceReady,
+      Some("Hello"),
+    )
+    .await;
     token.cancel();
 
     if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
