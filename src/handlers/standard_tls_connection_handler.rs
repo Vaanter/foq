@@ -131,17 +131,13 @@ mod tests {
   use crate::handlers::standard_tls_connection_handler::StandardTlsConnectionHandler;
   use crate::io::reply_code::ReplyCode;
   use crate::listeners::standard_listener::StandardListener;
-  use crate::utils::test_utils::{create_test_client_config, create_test_server_config};
+  use crate::utils::test_utils::{create_test_client_config, create_test_server_config, LOCALHOST};
 
   #[tokio::test]
   async fn server_hello_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let token = CancellationToken::new();
     let ct = token.clone();
-    let mut listener = StandardListener::new(ip).await.unwrap();
+    let mut listener = StandardListener::new(LOCALHOST).await.unwrap();
     let addr = listener.listener.local_addr().unwrap();
     let server_acceptor = TlsAcceptor::from(Arc::new(create_test_server_config()));
     let handler_fut = tokio::spawn(async move {

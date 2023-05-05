@@ -140,10 +140,6 @@ mod tests {
   use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
 
   async fn common(local_file: &'static str, remote_file: &str) {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     if !Path::new(&local_file).exists() {
       panic!("Test file does not exist! Cannot proceed!");
     }
@@ -173,7 +169,6 @@ mod tests {
       .await
       .file_system_view_root
       .change_working_directory(label);
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
     let mut session = CommandProcessor::new(session_properties.clone(), wrapper);
     let addr = match session
       .data_wrapper
@@ -186,6 +181,7 @@ mod tests {
       Ok(addr) => addr,
       Err(_) => panic!("Failed to open passive data listener!"),
     };
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
 
     println!("Connecting to passive listener");
     let mut client_dc = match TcpStream::connect(addr).await {
@@ -341,10 +337,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
@@ -363,10 +356,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
 
     let label = "test";
     let view = FileSystemView::new(

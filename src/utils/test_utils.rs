@@ -1,4 +1,5 @@
 use std::io::Error;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -149,3 +150,5 @@ pub(crate) fn create_test_server_config() -> ServerConfig {
     .with_single_cert(cert, key.remove(0))
     .unwrap()
 }
+
+pub(crate) const LOCALHOST: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);

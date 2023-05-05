@@ -112,14 +112,11 @@ mod tests {
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
   use crate::utils::test_utils::{
-    create_test_auth_provider, receive_and_verify_reply, TestReplySender,
+    create_test_auth_provider, receive_and_verify_reply, TestReplySender, LOCALHOST,
   };
 
   #[tokio::test]
   async fn login_successful_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
     let mut session_properties = SessionProperties::new();
     let _ = session_properties
       .login_form
@@ -127,7 +124,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::PASS, "test");
@@ -151,9 +148,6 @@ mod tests {
 
   #[tokio::test]
   async fn incorrect_password_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
     let mut session_properties = SessionProperties::new();
     let _ = session_properties
       .login_form
@@ -161,7 +155,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::PASS, "INVALID");
@@ -185,12 +179,8 @@ mod tests {
 
   #[tokio::test]
   async fn no_username_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::PASS, "test");
@@ -214,9 +204,6 @@ mod tests {
 
   #[tokio::test]
   async fn no_password_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
     let mut session_properties = SessionProperties::new();
     let _ = session_properties
       .login_form
@@ -224,7 +211,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::PASS, "");
@@ -249,9 +236,6 @@ mod tests {
   #[tokio::test]
   #[ignore] // Requires other tests that initialize DB to not run
   async fn database_not_setup_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
     let mut session_properties = SessionProperties::new();
     let _ = session_properties
       .login_form
@@ -259,7 +243,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::PASS, "test");

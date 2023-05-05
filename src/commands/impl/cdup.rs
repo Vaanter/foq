@@ -65,7 +65,7 @@ mod tests {
   use crate::io::reply_code::ReplyCode;
   use crate::io::reply_code::ReplyCode::{RequestedFileActionNotTaken, RequestedFileActionOkay};
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::TestReplySender;
+  use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
   async fn common(
     label: &str,
@@ -93,9 +93,7 @@ mod tests {
     let session_properties = Arc::new(RwLock::new(session_properties));
     let mut session = CommandProcessor::new(
       session_properties.clone(),
-      Arc::new(Mutex::new(StandardDataChannelWrapper::new(
-        "127.0.0.1:0".parse().unwrap(),
-      ))),
+      Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST))),
     );
 
     let (tx, mut rx) = mpsc::channel(1024);

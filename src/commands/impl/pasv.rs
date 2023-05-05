@@ -76,7 +76,7 @@ mod tests {
   use crate::io::reply_code::ReplyCode;
   use crate::io::command_processor::CommandProcessor;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::TestReplySender;
+  use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
   #[test]
   fn response_test() {
@@ -89,13 +89,9 @@ mod tests {
 
   #[tokio::test]
   async fn simple_open_dc() {
-    let ip: SocketAddr = "127.0.0.1:53245"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let command = Command::new(Commands::PASV, String::new());
 
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut session = CommandProcessor::new(session_properties, wrapper.clone());
 

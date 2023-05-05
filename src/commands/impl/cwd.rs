@@ -53,7 +53,6 @@ impl Executable for Cwd {
 mod tests {
   use std::collections::HashSet;
   use std::env::current_dir;
-  use std::net::SocketAddr;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -70,14 +69,10 @@ mod tests {
   use crate::io::file_system_view::FileSystemView;
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
+  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
 
   #[tokio::test]
   async fn cwd_absolute_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let command = Command::new(Commands::CWD, "/test");
 
     let label = "test";
@@ -97,7 +92,7 @@ mod tests {
     let _ = session_properties.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
 

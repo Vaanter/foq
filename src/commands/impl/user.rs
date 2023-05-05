@@ -60,20 +60,16 @@ mod tests {
   use crate::io::command_processor::CommandProcessor;
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
+  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
 
   #[tokio::test]
   async fn set_username_test() {
-    let ip = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let name = String::from("test");
     let command = Command::new(Commands::USER, name.clone());
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
 
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
     let (tx, mut rx) = channel(1024);
@@ -93,15 +89,11 @@ mod tests {
 
   #[tokio::test]
   async fn empty_username_test() {
-    let ip = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
     let command = Command::new(Commands::USER, "");
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
 
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
     let (tx, mut rx) = channel(1024);

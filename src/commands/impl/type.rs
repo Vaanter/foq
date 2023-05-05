@@ -93,14 +93,11 @@ mod tests {
   use crate::io::data_type::{DataType, SubType};
   use crate::io::reply_code::ReplyCode;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender};
+  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
 
   #[tokio::test]
   async fn ascii_non_print_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
@@ -128,10 +125,7 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_no_subtype_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
@@ -159,10 +153,7 @@ mod tests {
 
   #[tokio::test]
   async fn binary_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
@@ -185,10 +176,7 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_tfe_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
@@ -216,10 +204,7 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_cc_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
@@ -247,10 +232,7 @@ mod tests {
 
   #[tokio::test]
   async fn empty_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
@@ -281,10 +263,7 @@ mod tests {
 
   #[tokio::test]
   async fn ebcdic_no_subtype_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(ip)));
+    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 

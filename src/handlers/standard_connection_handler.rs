@@ -127,14 +127,11 @@ mod tests {
   use crate::handlers::standard_connection_handler::StandardConnectionHandler;
   use crate::io::reply_code::ReplyCode;
   use crate::listeners::standard_listener::StandardListener;
+  use crate::utils::test_utils::LOCALHOST;
 
   #[tokio::test]
   async fn server_hello_test() {
-    let ip: SocketAddr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
-
-    let mut listener = StandardListener::new(ip).await.unwrap();
+    let mut listener = StandardListener::new(LOCALHOST).await.unwrap();
     let addr = listener.listener.local_addr().unwrap();
     let token = CancellationToken::new();
     let ct = token.clone();

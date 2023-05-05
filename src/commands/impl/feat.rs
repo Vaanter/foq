@@ -46,7 +46,7 @@ mod tests {
   use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::command_processor::CommandProcessor;
   use crate::io::session_properties::SessionProperties;
-  use crate::utils::test_utils::TestReplySender;
+  use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
   #[tokio::test]
   async fn format() {
@@ -58,9 +58,10 @@ mod tests {
   async fn full_reply() {
     const EXPECTED: &str = "211-Features supported: \r\n MLSD\r\n211 END\r\n";
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut session = CommandProcessor::new(session_properties.clone(), Arc::new(Mutex::new(
-      StandardDataChannelWrapper::new("127.0.0.1:0".parse().unwrap()),
-    )));
+    let mut session = CommandProcessor::new(
+      session_properties.clone(),
+      Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST))),
+    );
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     Feat::execute(&mut session, &Command::new(Commands::FEAT, ""), &mut reply_sender).await;

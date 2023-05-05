@@ -204,7 +204,7 @@ mod tests {
     let client = Client::builder()
       .with_tls(tls_client)
       .expect("Client requires valid TLS settings!")
-      .with_io("0.0.0.0:0")
+      .with_io(LOCALHOST)
       .expect("Client requires valid I/O settings!")
       .start()
       .expect("Client must be able to start");
@@ -253,9 +253,6 @@ mod tests {
 
   #[tokio::test]
   async fn server_hello_quinn_test() {
-    let server_addr = "127.0.0.1:0"
-      .parse()
-      .expect("Test listener requires available IP:PORT");
 
     let mut listener = QuicOnlyListener::new(server_addr).unwrap();
 
