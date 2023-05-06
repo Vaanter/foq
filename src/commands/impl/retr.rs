@@ -7,11 +7,11 @@ use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::{
   get_data_channel_lock, get_open_file_result, get_transfer_reply,
 };
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
-use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+use crate::session::command_processor::CommandProcessor;
 
 pub(crate) struct Retr;
 
@@ -135,17 +135,17 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::retr::Retr;
+  use crate::commands::reply_code::ReplyCode;
   use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
   use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
-  use crate::commands::reply_code::ReplyCode;
-  use crate::session::session_properties::SessionProperties;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
+  use crate::session::command_processor::CommandProcessor;
+  use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
-    create_tls_client_config, open_tcp_data_channel, receive_and_verify_reply, TestReplySender,
-    LOCALHOST,
+    create_tls_client_config, open_tcp_data_channel, receive_and_verify_reply,
+    setup_test_command_processor, TestReplySender, LOCALHOST,
   };
 
   async fn common_tcp(file_name: &'static str) {
@@ -398,29 +398,9 @@ mod tests {
     receive_and_verify_reply(2, &mut rx, ReplyCode::BadSequenceOfCommands, None).await;
   }
 
-  fn setup_test_command_processor() -> (&'static str, CommandProcessor) {
-    let label = "test";
-    let view = FileSystemView::new(
-      current_dir().unwrap(),
-      label.clone(),
-      HashSet::from([UserPermission::READ]),
-    );
-
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties.username.insert("test".to_string());
-
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let command_processor = CommandProcessor::new(session_properties, wrapper);
-    (label, command_processor)
-  }
-
   #[tokio::test]
   async fn no_file_specified_test() {
-    let (label, mut command_processor) = setup_test_command_processor();
+    let (_, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
     let command = Command::new(Commands::RETR, "");
@@ -509,6 +489,12 @@ mod tests {
     .await
     .expect("Command timed out!");
 
-    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    receive_and_verify_reply(
+      2,
+      &mut rx,
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      None,
+    )
+    .await;
   }
 }

@@ -9,8 +9,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
-use crate::handlers::connection_handler::AsyncReadWrite;
 use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
+use crate::handlers::connection_handler::AsyncReadWrite;
 
 pub(crate) struct QuicOnlyDataChannelWrapper {
   addr: SocketAddr,
@@ -42,14 +42,12 @@ impl QuicOnlyDataChannelWrapper {
 
       match conn {
         Ok(Ok(Some(stream))) => {
+          debug!("Passive listener connection successful! ID: {}.", stream.id());
           let _ = data_channel.insert(Box::new(stream));
-          debug!("Passive listener connection successful!");
         }
         Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
         Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
-        Err(e) => {
-          info!("Client failed to connect to passive listener before timeout! {e}")
-        }
+        Err(e) => info!("Client failed to connect to passive listener before timeout! {e}"),
       };
     });
 

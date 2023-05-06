@@ -63,7 +63,7 @@ mod tests {
   use crate::session::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
   use crate::commands::reply_code::ReplyCode;
-  use crate::commands::reply_code::ReplyCode::{RequestedFileActionNotTaken, RequestedFileActionOkay};
+  use crate::commands::reply_code::ReplyCode::{NotLoggedIn, RequestedFileActionNotTaken, RequestedFileActionOkay};
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
@@ -74,6 +74,7 @@ mod tests {
     reply_code: ReplyCode,
     expected_path: PathBuf,
     expected_display_path: &str,
+    user: Option<String>
   ) {
     let command = Command::new(Commands::CDUP, "".to_string());
 
@@ -88,7 +89,7 @@ mod tests {
     session_properties
       .file_system_view_root
       .change_working_directory(change_path);
-    let _ = session_properties.username.insert("test".to_string());
+    let _ = session_properties.username = user;
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let mut session = CommandProcessor::new(
@@ -124,6 +125,7 @@ mod tests {
       RequestedFileActionNotTaken,
       path.clone(),
       "/",
+      Some("test".to_string())
     )
     .await;
   }
@@ -138,7 +140,23 @@ mod tests {
       RequestedFileActionOkay,
       path.clone(),
       "/",
+      Some("test".to_string())
     )
     .await;
+  }
+
+  #[tokio::test]
+  async fn cdup_not_logged_in_should_reply_530() {
+    let path = std::env::current_dir().unwrap();
+    common(
+      "test",
+      path.clone(),
+      "",
+      NotLoggedIn,
+      path.clone(),
+      "/",
+      None
+    )
+      .await;
   }
 }

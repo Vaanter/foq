@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::env::current_dir;
 use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
@@ -13,6 +15,7 @@ use tokio::io::{
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -22,13 +25,17 @@ use crate::auth::auth_provider::AuthProvider;
 use crate::auth::data_source::DataSource;
 use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
+use crate::auth::user_permission::UserPermission;
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+use crate::io::file_system_view::FileSystemView;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
+use crate::session::session_properties::SessionProperties;
 use crate::utils::tls_utils::{load_certs, load_keys};
 
 pub(crate) struct TestReplySender {
@@ -221,6 +228,26 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
     .lock()
     .await;
   client_dc
+}
+
+pub(crate) fn setup_test_command_processor() -> (&'static str, CommandProcessor) {
+  let label = "test";
+  let view = FileSystemView::new(
+    current_dir().unwrap(),
+    label.clone(),
+    HashSet::from([UserPermission::READ]),
+  );
+
+  let mut session_properties = SessionProperties::new();
+  session_properties
+    .file_system_view_root
+    .set_views(vec![view]);
+  let _ = session_properties.username.insert("test".to_string());
+
+  let session_properties = Arc::new(RwLock::new(session_properties));
+  let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+  let command_processor = CommandProcessor::new(session_properties, wrapper);
+  (label, command_processor)
 }
 
 pub(crate) async fn run_quic_listener(

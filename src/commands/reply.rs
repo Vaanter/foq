@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::str::FromStr;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::commands::reply_code::ReplyCode;
 
@@ -57,8 +58,8 @@ impl FromStr for Reply {
       anyhow::bail!("Reply too short!");
     }
     let start = lines.pop_front().unwrap();
-    let delimiter = start.chars().nth(3).unwrap_or(char::default());
-    if delimiter != ' ' && delimiter != '-' {
+    let delimiter = start.graphemes(true).nth(3).unwrap_or("\0");
+    if delimiter != " " && delimiter != "-" {
       anyhow::bail!("Reply code must be followed by a whitespace or minus!");
     }
     let code = match start[0..3].parse::<u16>() {
@@ -133,5 +134,33 @@ mod tests {
         panic!("Failed to parse! {}", e);
       }
     }
+  }
+
+  #[test]
+  fn from_string_invalid_code_test() {
+    let message = "0 Hello";
+    let parsed_reply = Reply::from_str(message);
+    assert!(parsed_reply.is_err());
+  }
+
+  #[test]
+  fn from_string_invalid_no_space_or_minus_test() {
+    let message = "220Hello";
+    let parsed_reply = Reply::from_str(message);
+    assert!(parsed_reply.is_err());
+  }
+
+  #[test]
+  fn from_string_invalid_no_message_test() {
+    let message = "220";
+    let parsed_reply = Reply::from_str(message);
+    assert!(parsed_reply.is_err());
+  }
+
+  #[test]
+  fn from_string_invalid_no_code_test() {
+    let message = "abc Hello";
+    let parsed_reply = Reply::from_str(message);
+    assert!(parsed_reply.is_err());
   }
 }
