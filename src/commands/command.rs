@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use tracing::debug;
+use tracing::trace;
 
 use crate::commands::commands::Commands;
 
@@ -19,12 +19,12 @@ impl Command {
 
   #[tracing::instrument(skip(message))]
   pub(crate) fn parse(message: &str) -> Result<Self, anyhow::Error> {
-    debug!("Parsing message to command.");
+    trace!("Parsing message to command.");
     let mut split = message.split(" ");
     let command = split.next().ok_or_else(|| anyhow!("Invalid command!"))?;
     let argument = split.next().unwrap_or("");
     let command = Command::new(command.parse()?, argument);
-    debug!("Command parsed: {:?}", command);
+    trace!("Command parsed: {:?}", command);
     Ok(command)
   }
 }

@@ -3,7 +3,7 @@ use std::io;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub(crate) enum Error {
+pub(crate) enum IoError {
   #[error("User not logged in!")]
   UserError,
   #[error("{0}")]

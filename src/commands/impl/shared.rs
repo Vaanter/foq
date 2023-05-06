@@ -5,10 +5,10 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 use tracing::{debug, info};
 
 use crate::handlers::connection_handler::AsyncReadWrite;
-use crate::handlers::data_channel_wrapper::DataChannelWrapper;
-use crate::io::error::Error;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
+use crate::io::error::IoError;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 
 pub(crate) async fn get_data_channel_lock(
   data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
@@ -44,26 +44,26 @@ pub(crate) fn get_transfer_reply(success: bool) -> Reply {
   }
 }
 
-pub(crate) fn get_open_file_result(file: Result<File, Error>) -> Result<File, Reply> {
+pub(crate) fn get_open_file_result(file: Result<File, IoError>) -> Result<File, Reply> {
   debug!("Checking file open result.");
   match file {
     Ok(f) => Ok(f),
-    Err(Error::UserError) => Err(Reply::new(
+    Err(IoError::UserError) => Err(Reply::new(
       ReplyCode::NotLoggedIn,
-      Error::UserError.to_string(),
+      IoError::UserError.to_string(),
     )),
-    Err(Error::NotFoundError(m)) | Err(Error::InvalidPathError(m)) => {
+    Err(IoError::NotFoundError(m)) | Err(IoError::InvalidPathError(m)) => {
       Err(Reply::new(ReplyCode::FileUnavailable, m))
     }
-    Err(Error::PermissionError) => Err(Reply::new(
+    Err(IoError::PermissionError) => Err(Reply::new(
       ReplyCode::FileUnavailable,
-      Error::PermissionError.to_string(),
+      IoError::PermissionError.to_string(),
     )),
-    Err(Error::NotAFileError) => Err(Reply::new(
+    Err(IoError::NotAFileError) => Err(Reply::new(
       ReplyCode::SyntaxErrorInParametersOrArguments,
-      Error::NotAFileError.to_string(),
+      IoError::NotAFileError.to_string(),
     )),
-    Err(Error::OsError(_)) => Err(Reply::new(
+    Err(IoError::OsError(_)) => Err(Reply::new(
       ReplyCode::RequestedActionAborted,
       "Requested action aborted: local error in processing.",
     )),

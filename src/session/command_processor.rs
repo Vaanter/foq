@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
-use tracing::{info, trace};
+use tracing::{debug, info};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -19,11 +19,11 @@ use crate::commands::r#impl::retr::Retr;
 use crate::commands::r#impl::stor::Stor;
 use crate::commands::r#impl::syst::Syst;
 use crate::commands::r#impl::user::User;
-use crate::handlers::data_channel_wrapper::DataChannelWrapper;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
-use crate::io::session_properties::SessionProperties;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
+use crate::session::session_properties::SessionProperties;
 
 #[derive(Clone)]
 pub(crate) struct CommandProcessor {
@@ -44,7 +44,7 @@ impl CommandProcessor {
 
   #[tracing::instrument(skip(self, reply_sender))]
   pub(crate) async fn evaluate(&mut self, message: String, reply_sender: &mut impl ReplySend) {
-    trace!("Evaluating command");
+    debug!("Evaluating command");
     let command = match Command::parse(&message.trim()) {
       Ok(c) => c,
       Err(e) => {

@@ -11,12 +11,12 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use crate::handlers::connection_handler::ConnectionHandler;
-use crate::handlers::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
+use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
 use crate::handlers::reply_sender::{ReplySend, ReplySender};
-use crate::io::command_processor::CommandProcessor;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
-use crate::io::session_properties::SessionProperties;
+use crate::session::command_processor::CommandProcessor;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
+use crate::session::session_properties::SessionProperties;
 
 #[allow(unused)]
 pub(crate) struct QuicOnlyConnectionHandler {
@@ -153,7 +153,7 @@ mod tests {
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
 
-  use crate::io::reply_code::ReplyCode;
+  use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     create_tls_client_config, receive_and_verify_reply_from_buf, run_quic_listener, LOCALHOST,
   };

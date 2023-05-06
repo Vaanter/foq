@@ -11,11 +11,11 @@ use tracing::{debug, error, info, warn};
 
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::reply_sender::{ReplySend, ReplySender};
-use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
-use crate::io::command_processor::CommandProcessor;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
-use crate::io::session_properties::SessionProperties;
+use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+use crate::session::command_processor::CommandProcessor;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
+use crate::session::session_properties::SessionProperties;
 
 #[allow(unused)]
 pub(crate) struct StandardConnectionHandler {
@@ -115,7 +115,6 @@ impl ConnectionHandler for StandardConnectionHandler {
 
 #[cfg(test)]
 mod tests {
-  use std::net::SocketAddr;
   use std::time::Duration;
 
   use tokio::io::{AsyncBufReadExt, BufReader};
@@ -125,7 +124,7 @@ mod tests {
 
   use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::standard_connection_handler::StandardConnectionHandler;
-  use crate::io::reply_code::ReplyCode;
+  use crate::commands::reply_code::ReplyCode;
   use crate::listeners::standard_listener::StandardListener;
   use crate::utils::test_utils::LOCALHOST;
 

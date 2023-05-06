@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use crate::commands::command::Command;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::command_processor::CommandProcessor;
-use crate::io::reply::Reply;
+use crate::session::command_processor::CommandProcessor;
+use crate::commands::reply::Reply;
 
 #[async_trait]
 pub(crate) trait Executable {

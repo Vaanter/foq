@@ -9,10 +9,10 @@ use crate::commands::r#impl::shared::{
   get_data_channel_lock, get_open_file_result, get_transfer_reply,
 };
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::command_processor::CommandProcessor;
+use crate::session::command_processor::CommandProcessor;
 use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 
 pub(crate) struct Stor;
 
@@ -117,7 +117,6 @@ mod tests {
   use std::collections::HashSet;
   use std::env::{current_dir, temp_dir};
   use std::fs::remove_file;
-  use std::net::SocketAddr;
   use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
@@ -135,11 +134,11 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::stor::Stor;
-  use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::command_processor::CommandProcessor;
+  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::session::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
-  use crate::io::reply_code::ReplyCode;
-  use crate::io::session_properties::SessionProperties;
+  use crate::commands::reply_code::ReplyCode;
+  use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
     open_tcp_data_channel, receive_and_verify_reply, TestReplySender, LOCALHOST,
   };

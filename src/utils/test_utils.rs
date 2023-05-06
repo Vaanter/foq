@@ -25,9 +25,9 @@ use crate::auth::user_data::UserData;
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::command_processor::CommandProcessor;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
+use crate::session::command_processor::CommandProcessor;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
 use crate::utils::tls_utils::{load_certs, load_keys};
 

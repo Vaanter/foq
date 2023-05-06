@@ -6,7 +6,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter, WriteHalf};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
-use crate::io::reply::Reply;
+use crate::commands::reply::Reply;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ReplySender<T: AsyncWrite + Sync + Send> {

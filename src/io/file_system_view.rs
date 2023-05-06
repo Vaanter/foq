@@ -8,7 +8,7 @@ use tracing::{debug, warn};
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
-use crate::io::error::Error;
+use crate::io::error::IoError;
 use crate::io::open_options_flags::OpenOptionsWrapper;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -88,14 +88,14 @@ impl FileSystemView {
     &self,
     path: impl Into<String>,
     options: OpenOptionsWrapper,
-  ) -> Result<File, Error> {
+  ) -> Result<File, IoError> {
     if options.read() && !self.permissions.contains(&UserPermission::READ)
       || (options.write() && !self.permissions.contains(&UserPermission::WRITE))
       || (options.create() && !self.permissions.contains(&UserPermission::CREATE))
       || (options.append()) && !self.permissions.contains(&UserPermission::APPEND)
       || (options.truncate() && !self.permissions.contains(&UserPermission::WRITE))
     {
-      return Err(Error::PermissionError);
+      return Err(IoError::PermissionError);
     }
 
     let path = path.into();
@@ -110,23 +110,23 @@ impl FileSystemView {
     let file = OpenOptions::from(options).open(&path).await.map_err(|e| {
       warn!("Error opening file: {}", e);
       match e.kind() {
-        ErrorKind::NotFound => Error::NotFoundError(e.to_string()),
-        ErrorKind::PermissionDenied => Error::PermissionError,
-        _ => Error::OsError(e),
+        ErrorKind::NotFound => IoError::NotFoundError(e.to_string()),
+        ErrorKind::PermissionDenied => IoError::PermissionError,
+        _ => IoError::OsError(e),
       }
     });
 
     return if path.is_dir() {
-      return Err(Error::NotAFileError);
+      return Err(IoError::NotAFileError);
     } else {
       file
     };
   }
 
-  pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
+  pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
     let path = path.into();
     if !self.permissions.contains(&UserPermission::LIST) {
-      return Err(Error::PermissionError);
+      return Err(IoError::PermissionError);
     }
 
     if path.is_empty() || path == "." {
@@ -140,7 +140,7 @@ impl FileSystemView {
       let read_dir = current.read_dir();
       if read_dir.is_err() {
         // IO Error
-        return Err(Error::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(read_dir.unwrap_err()));
       }
 
       Ok(Self::create_listing(
@@ -153,7 +153,7 @@ impl FileSystemView {
       if self.root == self.current_path {
         // Cannot list before root
         // MUST RETURN InvalidPathError ONLY HERE
-        return Err(Error::InvalidPathError(String::new()));
+        return Err(IoError::InvalidPathError(String::new()));
       }
 
       let parent = self.current_path.parent();
@@ -166,7 +166,7 @@ impl FileSystemView {
       let read_dir = parent.read_dir();
       if read_dir.is_err() {
         // IO Error
-        return Err(Error::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(read_dir.unwrap_err()));
       }
 
       let parent_name = parent
@@ -190,7 +190,7 @@ impl FileSystemView {
       let read_dir = self.root.read_dir();
       if read_dir.is_err() {
         // IO Error
-        return Err(Error::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(read_dir.unwrap_err()));
       }
 
       Ok(Self::create_listing(
@@ -203,18 +203,18 @@ impl FileSystemView {
       let absolute = self.root.join(&path[1..]);
       if !absolute.exists() {
         // Path doesn't exist! Nothing to list
-        return Err(Error::NotFoundError(String::from("Directory not found!")));
+        return Err(IoError::NotFoundError(String::from("Directory not found!")));
       }
 
       if !absolute.is_dir() {
         // Path does not refer to a directory
-        return Err(Error::NotADirectoryError);
+        return Err(IoError::NotADirectoryError);
       }
 
       let read_dir = absolute.read_dir();
       if read_dir.is_err() {
         // IO Error
-        return Err(Error::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(read_dir.unwrap_err()));
       }
 
       Ok(Self::create_listing(
@@ -227,18 +227,18 @@ impl FileSystemView {
       let relative = self.current_path.join(&path);
       if !relative.exists() {
         // Path doesn't exist! Nothing to list
-        return Err(Error::NotFoundError(String::from("Directory not found!")));
+        return Err(IoError::NotFoundError(String::from("Directory not found!")));
       }
 
       if !relative.is_dir() {
         // Path does not refer to a directory
-        return Err(Error::NotADirectoryError);
+        return Err(IoError::NotADirectoryError);
       }
 
       let read_dir = relative.read_dir();
       if read_dir.is_err() {
         // IO Error
-        return Err(Error::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(read_dir.unwrap_err()));
       }
 
       Ok(Self::create_listing(
@@ -285,7 +285,7 @@ pub(crate) mod tests {
 
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::{EntryData, EntryType};
-  use crate::io::error::Error;
+  use crate::io::error::IoError;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 
@@ -477,7 +477,7 @@ pub(crate) mod tests {
       .build()
       .unwrap();
     let file = view.open_file("/test_files/1MiB.txt", options).await;
-    let Err(Error::PermissionError) = file else {
+    let Err(IoError::PermissionError) = file else {
       panic!("Expected Permission error, got: {:?}", file);
     };
   }
@@ -494,7 +494,7 @@ pub(crate) mod tests {
       .build()
       .unwrap();
     let file = view.open_file("/test_files/subfolder", options).await;
-    let Err(Error::NotAFileError) = file else {
+    let Err(IoError::NotAFileError) = file else {
       panic!("Expected NotAFile error, got: {:?}", file);
     };
   }
@@ -569,7 +569,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("NONEXISTENT");
     assert!(listing.is_err());
-    let Err(Error::NotFoundError(_)) = listing else {
+    let Err(IoError::NotFoundError(_)) = listing else {
       panic!("Expected NotFound error");
     };
   }
@@ -583,7 +583,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/NONEXISTENT");
     assert!(listing.is_err());
-    let Err(Error::NotFoundError(_)) = listing else {
+    let Err(IoError::NotFoundError(_)) = listing else {
       panic!("Expected NotFound error");
     };
   }
@@ -625,7 +625,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
     let listing = view.list_dir("..");
-    let Err(Error::InvalidPathError(_)) = listing else {
+    let Err(IoError::InvalidPathError(_)) = listing else {
       panic!("Expected InvalidPath error");
     };
   }

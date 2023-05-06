@@ -6,10 +6,10 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::command_processor::CommandProcessor;
-use crate::io::error::Error;
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
+use crate::session::command_processor::CommandProcessor;
+use crate::io::error::IoError;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub(crate) struct Mlsd;
@@ -31,15 +31,15 @@ impl Executable for Mlsd {
 
     let listing = match listing {
       Ok(l) => l,
-      Err(Error::UserError) => {
+      Err(IoError::UserError) => {
         Self::reply(
-          Reply::new(ReplyCode::NotLoggedIn, Error::UserError.to_string()),
+          Reply::new(ReplyCode::NotLoggedIn, IoError::UserError.to_string()),
           reply_sender,
         )
         .await;
         return;
       }
-      Err(Error::OsError(_)) | Err(Error::SystemError) => {
+      Err(IoError::OsError(_)) | Err(IoError::SystemError) => {
         Self::reply(
           Reply::new(
             ReplyCode::RequestedActionAborted,
@@ -50,29 +50,29 @@ impl Executable for Mlsd {
         .await;
         return;
       }
-      Err(Error::NotADirectoryError) => {
+      Err(IoError::NotADirectoryError) => {
         Self::reply(
           Reply::new(
             ReplyCode::SyntaxErrorInParametersOrArguments,
-            Error::NotADirectoryError.to_string(),
+            IoError::NotADirectoryError.to_string(),
           ),
           reply_sender,
         )
         .await;
         return;
       }
-      Err(Error::PermissionError) => {
+      Err(IoError::PermissionError) => {
         Self::reply(
           Reply::new(
             ReplyCode::FileUnavailable,
-            Error::PermissionError.to_string(),
+            IoError::PermissionError.to_string(),
           ),
           reply_sender,
         )
         .await;
         return;
       }
-      Err(Error::NotFoundError(message)) | Err(Error::InvalidPathError(message)) => {
+      Err(IoError::NotFoundError(message)) | Err(IoError::InvalidPathError(message)) => {
         Self::reply(
           Reply::new(ReplyCode::FileUnavailable, message),
           reply_sender,
@@ -157,11 +157,11 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::mlsd::Mlsd;
-  use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::command_processor::CommandProcessor;
+  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::session::command_processor::CommandProcessor;
   use crate::io::file_system_view::FileSystemView;
-  use crate::io::reply_code::ReplyCode;
-  use crate::io::session_properties::SessionProperties;
+  use crate::commands::reply_code::ReplyCode;
+  use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
 
   #[tokio::test]

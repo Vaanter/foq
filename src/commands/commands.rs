@@ -2,6 +2,7 @@ use strum_macros::{EnumIter, EnumString};
 
 #[derive(Clone, Copy, Debug, PartialEq, EnumString, EnumIter)]
 #[strum(ascii_case_insensitive)]
+#[non_exhaustive]
 pub enum Commands {
   ABOR,
   ACCT,

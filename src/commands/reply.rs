@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::str::FromStr;
 
-use crate::io::reply_code::ReplyCode;
+use crate::commands::reply_code::ReplyCode;
 
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct Reply {
@@ -105,8 +105,8 @@ impl FromStr for Reply {
 mod tests {
   use std::str::FromStr;
 
-  use crate::io::reply::Reply;
-  use crate::io::reply_code::ReplyCode;
+  use crate::commands::reply::Reply;
+  use crate::commands::reply_code::ReplyCode;
 
   #[test]
   fn test_from_string_single_line() {

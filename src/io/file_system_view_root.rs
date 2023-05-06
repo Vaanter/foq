@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
-use crate::io::error::Error;
+use crate::io::error::IoError;
 use crate::io::file_system_view::FileSystemView;
 use crate::io::open_options_flags::OpenOptionsWrapper;
 
@@ -138,12 +138,12 @@ impl FileSystemViewRoot {
   }
 
   #[tracing::instrument(skip(self, path))]
-  pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, Error> {
+  pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
     let path = path.into();
     debug!("Listing directory, path: {}", path);
     if self.file_system_views.is_none() {
       // not logged in
-      return Err(Error::UserError);
+      return Err(IoError::UserError);
     }
 
     if path.is_empty() || path == "." {
@@ -159,7 +159,7 @@ impl FileSystemViewRoot {
 
         if view.is_none() {
           // Current view doesn't exist (should panic?)
-          return Err(Error::SystemError);
+          return Err(IoError::SystemError);
         }
 
         view.unwrap().list_dir(".")
@@ -169,7 +169,7 @@ impl FileSystemViewRoot {
     } else if path == ".." {
       if self.current_view.is_none() {
         // We are at root, nothing is before
-        return Err(Error::InvalidPathError(String::from(
+        return Err(IoError::InvalidPathError(String::from(
           "Parent path is inaccessible!",
         )));
       }
@@ -182,14 +182,14 @@ impl FileSystemViewRoot {
 
       if view.is_none() {
         // Current view doesn't exist (should panic?)
-        return Err(Error::SystemError);
+        return Err(IoError::SystemError);
       }
 
       let listing = view.unwrap().list_dir("..");
 
       return match listing {
         Ok(l) => Ok(l),
-        Err(Error::InvalidPathError(_)) => self.list_root(),
+        Err(IoError::InvalidPathError(_)) => self.list_root(),
         Err(e) => Err(e),
       };
     } else if path.starts_with("/") {
@@ -197,14 +197,14 @@ impl FileSystemViewRoot {
       let label = path.split("/").nth(1);
       if label.is_none() {
         // path is invalid (e.g.: //foo/bar)
-        return Err(Error::InvalidPathError(String::from("Invalid path!")));
+        return Err(IoError::InvalidPathError(String::from("Invalid path!")));
       }
 
       let view = self.file_system_views.as_ref().unwrap().get(label.unwrap());
 
       if view.is_none() {
         // Current view doesn't exist (should panic?)
-        return Err(Error::SystemError);
+        return Err(IoError::SystemError);
       }
 
       let mut sub_path = path.split("/").skip(2).collect::<Vec<&str>>().join("/");
@@ -217,7 +217,7 @@ impl FileSystemViewRoot {
         let label = path.split("/").nth(0).expect("Path cannot be empty here!");
         let view = self.file_system_views.as_ref().unwrap().get(label);
         if view.is_none() {
-          return Err(Error::NotFoundError(String::from("Path doesn't exist!")));
+          return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
         }
         let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
         return view.unwrap().list_dir(sub_path);
@@ -232,16 +232,16 @@ impl FileSystemViewRoot {
 
       if view.is_none() {
         // Current view doesn't exist (should panic?)
-        return Err(Error::SystemError);
+        return Err(IoError::SystemError);
       }
 
       view.unwrap().list_dir(path)
     }
   }
 
-  fn list_root(&self) -> Result<Vec<EntryData>, Error> {
+  fn list_root(&self) -> Result<Vec<EntryData>, IoError> {
     if self.file_system_views.is_none() {
-      return Err(Error::UserError);
+      return Err(IoError::UserError);
     }
 
     let mut entries: Vec<EntryData> =
@@ -271,14 +271,14 @@ impl FileSystemViewRoot {
     &self,
     path: impl Into<String>,
     options: OpenOptionsWrapper,
-  ) -> Result<File, Error> {
+  ) -> Result<File, IoError> {
     let path = path.into();
     if self.file_system_views.is_none() {
-      return Err(Error::UserError);
+      return Err(IoError::UserError);
     }
 
     if path.is_empty() || path == "/" {
-      return Err(Error::InvalidPathError(String::from(
+      return Err(IoError::InvalidPathError(String::from(
         "Path references a directory, not a file!",
       )));
     } else if path.starts_with("/") {
@@ -286,7 +286,7 @@ impl FileSystemViewRoot {
       let view = self.file_system_views.as_ref().unwrap().get(label);
 
       if view.is_none() {
-        return Err(Error::NotFoundError(String::from("File not found!")));
+        return Err(IoError::NotFoundError(String::from("File not found!")));
       }
 
       let mut sub_path = path.split("/").skip(2).collect::<Vec<&str>>().join("/");
@@ -298,7 +298,7 @@ impl FileSystemViewRoot {
         let label = path.split("/").nth(0).expect("Path cannot be empty here!");
         let view = self.file_system_views.as_ref().unwrap().get(label);
         if view.is_none() {
-          return Err(Error::InvalidPathError(String::from("Path doesn't exist!")));
+          return Err(IoError::InvalidPathError(String::from("Path doesn't exist!")));
         }
         let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
         return view.unwrap().open_file(sub_path, options).await;
@@ -321,7 +321,7 @@ mod tests {
 
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::EntryData;
-  use crate::io::error::Error;
+  use crate::io::error::IoError;
   use crate::io::file_system_view::tests::validate_listing;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view_root::FileSystemViewRoot;
@@ -337,7 +337,7 @@ mod tests {
       .unwrap();
 
     let file = root.open_file("test_file", options).await;
-    let Err(Error::UserError) = file else {
+    let Err(IoError::UserError) = file else {
       panic!("Expected User error");
     };
   }
@@ -410,7 +410,7 @@ mod tests {
     let file = root
       .open_file(format!("{label2}/NONEXISTENT"), options)
       .await;
-    let Err(Error::NotFoundError(_)) = file else {
+    let Err(IoError::NotFoundError(_)) = file else {
       panic!("Expected NotFound error, got: {:?}", file);
     };
   }
@@ -551,7 +551,7 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("");
-    let Err(Error::UserError) = file else {
+    let Err(IoError::UserError) = file else {
       panic!("Expected User error")
     };
   }
@@ -561,7 +561,7 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("test_files");
-    let Err(Error::UserError) = file else {
+    let Err(IoError::UserError) = file else {
       panic!("Expected User error")
     };
   }
@@ -571,7 +571,7 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("/test_files");
-    let Err(Error::UserError) = file else {
+    let Err(IoError::UserError) = file else {
       panic!("Expected User error")
     };
   }
@@ -581,7 +581,7 @@ mod tests {
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("..");
-    let Err(Error::UserError) = file else {
+    let Err(IoError::UserError) = file else {
       panic!("Expected User error");
     };
   }
@@ -643,7 +643,7 @@ mod tests {
 
     let root = FileSystemViewRoot::new(Some(views));
     let listing = root.list_dir("..");
-    let Err(Error::InvalidPathError(_)) = listing else {
+    let Err(IoError::InvalidPathError(_)) = listing else {
       panic!("Expected InvalidPath error");
     };
   }

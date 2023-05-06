@@ -4,10 +4,10 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::command_processor::CommandProcessor;
-use crate::io::data_type::{DataType, SubType};
-use crate::io::reply::Reply;
-use crate::io::reply_code::ReplyCode;
+use crate::session::command_processor::CommandProcessor;
+use crate::session::data_type::{DataType, SubType};
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 
 pub(crate) struct Type;
 
@@ -77,7 +77,6 @@ impl Executable for Type {
 
 #[cfg(test)]
 mod tests {
-  use std::net::SocketAddr;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -88,11 +87,11 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::r#type::Type;
-  use crate::handlers::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::command_processor::CommandProcessor;
-  use crate::io::data_type::{DataType, SubType};
-  use crate::io::reply_code::ReplyCode;
-  use crate::io::session_properties::SessionProperties;
+  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::session::command_processor::CommandProcessor;
+  use crate::session::data_type::{DataType, SubType};
+  use crate::commands::reply_code::ReplyCode;
+  use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
 
   #[tokio::test]
