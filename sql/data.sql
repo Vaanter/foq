@@ -6,7 +6,7 @@ INSERT INTO users(username, password)
 VALUES ('user3', '$argon2id$v=19$m=19456,t=2,p=1$wdd9R3bV4juf5+zBb3qmig$TAMrnpTWqd62b0f0Wp8tSIvpCWSQI2x0OW/8yPd/KGg');
 
 INSERT INTO views(user_id, root, label, permissions)
-VALUES (1, 'C:\', 'c', 'r;l;w');
+VALUES (1, 'C:\', 'c', 'r;l;w;c');
 
 INSERT INTO views(user_id, root, label, permissions)
 VALUES (3, 'C:\', 'c', 'INVALID');
