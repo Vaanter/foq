@@ -1,6 +1,7 @@
 extern crate core;
 
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use tokio::io::{Error, ErrorKind};
@@ -34,20 +35,14 @@ mod session;
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 #[tracing::instrument]
 async fn main() {
+  let log_level = Level::from_str(&CONFIG.get_string("log_level").unwrap_or(String::new()))
+    .unwrap_or(Level::INFO);
   let subscriber = tracing_subscriber::fmt()
-    // Use a more compact, abbreviated log format
-    .compact()
-    // Display source code file paths
     .with_file(true)
-    // Display source code line numbers
     .with_line_number(true)
-    // Display the thread ID an event was recorded on
     .with_thread_ids(true)
-    // Don't display the event's target (module path)
     .with_target(false)
-    // Display logs from this level
-    .with_max_level(Level::TRACE)
-    // Build the subscriber
+    .with_max_level(log_level)
     .finish();
   tracing::subscriber::set_global_default(subscriber).unwrap();
 
@@ -60,34 +55,70 @@ async fn main() {
     })
     .await;
 
-  let tcp_addr = "0.0.0.0:21".parse().unwrap();
-  let tcp_tls_addr = "0.0.0.0:990".parse().unwrap();
-  let quic_addr = "0.0.0.0:9900".parse().unwrap();
-
   let cancellation_token = CancellationToken::new();
 
-  let tcp_task = tokio::spawn(run_tcp(tcp_addr, cancellation_token.clone()));
-  let tcp_tls_task = tokio::spawn(run_tcp_tls(tcp_tls_addr, cancellation_token.clone()));
-  let quic_task = tokio::spawn(run_quic(quic_addr, cancellation_token.clone()));
+  let mut tasks = Vec::with_capacity(3);
+  let tcp_address = CONFIG.get_string("tcp_address");
+  if let Ok(tcp_address) = tcp_address {
+    match tcp_address.parse() {
+      Ok(tcp_addr) => {
+        let tcp_task = tokio::spawn(run_tcp(tcp_addr, cancellation_token.clone()));
+        tasks.push(tcp_task);
+      }
+      Err(_) => error!("Failed to parse TCP address!"),
+    }
+  } else {
+    warn!("No TCP address in config!");
+  }
+
+  let tcp_tls_address = CONFIG.get_string("tcp_tls_address");
+  if let Ok(tcp_tls_address) = tcp_tls_address {
+    match tcp_tls_address.parse() {
+      Ok(tcp_tls_addr) => {
+        let tcp_tls_task = tokio::spawn(run_tcp_tls(tcp_tls_addr, cancellation_token.clone()));
+        tasks.push(tcp_tls_task);
+      }
+      Err(_) => error!("Failed to parse TCP+TLS address!"),
+    }
+  } else {
+    warn!("No TCP+TLS address in config!");
+  }
+
+  let quic_address = CONFIG.get_string("quic_address");
+  if let Ok(quic_address) = quic_address {
+    match quic_address.parse() {
+      Ok(quic_addr) => {
+        let quic_task = tokio::spawn(run_quic(quic_addr, cancellation_token.clone()));
+        tasks.push(quic_task);
+      }
+      Err(_) => error!("Failed to parse QUIC address!"),
+    }
+  } else {
+    warn!("No QUIC address in config!");
+  }
 
   match tokio::signal::ctrl_c().await {
     Ok(()) => {
       info!("Ctrl-c received!");
       cancellation_token.cancel();
-      tcp_task.abort();
-      tcp_tls_task.abort();
-      quic_task.abort();
+      for handle in tasks.iter_mut() {
+        handle.await.expect("TODO: panic message");
+      }
     }
-    Err(e) => {
-      error!("Ctrl-c signal error! {e}");
-    }
+    Err(e) => error!("Ctrl-c signal error! {e}"),
   }
 }
 
-#[tracing::instrument]
-async fn run_tcp(addr: SocketAddr, token: CancellationToken) -> Result<(), Error> {
-  let mut standard_listener = StandardListener::new(addr).await.unwrap();
-  debug!("[TCP] Running standard listener loop.");
+#[tracing::instrument(skip(token))]
+async fn run_tcp(addr: SocketAddr, token: CancellationToken) {
+  let mut standard_listener = match StandardListener::new(addr).await {
+    Ok(l) => l,
+    Err(e) => {
+      error!("[TCP] Failed to create listener! Error: {}", e);
+      return;
+    }
+  };
+  info!("[TCP] Listening on {}.", addr);
   loop {
     let cancel = token.clone();
     match standard_listener.accept(cancel.clone()).await {
@@ -106,19 +137,32 @@ async fn run_tcp(addr: SocketAddr, token: CancellationToken) -> Result<(), Error
       }
     };
   }
-  Ok(())
 }
 
-#[tracing::instrument]
-async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) -> Result<(), Error> {
-  let config = rustls::ServerConfig::builder()
+#[tracing::instrument(skip(token))]
+async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) {
+  let mut config = match rustls::ServerConfig::builder()
     .with_safe_defaults()
     .with_no_client_auth()
     .with_single_cert(CERTS.clone(), KEY.clone())
-    .map_err(|err| Error::new(ErrorKind::InvalidInput, err))?;
+    .map_err(|err| Error::new(ErrorKind::InvalidInput, err))
+  {
+    Ok(c) => c,
+    Err(e) => {
+      error!("[TCP+TLS] Error creating config! {e}");
+      return;
+    }
+  };
   let tls_acceptor = TlsAcceptor::from(Arc::new(config));
-  let mut standard_listener = StandardListener::new(addr).await.unwrap();
-  debug!("[TCP+TLS] Running standard listener loop.");
+  let mut standard_listener = match StandardListener::new(addr).await {
+    Ok(l) => l,
+    Err(e) => {
+      error!("[TCP+TLS] Failed to create listener! Error: {}", e);
+      return;
+    }
+  };
+
+  info!("[TCP+TLS] Listening on {}.", addr);
   loop {
     let cancel = token.clone();
     match standard_listener.accept(cancel.clone()).await {
@@ -145,16 +189,21 @@ async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) -> Result<(), E
       }
     };
   }
-  Ok(())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(token))]
 async fn run_quic(addr: SocketAddr, token: CancellationToken) {
-  let mut standard_listener = QuicOnlyListener::new(addr).unwrap();
-  debug!("[QUIC] Running quic listener loop.");
+  let mut quic_only_listener = match QuicOnlyListener::new(addr) {
+    Ok(l) => l,
+    Err(e) => {
+      error!("[QUIC] Failed to create listener! Error: {}", e);
+      return;
+    }
+  };
+  info!("[QUIC] Listening on {}.", addr);
   loop {
     let cancel = token.clone();
-    match standard_listener.accept(cancel.clone()).await {
+    match quic_only_listener.accept(cancel.clone()).await {
       Some(conn) => {
         let peer = conn.remote_addr().unwrap();
         info!("[QUIC] Received connection from: {:?}", peer);
