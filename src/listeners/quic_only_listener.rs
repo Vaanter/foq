@@ -1,5 +1,6 @@
-use std::error::Error;
+use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use rustls::ServerConfig;
 use s2n_quic::{
@@ -16,7 +17,11 @@ pub(crate) struct QuicOnlyListener {
 }
 
 impl QuicOnlyListener {
-  pub(crate) fn new(addr: SocketAddr) -> Result<Self, Box<dyn Error>> {
+  pub(crate) fn new(addr: SocketAddr) -> Result<Self, Error> {
+    if addr.is_ipv6() {
+      return Err(Error::new(ErrorKind::Unsupported, "IPv6 is not supported!"));
+    }
+
     let io = IoBuilder::default().with_receive_address(addr)?.build()?;
 
     let certs = CERTS.clone();
@@ -29,17 +34,24 @@ impl QuicOnlyListener {
       .map_err(|err| tokio::io::Error::new(tokio::io::ErrorKind::InvalidInput, err))?;
     config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
 
+    if std::env::var_os("SSLKEYLOGFILE").is_some() {
+      config.key_log = Arc::new(rustls::KeyLogFile::new());
+    }
+
     let tls_server = TlsServer::new(config);
 
     let server = Server::builder()
-      .with_tls(tls_server)?
-      .with_io(io)?
-      .start()?;
+      .with_tls(tls_server)
+      .unwrap()
+      .with_io(io)
+      .unwrap()
+      .start()
+      .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
 
     Ok(QuicOnlyListener { server })
   }
 
-  #[tracing::instrument(skip(self))]
+  #[tracing::instrument(skip_all)]
   pub(crate) async fn accept(&mut self, token: CancellationToken) -> Option<Connection> {
     let value = tokio::select! {
       conn = self.server.accept() => Some(conn.unwrap()),

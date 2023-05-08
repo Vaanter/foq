@@ -13,7 +13,7 @@ use tracing::{debug, error, info, warn, Level};
 
 use crate::auth::auth_provider::AuthProvider;
 use crate::auth::sqlite_data_source::SqliteDataSource;
-use crate::global_context::{AUTH_PROVIDER, CERTS, DB_LAZY, KEY};
+use crate::global_context::{AUTH_PROVIDER, CERTS, CONFIG, DB_LAZY, KEY};
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
 use crate::handlers::standard_connection_handler::StandardConnectionHandler;
@@ -23,14 +23,13 @@ use crate::listeners::standard_listener::StandardListener;
 
 mod auth;
 mod commands;
+mod data_channels;
 mod global_context;
 mod handlers;
 mod io;
-mod lab;
 mod listeners;
-mod utils;
-mod data_channels;
 mod session;
+mod utils;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 #[tracing::instrument]
@@ -153,6 +152,11 @@ async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) {
       return;
     }
   };
+
+  if std::env::var_os("SSLKEYLOGFILE").is_some() {
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
+  }
+
   let tls_acceptor = TlsAcceptor::from(Arc::new(config));
   let mut standard_listener = match StandardListener::new(addr).await {
     Ok(l) => l,

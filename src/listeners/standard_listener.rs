@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 
 use tokio::net::{TcpListener, TcpStream};
@@ -10,13 +10,16 @@ pub(crate) struct StandardListener {
 }
 
 impl StandardListener {
-  pub(crate) async fn new(addr: SocketAddr) -> Result<Self, Box<dyn Error>> {
+  pub(crate) async fn new(addr: SocketAddr) -> Result<Self, Error> {
+    if addr.is_ipv6() {
+      return Err(Error::new(ErrorKind::Unsupported, "IPv6 is not supported!"));
+    }
     Ok(StandardListener {
       listener: TcpListener::bind(addr).await?,
     })
   }
 
-  #[tracing::instrument(skip(self))]
+  #[tracing::instrument(skip_all)]
   pub(crate) async fn accept(
     &mut self,
     token: CancellationToken,
