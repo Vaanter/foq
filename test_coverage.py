@@ -39,8 +39,9 @@ if retcode != 0:
 #     exit(1)
 
 os.system(
-    r'''grcov . --binary-path ./target/debug/ -s . -t html --excl-line "(#\[derive\()|(^ *\.await;?)" --excl-start "mod 
-    tests" --ignore-not-existing --ignore *main.rs -o ./coverage/''')
+    r'grcov . --binary-path ./target/debug/ -s . -t html --excl-line "(#\[derive\()|(^ *\.await;?)|'
+    r'(#\[tracing::instrument\()|( *trace!\([^;]*\);)|( *debug!\([^;]*\);)|( *info!\([^;]*\);)|( *warn!\([^;]*\);)|'
+    r'( *error!\([^;]*\);)" --excl-start "mod tests" --ignore-not-existing --ignore *main.rs -o ./coverage/')
 
 # cleanup residual files
 for file in os.listdir():
