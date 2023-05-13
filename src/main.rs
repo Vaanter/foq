@@ -37,8 +37,8 @@ async fn main() {
   let log_level = Level::from_str(&CONFIG.get_string("log_level").unwrap_or(String::new()))
     .unwrap_or(Level::INFO);
   let subscriber = tracing_subscriber::fmt()
-    .with_file(true)
-    .with_line_number(true)
+    .with_file(false)
+    .with_line_number(false)
     .with_thread_ids(true)
     .with_target(false)
     .with_max_level(log_level)

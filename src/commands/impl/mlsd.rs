@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -94,7 +94,7 @@ impl Executable for Mlsd {
     match stream.lock().await.as_mut() {
       Some(s) => {
         let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
-        debug!("Sending listing to client:\n{}", mem);
+        trace!("Sending listing to client:\n{}", mem);
         let len = s.write_all(mem.as_ref()).await;
         debug!("Sending listing result: {:?}", len);
       }
