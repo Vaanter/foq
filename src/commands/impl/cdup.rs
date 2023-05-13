@@ -123,7 +123,7 @@ mod tests {
       path.clone(),
       "",
       RequestedFileActionNotTaken,
-      path.clone(),
+      path.clone().canonicalize().unwrap(),
       "/",
       Some("test".to_string())
     )
@@ -138,7 +138,7 @@ mod tests {
       path.clone(),
       "test",
       RequestedFileActionOkay,
-      path.clone(),
+      path.clone().canonicalize().unwrap(),
       "/",
       Some("test".to_string())
     )
@@ -153,7 +153,7 @@ mod tests {
       path.clone(),
       "",
       NotLoggedIn,
-      path.clone(),
+      path.clone().canonicalize().unwrap(),
       "/",
       None
     )

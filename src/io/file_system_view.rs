@@ -27,6 +27,7 @@ impl FileSystemView {
     permissions: HashSet<UserPermission>,
   ) -> Self {
     let label = label.into();
+    let root = root.canonicalize().expect("View path must exist!");
     FileSystemView {
       current_path: root.clone(),
       root,
@@ -61,17 +62,19 @@ impl FileSystemView {
       self.display_path = format!("/{}", self.label.clone());
       self.current_path = self.root.clone();
     } else if dir.starts_with("/") {
-      let new_current = self.root.join(&dir[1..]);
-      if !new_current.exists() {
-        return false;
-      }
+      let new_current = match self.root.join(&dir[1..]).canonicalize() {
+        Ok(n) => n,
+        Err(_) => return false,
+      };
+
       self.current_path = new_current;
-      self.display_path += &dir;
+      self.display_path = format!("/{}{}", &self.label, &dir);
     } else {
-      let new_current = self.current_path.join(dir.clone());
-      if !new_current.exists() {
-        return false;
-      }
+      let new_current = match self.current_path.join(dir.clone()).canonicalize() {
+        Ok(n) => n,
+        Err(_) => return false,
+      };
+
       self.current_path = new_current;
       self.display_path.push('/');
       self.display_path.push_str(&dir);
@@ -200,16 +203,19 @@ impl FileSystemView {
         &self.permissions,
       ))
     } else if path.starts_with("/") {
-      let absolute = self.root.join(&path[1..]);
-      if !absolute.exists() {
+      let absolute = match self.root.join(&path[1..]).canonicalize() {
+        Ok(absolute) => absolute,
         // Path doesn't exist! Nothing to list
-        return Err(IoError::NotFoundError(String::from("Directory not found!")));
-      }
-
-      if !absolute.is_dir() {
-        // Path does not refer to a directory
-        return Err(IoError::NotADirectoryError);
-      }
+        Err(e) => {
+          return match e.kind() {
+            ErrorKind::NotFound => {
+              Err(IoError::NotFoundError(String::from("Directory not found!")))
+            }
+            // Path does not refer to a directory
+            _ => Err(IoError::NotADirectoryError),
+          };
+        }
+      };
 
       let read_dir = absolute.read_dir();
       if read_dir.is_err() {
@@ -309,8 +315,11 @@ pub(crate) mod tests {
 
     assert!(view.change_working_directory("test_files"));
     assert_eq!(format!("/{label}/test_files"), view.display_path);
-    assert_eq!(root.join("test_files"), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(
+      root.join("test_files").canonicalize().unwrap(),
+      view.current_path
+    );
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -322,8 +331,8 @@ pub(crate) mod tests {
 
     assert!(!view.change_working_directory("NONEXISTENT"));
     assert_eq!(format!("/{label}"), view.display_path);
-    assert_eq!(root.clone(), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -335,8 +344,8 @@ pub(crate) mod tests {
 
     assert!(!view.change_working_directory("/NONEXISTENT"));
     assert_eq!(format!("/{label}"), view.display_path);
-    assert_eq!(root.clone(), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -348,8 +357,11 @@ pub(crate) mod tests {
 
     assert!(view.change_working_directory("/test_files"));
     assert_eq!(format!("/{label}/test_files"), view.display_path);
-    assert_eq!(root.join("test_files"), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(
+      root.join("test_files").canonicalize().unwrap(),
+      view.current_path
+    );
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -361,8 +373,11 @@ pub(crate) mod tests {
 
     assert!(view.change_working_directory("/test_files/subfolder"));
     assert_eq!(format!("/{label}/test_files/subfolder"), view.display_path);
-    assert_eq!(root.join("test_files/subfolder"), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(
+      root.join("test_files/subfolder").canonicalize().unwrap(),
+      view.current_path
+    );
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -374,8 +389,8 @@ pub(crate) mod tests {
 
     assert!(view.change_working_directory("."));
     assert_eq!(format!("/{label}"), view.display_path);
-    assert_eq!(root.clone(), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -388,8 +403,8 @@ pub(crate) mod tests {
     assert!(view.change_working_directory("test_files"));
     assert!(view.change_working_directory(".."));
     assert_eq!(format!("/{label}"), view.display_path);
-    assert_eq!(root.clone(), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -401,8 +416,8 @@ pub(crate) mod tests {
 
     assert!(!view.change_working_directory(".."));
     assert_eq!(format!("/{label}"), view.display_path);
-    assert_eq!(root.clone(), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[test]
@@ -416,8 +431,8 @@ pub(crate) mod tests {
     assert!(view.change_working_directory("subfolder"));
     assert!(view.change_working_directory("~"));
     assert_eq!(format!("/{label}"), view.display_path);
-    assert_eq!(root.clone(), view.current_path);
-    assert_eq!(root, view.root);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
   #[tokio::test]
@@ -509,7 +524,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir(".").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -521,7 +536,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("test_files").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -533,7 +548,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("test_files/subfolder").unwrap();
 
-    validate_listing(&listing, 1, permissions.len(), 0, 0);
+    validate_listing("subfolder", &listing, 1, permissions.len(), 0, 0);
   }
 
   #[test]
@@ -545,7 +560,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/test_files").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -557,7 +572,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/test_files/subfolder").unwrap();
 
-    validate_listing(&listing, 1, permissions.len(), 0, 0);
+    validate_listing("subfolder", &listing, 1, permissions.len(), 0, 0);
   }
 
   #[test]
@@ -601,7 +616,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
 
     let listing = view.list_dir("").unwrap();
-    validate_listing(&listing, 1, permissions.len(), 0, 0);
+    validate_listing(label, &listing, 1, permissions.len(), 0, 0);
   }
 
   #[test]
@@ -614,7 +629,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("..").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -640,10 +655,11 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/").unwrap();
 
-    validate_listing(&listing, 9, permissions.len(), 4, 5);
+    validate_listing(label, &listing, 9, permissions.len(), 4, 5);
   }
 
   pub(crate) fn validate_listing(
+    listed_dir_name: &str,
     listing: &Vec<EntryData>,
     total: usize,
     perms: usize,
@@ -656,6 +672,7 @@ pub(crate) mod tests {
     let mut dir_count = 0;
     for entry in listing {
       if entry.entry_type() == EntryType::CDIR {
+        assert_eq!(listed_dir_name, entry.name());
         cdir_count += 1;
       } else if entry.entry_type() == EntryType::DIR {
         dir_count += 1;

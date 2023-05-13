@@ -34,8 +34,9 @@ impl FileSystemViewRoot {
   pub(crate) fn change_working_directory(&mut self, path: impl Into<String>) -> bool {
     let path = path.into();
     if path == "." || path.is_empty() {
-      return false;
+      return self.file_system_views.is_some();
     } else if path == ".." {
+      // Not logged in / at root
       if self.file_system_views.is_none() || self.current_view.is_none() {
         return false;
       }
@@ -605,7 +606,7 @@ mod tests {
       HashSet::<&EntryData>::from_iter(listing.iter()).len(),
       listing.len()
     );
-    validate_listing(&listing, 3, 2, 0, 2);
+    validate_listing("/", &listing, 3, 2, 0, 2);
   }
 
   #[test]
@@ -628,7 +629,7 @@ mod tests {
       HashSet::<&EntryData>::from_iter(listing.iter()).len(),
       listing.len()
     );
-    validate_listing(&listing, 3, 2, 0, 2);
+    validate_listing("/", &listing, 3, 2, 0, 2);
   }
 
   #[test]
@@ -667,7 +668,7 @@ mod tests {
 
     let listing = root.list_dir(".").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -689,7 +690,7 @@ mod tests {
 
     let listing = root.list_dir("subfolder").unwrap();
 
-    validate_listing(&listing, 1, permissions.len(), 0, 0);
+    validate_listing("subfolder", &listing, 1, permissions.len(), 0, 0);
   }
 
   #[test]
@@ -710,7 +711,7 @@ mod tests {
 
     let listing = root.list_dir("/test_files").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -737,7 +738,7 @@ mod tests {
       HashSet::<&EntryData>::from_iter(listing.iter()).len(),
       listing.len()
     );
-    validate_listing(&listing, 3, 2, 0, 2);
+    validate_listing("/", &listing, 3, 2, 0, 2);
   }
 
   #[test]
@@ -755,7 +756,7 @@ mod tests {
 
     let listing = root.list_dir("..").unwrap();
 
-    validate_listing(&listing, 5, permissions.len(), 3, 1);
+    validate_listing(&format!("{}", label1), &listing, 5, permissions.len(), 3, 1);
   }
 
   pub(crate) fn create_root(views: Vec<FileSystemView>) -> BTreeMap<String, FileSystemView> {
