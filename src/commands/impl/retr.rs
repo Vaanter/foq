@@ -166,7 +166,7 @@ mod tests {
       (command, command_processor)
     });
 
-    let tls_client = TlsClient::new(create_tls_client_config());
+    let tls_client = TlsClient::new(create_tls_client_config("ftpoq-1"));
 
     let client = Client::builder()
       .with_tls(tls_client)

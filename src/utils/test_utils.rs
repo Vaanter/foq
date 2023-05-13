@@ -268,11 +268,11 @@ pub(crate) async fn run_quic_listener(
   (handler_fut, addr)
 }
 
-pub(crate) fn create_tls_client_config() -> ClientConfig {
+pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
   let mut client_config = ClientConfig::builder()
     .with_safe_defaults()
     .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
     .with_no_client_auth();
-  client_config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
+  client_config.alpn_protocols = vec![alpn.as_bytes().to_vec()];
   client_config
 }

@@ -152,6 +152,7 @@ async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) {
       return;
     }
   };
+  config.alpn_protocols = vec!["ftp".as_bytes().to_vec()];
 
   if std::env::var_os("SSLKEYLOGFILE").is_some() {
     config.key_log = Arc::new(rustls::KeyLogFile::new());

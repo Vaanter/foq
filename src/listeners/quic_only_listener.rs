@@ -32,7 +32,7 @@ impl QuicOnlyListener {
       .with_no_client_auth()
       .with_single_cert(certs, key)
       .map_err(|err| tokio::io::Error::new(tokio::io::ErrorKind::InvalidInput, err))?;
-    config.alpn_protocols = vec!["foq".as_bytes().to_vec()];
+    config.alpn_protocols = vec!["ftpoq-1".as_bytes().to_vec()];
 
     if std::env::var_os("SSLKEYLOGFILE").is_some() {
       config.key_log = Arc::new(rustls::KeyLogFile::new());

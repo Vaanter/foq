@@ -163,7 +163,7 @@ mod tests {
     let token = CancellationToken::new();
     let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
-    let tls_client = TlsClient::new(create_tls_client_config());
+    let tls_client = TlsClient::new(create_tls_client_config("ftpoq-1"));
 
     let client = Client::builder()
       .with_tls(tls_client)
@@ -212,7 +212,7 @@ mod tests {
     let token = CancellationToken::new();
     let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
-    let client_config = create_tls_client_config();
+    let client_config = create_tls_client_config("ftpoq-1");
 
     let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
 
