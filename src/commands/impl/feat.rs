@@ -11,7 +11,7 @@ use crate::commands::reply_code::ReplyCode;
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub(crate) struct Feat;
 
-const FEATURES: [&str; 1] = ["MLSD"];
+const FEATURES: [&str; 2] = ["MLSD", "UTF8"];
 
 impl Feat {
   fn format_features() -> Vec<String> {
@@ -56,13 +56,13 @@ mod tests {
 
   #[tokio::test]
   async fn format() {
-    const EXPECTED: &str = " MLSD";
+    const EXPECTED: &str = " MLSD UTF8";
     assert_eq!(EXPECTED, Feat::format_features().join(""))
   }
 
   #[tokio::test]
   async fn full_reply() {
-    const EXPECTED: &str = "211-Features supported: \r\n MLSD\r\n211 END\r\n";
+    const EXPECTED: &str = "211-Features supported: \r\n MLSD\r\n UTF8\r\n211 END\r\n";
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut session = CommandProcessor::new(
       session_properties.clone(),
