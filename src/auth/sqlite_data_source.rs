@@ -71,6 +71,7 @@ impl DataSource for SqliteDataSource {
           .permissions
           .trim()
           .split(";")
+          .filter(|&p| !p.is_empty())
           .map(|p| UserPermission::from_str(p).map_err(|_| AuthError::PermissionParsingError)),
       )?;
       let view = FileSystemView::new(PathBuf::from(&view.root), &view.label, permissions);
