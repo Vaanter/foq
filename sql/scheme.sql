@@ -9,7 +9,7 @@ create table if not exists views
 (
     user_id     integer not null,
     root        text    not null,
-    label       text    not null,
+    label       text    not null unique,
     permissions text    not null,
     foreign key (user_id) references users (user_id)
 );
