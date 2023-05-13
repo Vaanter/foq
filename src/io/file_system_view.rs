@@ -146,8 +146,14 @@ impl FileSystemView {
         return Err(IoError::OsError(read_dir.unwrap_err()));
       }
 
+      let name = self
+        .display_path
+        .rsplit_once("/")
+        .unwrap_or(("", &self.label))
+        .1;
+
       Ok(Self::create_listing(
-        &self.label,
+        name,
         current,
         read_dir.unwrap(),
         &self.permissions,
@@ -197,7 +203,7 @@ impl FileSystemView {
       }
 
       Ok(Self::create_listing(
-        "/",
+        format!("{}", &self.label),
         self.root.clone(),
         read_dir.unwrap(),
         &self.permissions,
