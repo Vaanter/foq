@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use tokio::fs::{File, OpenOptions};
 use tracing::{debug, warn};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
@@ -47,13 +48,19 @@ impl FileSystemView {
       }
       self.current_path.pop();
       if self.display_path != "/" {
-        let index = match self.display_path.rfind("/") {
-          Some(index) => index,
-          None => {
-            panic!("Display path must contain forward slash!");
-          }
-        };
-        self.display_path = self.display_path.chars().take(index).collect();
+        // display_path.rfind("/") does not work when display_path contains values spanning multiple bytes
+        let new_display_path: String = self
+          .display_path
+          .graphemes(true)
+          .rev()
+          .skip_while(|&c| c != "/")
+          .skip(1)
+          .collect::<String>()
+          .graphemes(true)
+          .rev()
+          .collect();
+
+        self.display_path = new_display_path;
         if self.display_path.is_empty() {
           self.display_path = format!("/{}", self.label.clone());
         }
