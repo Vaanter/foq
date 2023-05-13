@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs::Metadata;
+use std::io;
 use std::io::Error;
 use std::time::SystemTime;
 
@@ -59,7 +60,7 @@ impl EntryData {
   }
 
   pub(crate) fn create_from_metadata(
-    metadata: std::io::Result<Metadata>,
+    metadata: io::Result<Metadata>,
     name: impl Into<String>,
     permissions: &HashSet<UserPermission>,
   ) -> Result<Self, Error> {

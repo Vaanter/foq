@@ -1,7 +1,7 @@
 use derive_builder::Builder;
 use tokio::fs::OpenOptions;
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default, Builder)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default, Debug, Builder)]
 #[builder(default)]
 pub(crate) struct OpenOptionsWrapper {
   read: bool,
