@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -62,7 +63,9 @@ impl StandardConnectionHandler {
         len
       }
       Err(e) => {
-        error!("[TCP] Reading client message failed! Error: {e}");
+        if e.kind() != ErrorKind::UnexpectedEof {
+          error!("[TCP] Reading client message failed! Error: {e}");
+        }
         0
       }
     };

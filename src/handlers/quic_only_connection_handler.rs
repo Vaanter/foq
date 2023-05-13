@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,11 +17,12 @@ use crate::handlers::reply_sender::{ReplySend, ReplySender};
 use crate::session::command_processor::CommandProcessor;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::session::session_properties::SessionProperties;
 
 #[allow(unused)]
 pub(crate) struct QuicOnlyConnectionHandler {
-  pub(crate) connection: Arc<Mutex<Connection>>,
+  connection: Arc<Mutex<Connection>>,
   data_channel_wrapper: Arc<Mutex<QuicOnlyDataChannelWrapper>>,
   command_processor: Arc<Mutex<CommandProcessor>>,
   control_channel: Option<BufReader<ReadHalf<BidirectionalStream>>>,
@@ -70,7 +72,9 @@ impl QuicOnlyConnectionHandler {
         len
       }
       Err(e) => {
-        error!("[TCP] Reading client message failed! Error: {e}");
+        if e.kind() != ErrorKind::UnexpectedEof {
+          error!("[TCP] Reading client message failed! Error: {e}");
+        }
         0
       }
     };
@@ -126,6 +130,7 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
         _ = token.cancelled() => {
           info!("[QUIC] Shutdown received!");
           let _ = timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close());
+          let _ = timeout(Duration::from_secs(2), self.data_channel_wrapper.lock().await.close_data_stream());
           break;
         }
         result = self.await_command() => {

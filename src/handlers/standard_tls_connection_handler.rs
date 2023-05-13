@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -63,7 +64,9 @@ impl StandardTlsConnectionHandler {
         len
       }
       Err(e) => {
-        error!("[TCP+TLS] Reading client message failed! Error: {e}");
+        if e.kind() != ErrorKind::UnexpectedEof {
+          error!("[TCP+TLS] Reading client message failed! Error: {e}");
+        }
         0
       }
     };
