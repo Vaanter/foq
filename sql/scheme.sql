@@ -9,8 +9,9 @@ create table if not exists views
 (
     user_id     integer not null,
     root        text    not null,
-    label       text    not null unique,
+    label       text    not null,
     permissions text    not null,
-    foreign key (user_id) references users (user_id)
+    foreign key (user_id) references users (user_id),
+    constraint unique_label_per_user unique (user_id, label)
 );
 
