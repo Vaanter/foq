@@ -1,3 +1,5 @@
+//! Contains global statics
+
 use std::path::Path;
 
 use config::Config;
@@ -10,6 +12,7 @@ use tracing::info;
 use crate::auth::auth_provider::AuthProvider;
 use crate::utils::tls_utils::{load_certs, load_keys};
 
+/// The configuration loaded from config file
 pub(crate) static CONFIG: Lazy<Config> = Lazy::new(|| {
   Config::builder()
     .add_source(config::File::with_name("config.toml"))
@@ -20,6 +23,7 @@ pub(crate) static CONFIG: Lazy<Config> = Lazy::new(|| {
     .unwrap()
 });
 
+/// The certificates loaded from a file
 pub(crate) static CERTS: Lazy<Vec<Certificate>> = Lazy::new(|| {
   load_certs(Path::new(
     &CONFIG
@@ -29,6 +33,7 @@ pub(crate) static CERTS: Lazy<Vec<Certificate>> = Lazy::new(|| {
   .expect("Unable to load certificates! Cannot start.")
 });
 
+/// The key loaded from a file
 pub(crate) static KEY: Lazy<PrivateKey> = Lazy::new(|| {
   load_keys(Path::new(
     &CONFIG
@@ -41,6 +46,7 @@ pub(crate) static KEY: Lazy<PrivateKey> = Lazy::new(|| {
   .clone()
 });
 
+/// The SQLite connection
 pub(crate) static DB_LAZY: Lazy<SqlitePool> = Lazy::new(|| {
   let db_url = CONFIG
     .get_string("DATABASE_URL")

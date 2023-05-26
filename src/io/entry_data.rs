@@ -1,3 +1,5 @@
+//! Information about an object in the filesystem, such as file or directory.
+
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs::Metadata;
@@ -12,6 +14,8 @@ use strum_macros::Display;
 
 use crate::auth::user_permission::UserPermission;
 
+/// Entry type fact as specified by
+/// [RFC3659](https://datatracker.ietf.org/doc/html/rfc3659#section-7.5.1).
 #[allow(unused)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Display, Hash)]
 #[strum(serialize_all = "lowercase")]
@@ -23,6 +27,7 @@ pub(crate) enum EntryType {
   LINK,
 }
 
+/// Holds the various facts about a filesystem object.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub(crate) struct EntryData {
   size: u64,
@@ -34,6 +39,10 @@ pub(crate) struct EntryData {
 
 #[allow(unused)]
 impl EntryData {
+  /// Constructs a new entry.
+  ///
+  /// If the modify fact is not set, then the current system time is assumed. If it is set then
+  /// care must be taken to assure it's in the correct format as this function does no checks.
   pub(crate) fn new(
     size: u64,
     entry_type: EntryType,
@@ -59,6 +68,9 @@ impl EntryData {
     self.entry_type = new_type;
   }
 
+  /// Constructs a new entry from the metadata of an object.
+  ///
+  /// Users permissions are filtered to permissions that are relevant for an object.
   pub(crate) fn create_from_metadata(
     metadata: io::Result<Metadata>,
     name: impl Into<String>,

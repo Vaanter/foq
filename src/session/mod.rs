@@ -1,3 +1,4 @@
+//! Contains implementation of session management and processing of commands.
 pub(crate) mod session_properties;
 pub(crate) mod data_type;
 pub(crate) mod transfer_mode;

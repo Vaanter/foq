@@ -1,3 +1,5 @@
+//! Authenticates a user using the supplied [`DataSource`]s.
+
 use crate::auth::data_source::DataSource;
 use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
@@ -8,10 +10,26 @@ pub(crate) struct AuthProvider {
 }
 
 impl AuthProvider {
+  /// Constructs a new [`AuthProvider`] instance with no data sources.
   pub(crate) fn new() -> Self {
     Self::default()
   }
 
+  /// Attempts to authenticate the user.
+  /// 
+  /// Iterative goes through all the [`DataSource`]s checking if the user can be authenticated by 
+  /// any of them. This function will skip the remaining data sources as soon as the user is 
+  /// authenticated.
+  /// 
+  /// # Arguments
+  /// 
+  /// - `login_form`: A [`LoginForm`] containing the users username and password.
+  /// 
+  /// # Returns
+  /// 
+  /// An [`Option`] that contains the [`UserData`] entity if the authentication was successful, 
+  /// [`None`] otherwise.
+  /// 
   pub(crate) async fn authenticate(&self, login_form: LoginForm) -> Option<UserData> {
     for data_source in self.data_sources.iter() {
       if let Ok(ud) = data_source.authenticate(&login_form).await {

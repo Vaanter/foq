@@ -19,6 +19,8 @@ use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::session::session_properties::SessionProperties;
 
+/// Represents the networking part of clients session for TCP+TLS.
+///
 #[allow(unused)]
 pub(crate) struct StandardTlsConnectionHandler {
   data_channel_wrapper: Arc<Mutex<StandardDataChannelWrapper>>,
@@ -29,6 +31,13 @@ pub(crate) struct StandardTlsConnectionHandler {
 }
 
 impl StandardTlsConnectionHandler {
+  /// Constructs a new handler for TCP+TLS connections.
+  ///
+  /// Initializes a new data channel wrapper from the connection. Also creates a new session for
+  /// the client. [`SessionProperties`] and [`CommandProcessor`] are setup with default settings.
+  /// The connection will be split into reader and writer halves. The writer will be used to
+  /// construct [`ReplySender`], the reader will be used to read messages from client.
+  ///
   pub(crate) fn new(stream: TlsStream<TcpStream>) -> Self {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(
       stream.get_ref().0.local_addr().unwrap().clone(),
@@ -50,6 +59,15 @@ impl StandardTlsConnectionHandler {
     }
   }
 
+  /// Waits until the client sends a command or the connection closes.
+  ///
+  /// Reads data from the client until newline. If the connection closes, this returns an [`error`].
+  /// Otherwise it will return [`Ok(())`].
+  ///
+  /// After reading clients message, it sent for evaluation to [`CommandProcessor`].
+  ///
+  /// [`error`]: anyhow::Error
+  ///
   #[tracing::instrument(skip(self))]
   pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
     let reader = &mut self.control_channel;

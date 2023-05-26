@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::handlers::connection_handler::AsyncReadWrite;
 
+/// This trait specifies operations that can be used on a data channel.
 #[async_trait]
 pub(crate) trait DataChannelWrapper: Sync + Send {
   async fn open_data_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>>;

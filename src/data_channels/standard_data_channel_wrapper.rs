@@ -19,6 +19,22 @@ pub(crate) struct StandardDataChannelWrapper {
 }
 
 impl StandardDataChannelWrapper {
+  /// Creates a new instance of a [`StandardDataChannelWrapper`].
+  ///
+  /// This function takes in a [`SocketAddr`] and returns a new [`StandardDataChannelWrapper`]
+  /// instance.
+  /// The [`StandardDataChannelWrapper`] represents a wrapper for a TCP (unencrypted) data channel
+  /// that is used for sending data.
+  ///
+  /// # Arguments
+  ///
+  /// - `addr`: A [`SocketAddr`] representing the address for the data channel.
+  /// The port is set to 0.
+  ///
+  /// # Returns
+  ///
+  /// A new instance of [`StandardDataChannelWrapper`].
+  ///
   pub(crate) fn new(mut addr: SocketAddr) -> Self {
     addr.set_port(0);
     StandardDataChannelWrapper {
@@ -27,6 +43,21 @@ impl StandardDataChannelWrapper {
     }
   }
 
+  /// Creates a new stream for the data channel.
+  ///
+  /// Creates a new [`tokio::task`] that creates a new TCP listener which waits for up to 20
+  /// seconds for the client to connect. If the client connects, then the `data_channel` property
+  /// is set and the data channel can be used. If the client does not connect in time or some
+  /// other error occurs it will logged.
+  ///
+  /// # Panics
+  ///
+  /// This function will panic if all ports are in use.
+  ///
+  /// # Returns
+  ///
+  /// A [`SocketAddr`] the server listens on.
+  ///
   #[tracing::instrument(skip(self))]
   async fn create_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
     debug!("Creating passive listener");
@@ -68,6 +99,7 @@ impl StandardDataChannelWrapper {
 
 #[async_trait]
 impl DataChannelWrapper for StandardDataChannelWrapper {
+  /// Opens a data channel using [`StandardDataChannelWrapper::create_stream`].
   async fn open_data_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
     self.close_data_stream().await;
     self.create_stream().await

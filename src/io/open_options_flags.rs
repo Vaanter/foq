@@ -1,6 +1,9 @@
+//! Wraps the options in [`OpenOptions`] to allow access to the options.
+
 use derive_builder::Builder;
 use tokio::fs::OpenOptions;
 
+/// Available options when opening a file.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default, Debug, Builder)]
 #[builder(default)]
 pub(crate) struct OpenOptionsWrapper {

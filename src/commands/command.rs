@@ -1,3 +1,5 @@
+//! The command and its argument.
+
 use tracing::trace;
 
 use crate::commands::commands::Commands;
@@ -16,6 +18,20 @@ impl Command {
     };
   }
 
+  /// Parses a message into a command.
+  ///
+  /// This function takes a string slice and returns a [`Result`] containing the parsed [`Command`]
+  /// or an [`anyhow::Error`] if parsing fails.
+  ///
+  /// # Arguments
+  ///
+  /// - `message`: A string slice representing the message to be parsed.
+  ///
+  /// # Returns
+  ///
+  /// A [`Result`] containing the parsed [`Command`] if successful, or an [`anyhow::Error`] if
+  /// parsing fails.
+  ///
   #[tracing::instrument(skip(message))]
   pub(crate) fn parse(message: &str) -> Result<Self, anyhow::Error> {
     trace!("Parsing message to command.");

@@ -1,3 +1,8 @@
+//! File system view root represent the start of the directory tree an user can access.
+//! See [`File system view`] module documentation.
+//!
+//! [`File system view`]: crate::io::file_system_view
+
 use std::collections::BTreeMap;
 
 use tokio::fs::File;
@@ -9,15 +14,18 @@ use crate::io::error::IoError;
 use crate::io::file_system_view::FileSystemView;
 use crate::io::open_options_flags::OpenOptionsWrapper;
 
+/// Contains the users file system views.
 #[derive(Debug, Default)]
 pub(crate) struct FileSystemViewRoot {
   pub(crate) file_system_views: Option<BTreeMap<String, FileSystemView>>,
   current_view: Option<String>,
 }
 
+/// Permissions a user can have in the root.
 const ROOT_PERMISSIONS: [UserPermission; 2] = [UserPermission::EXECUTE, UserPermission::LIST];
 
 impl FileSystemViewRoot {
+  /// Constructs a new instance of [`FileSystemViewRoot`].
   pub(crate) fn new(views: Option<BTreeMap<String, FileSystemView>>) -> Self {
     FileSystemViewRoot {
       file_system_views: views,
@@ -31,6 +39,28 @@ impl FileSystemViewRoot {
   }
 
   // TODO better return
+  /// Changes the current path to the specified one.
+  ///
+  /// This function changes the current path to `dir` and returns **true** if the new path is
+  /// valid, **false** otherwise. New path can be absolute or relative and also the current path
+  /// (.), parent (..) and root (/).
+  ///
+  /// # Arguments
+  ///
+  /// `dir`: A type that can be converted into a `String`, that will be used to construct the new
+  /// path.
+  ///
+  /// # Invalid paths
+  /// A path can be invalid for these reasons:
+  /// - A user is not logged in.
+  /// - The `path` refers to parent path (..) but the path is already at root.
+  /// - The `path` refers to nonexistent [`FileSystemView`].
+  /// - [`FileSystemView::change_working_directory`] returns **false**
+  ///
+  /// # Returns
+  ///
+  /// **true** if the new path is valid, **false** otherwise.
+  ///
   pub(crate) fn change_working_directory(&mut self, path: impl Into<String>) -> bool {
     let path = path.into();
     if path == "." || path.is_empty() {
@@ -114,10 +144,14 @@ impl FileSystemViewRoot {
     }
   }
 
+  /// Changes current path to parent.
+  ///
+  /// See [`FileSystemViewRoot::change_working_directory`].
   pub(crate) fn change_working_directory_up(&mut self) -> bool {
     self.change_working_directory("..")
   }
 
+  /// Returns the path to current working directory.
   #[tracing::instrument(skip(self))]
   pub(crate) fn get_current_working_directory(&self) -> String {
     debug!("Getting current working directory path");
@@ -138,6 +172,21 @@ impl FileSystemViewRoot {
     );
   }
 
+  /// Creates a directory listing.
+  ///
+  /// This function lists all files and directories at `path` as [`EntryData`]. If the listing
+  /// succeeds, then it is returned, otherwise [`IoError`] is returned.
+  ///
+  /// # Arguments
+  ///
+  /// - `path` A type that can be converted into a [`String`], representing the path to directory
+  /// to list.
+  ///
+  /// # Returns
+  ///
+  /// A [`Result`] containing the listing as [`Vec<EntryData>`] if successful or an [`IoError`] if
+  /// an error occurs.
+  ///
   #[tracing::instrument(skip(self, path))]
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
     let path = path.into();
@@ -240,6 +289,22 @@ impl FileSystemViewRoot {
     }
   }
 
+  /// Creates a listing of the root.
+  ///
+  /// This function lists all views this root contains as [`EntryData`]. If the listing
+  /// succeeds, then it is returned, otherwise [`IoError`] is returned.
+  ///
+  /// # Returns
+  ///
+  /// A [`Result`] containing the listing as [`Vec<EntryData>`] if successful or an [`IoError`] if
+  /// an error occurs.
+  /// 
+  /// # Errors
+  ///
+  /// This function can return the following `IoError` variants:
+  /// 
+  /// - [`IoError::UserError`]: If the user is not logged in.
+  ///
   fn list_root(&self) -> Result<Vec<EntryData>, IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
@@ -267,6 +332,9 @@ impl FileSystemViewRoot {
     Ok(entries)
   }
 
+  /// Opens a file with the specified path and options.
+  /// 
+  /// See: [`FileSystemView::open_file`].
   #[tracing::instrument(skip(self, path, options))]
   pub(crate) async fn open_file(
     &self,

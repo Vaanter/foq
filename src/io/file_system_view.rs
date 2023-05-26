@@ -1,3 +1,7 @@
+//! File system view represent an abstraction over the file system. Each view corresponds to a
+//! single location a user can access. This can be a disk partition or a specific directory.
+//! The user has a set of permissions which specify which operations are permitted.
+
 use std::collections::HashSet;
 use std::fs::ReadDir;
 use std::io::ErrorKind;
@@ -12,6 +16,9 @@ use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
 use crate::io::open_options_flags::OpenOptionsWrapper;
 
+/// For documentation about file system view, see [`module`] documentation.
+///
+/// [`module`]: crate::io::file_system_view
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct FileSystemView {
   pub(crate) root: PathBuf,         // native path to starting directory
@@ -22,6 +29,27 @@ pub(crate) struct FileSystemView {
 }
 
 impl FileSystemView {
+  /// Creates a new instance of a [`FileSystemView`].
+  ///
+  /// This function takes in a `root` path, a `label`, and a set of `permissions`, and returns a
+  /// new `FileSystemView` instance.
+  ///
+  /// # Arguments
+  /// - `root`: A [`PathBuf`] representing the root path of the file system view.
+  /// - `label`: A type that can be converted into a [`String`], representing the label of the file
+  /// system view.
+  /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
+  /// in the view.
+  ///
+  /// # Panics
+  ///
+  /// This function will panic if the root path cannot be canonicalized, i.e., if it does not
+  /// exist.
+  ///
+  /// # Returns
+  ///
+  /// New [`FileSystemView`] instance.
+  ///
   pub(crate) fn new(
     root: PathBuf,
     label: impl Into<String>,
@@ -38,6 +66,58 @@ impl FileSystemView {
     }
   }
 
+  /// Creates a new instance of a `FileSystemView`.
+  ///
+  /// This function takes in a `root` path, a `label`, and a set of `permissions`, and returns a
+  /// [`Ok<FileSystemView>`]. If the root path cannot be canonicalized, then this will
+  /// return [`Err(())`].
+  ///
+  /// # Arguments
+  ///
+  /// - `root`: A [`PathBuf`] representing the root path of the file system view.
+  /// - `label`: A type that can be converted into a [`String`], representing the label of the
+  /// file system view.
+  /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
+  /// in the view.
+  ///
+  /// # Returns
+  ///
+  /// An [`Result`] containing the new [`FileSystemView`] if successful, or [`Err`] if an error
+  /// occurrs.
+  ///
+  pub(crate) fn new_option(
+    root: PathBuf,
+    label: impl Into<String>,
+    permissions: HashSet<UserPermission>,
+  ) -> Result<Self, ()> {
+    let label = label.into();
+    return match root.canonicalize() {
+      Ok(r) => Ok(FileSystemView {
+        current_path: r.clone(),
+        root: r,
+        display_path: format!("/{}", label),
+        label,
+        permissions,
+      }),
+      Err(_) => Err(()),
+    };
+  }
+
+  /// Changes the current path to the specified one.
+  ///
+  /// This function changes the current path to `dir` and returns **true** if the new path is
+  /// valid, **false** otherwise. New path can be absolute or relative and also the current path
+  /// (.), parent (..) and root (/).
+  ///
+  /// # Arguments
+  ///
+  /// `dir`: A type that can be converted into a [`String`], that will be used to construct the new
+  /// path.
+  ///
+  /// # Returns
+  ///
+  /// **true** if the new path is valid, **false** otherwise.
+  ///
   pub(crate) fn change_working_directory(&mut self, dir: impl Into<String>) -> bool {
     let dir = dir.into().replace("\\", "/");
     if dir.is_empty() || dir == "." {
@@ -48,7 +128,8 @@ impl FileSystemView {
       }
       self.current_path.pop();
       if self.display_path != "/" {
-        // display_path.rfind("/") does not work when display_path contains values spanning multiple bytes
+        // display_path.rfind("/") does not work when display_path contains values spanning
+        // multiple unicode scalar points
         let new_display_path: String = self
           .display_path
           .graphemes(true)
@@ -89,10 +170,39 @@ impl FileSystemView {
     true
   }
 
+  /// Changes current path to parent.
+  ///
+  /// See [`FileSystemView::change_working_directory`].
   pub(crate) fn change_working_directory_up(&mut self) -> bool {
     self.change_working_directory("..")
   }
 
+  /// Opens a file with the specified path and options.
+  ///
+  /// This function asynchronously opens a file using the provided `path` and `options`, and
+  /// returns a `Result` containing the opened [`File`] or an [`IoError`] if an error occurs.
+  ///
+  /// # Arguments
+  ///
+  /// - `path`: A type that can be converted into a [`String`], representing the path of the file
+  /// to be opened.
+  /// - `options`: An [`OpenOptionsWrapper`] containing the options for opening the file.
+  ///
+  /// # Returns
+  ///
+  /// A [`Result`] containing the opened [`File`] if successful, or an [`IoError`] if an error
+  /// occurs.
+  ///
+  /// # Errors
+  ///
+  /// This function can return the following [`IoError`] variants:
+  ///
+  /// - [`IoError::PermissionError`]: If the requested operation is not permitted based on the users
+  /// permissions.
+  /// - [`IoError::NotFoundError`]: If the file specified by the `path` does not exist.
+  /// - [`IoError::OsError`]: If an operating system error occurs during the file opening process.
+  /// - [`IoError::NotAFileError`]: If the specified `path` refers to a directory instead of a file.
+  ///
   #[tracing::instrument(skip_all)]
   pub(crate) async fn open_file(
     &self,
@@ -133,6 +243,21 @@ impl FileSystemView {
     };
   }
 
+  /// Creates a directory listing.
+  ///
+  /// This function lists all files and directories at `path` as [`EntryData`]. If the listing
+  /// succeeds, then it is returned, otherwise [`IoError`] is returned.
+  ///
+  /// # Arguments
+  ///
+  /// - `path` A type that can be converted into a [`String`], representing the path to directory
+  /// to list.
+  ///
+  /// # Returns
+  ///
+  /// A [`Result`] containing the listing as [`Vec<EntryData>`] if successful or an [`IoError`] if
+  /// an error occurs.
+  ///
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
     let path = path.into();
     if !self.permissions.contains(&UserPermission::LIST) {
@@ -269,6 +394,23 @@ impl FileSystemView {
     }
   }
 
+  /// Convert the listing of objects in directory to common format.
+  ///
+  /// This function converts a raw [`ReadDir`] into a [`Vec`] of [`EntryData`] and then returns it.
+  ///
+  /// # Arguments
+  /// - `name`: A type that can be converted into a [`String`], representing the name of the
+  /// listed directory.
+  /// - `path`: A type that can be converted into a [`String`], representing the path to the
+  /// listed directory.
+  /// - `read_dir`: A [`ReadDir`] containing all the listed objects.
+  /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
+  /// for the objects.
+  ///
+  /// # Returns
+  ///
+  /// A [`Vec<EntryData>`] containing the converted listing.
+  ///
   fn create_listing(
     name: impl Into<String>,
     path: impl AsRef<Path>,

@@ -1,3 +1,5 @@
+//! Contains actual implementations of commands.
+
 pub(crate) mod cdup;
 pub(crate) mod cwd;
 pub(crate) mod feat;

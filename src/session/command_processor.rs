@@ -1,3 +1,5 @@
+//! Processes commands from client.
+
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
@@ -32,6 +34,9 @@ pub(crate) struct CommandProcessor {
 }
 
 impl CommandProcessor {
+  /// Constructs new processor.
+  /// 
+  /// Holds session properties and data wrapper which can be used in commands.
   pub(crate) fn new(
     session_properties: Arc<RwLock<SessionProperties>>,
     data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
@@ -42,7 +47,13 @@ impl CommandProcessor {
     }
   }
 
-  #[tracing::instrument(skip(self, reply_sender))]
+  /// Parses users message into command and then executes it.
+  /// 
+  /// The commands is first parsed. If parsing fails a reply is sent and this returns. If parsing 
+  /// succeeds and the command is implemented, then it is executed. If it's not implemented then 
+  /// a reply is sent stating such.
+  /// 
+  #[tracing::instrument(skip_all)]
   pub(crate) async fn evaluate(&mut self, message: String, reply_sender: &mut impl ReplySend) {
     debug!("Evaluating command");
     let command = match Command::parse(&message.trim()) {

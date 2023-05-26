@@ -1,3 +1,5 @@
+//! An entity containing user information.
+
 use crate::io::file_system_view::FileSystemView;
 
 #[derive(Clone, Debug)]
@@ -9,6 +11,17 @@ pub(crate) struct UserData {
 }
 
 impl UserData {
+  /// Constructs a new [`UserData`] instance.
+  ///
+  /// # Arguments
+  /// - `username`: A type that can be converted into a [`String`], representing the users name.
+  /// - `password`: A type that can be converted into a [`String`], representing the users
+  /// password.
+  ///
+  /// # Returns
+  ///
+  /// A new [`UserData`] entity.
+  ///
   pub(crate) fn new(username: impl Into<String>, password: impl Into<String>) -> Self {
     UserData {
       username: username.into(),

@@ -1,3 +1,5 @@
+//! Available permissions a user can have.
+
 use strum_macros::{EnumIter, EnumMessage, EnumString};
 
 use crate::io::entry_data::EntryType;

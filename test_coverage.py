@@ -8,11 +8,11 @@ env["RUSTFLAGS"] = "-Cinstrument-coverage"
 env["LLVM_PROFILE_FILE"] = "tests-%p-%m.profraw"
 
 # clean the project
-retcode = subprocess.call(["cargo", "clean"], env=env)
-
-if retcode != 0:
-    print("Failed to clean the project! Exiting!")
-    exit(1)
+# retcode = subprocess.call(["cargo", "clean"], env=env)
+#
+# if retcode != 0:
+#     print("Failed to clean the project! Exiting!")
+#     exit(1)
 
 try:
     # remove coverage folder
@@ -41,7 +41,8 @@ if retcode != 0:
 os.system(
     r'grcov . --binary-path ./target/debug/ -s . -t html --excl-line "(#\[derive\()|(^ *\.await;?)|'
     r'(#\[tracing::instrument\()|( *trace!\([^;]*\);)|( *debug!\([^;]*\);)|( *info!\([^;]*\);)|( *warn!\([^;]*\);)|'
-    r'( *error!\([^;]*\);)" --excl-start "mod tests" --ignore-not-existing --ignore *main.rs -o ./coverage/')
+    r'( *error!\([^;]*\);)" --excl-start "mod tests" --ignore-not-existing --ignore *main.rs --ignore *runner.rs'
+    r' -o ./coverage/')
 
 # cleanup residual files
 for file in os.listdir():

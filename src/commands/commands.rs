@@ -1,3 +1,5 @@
+//! All the recognized commands. **NOTE**: Not all commands listed here are implemented.
+
 use strum_macros::{EnumIter, EnumString};
 
 #[derive(Clone, Copy, Debug, PartialEq, EnumString, EnumIter)]

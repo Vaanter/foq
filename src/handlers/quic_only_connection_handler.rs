@@ -20,6 +20,8 @@ use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::session::session_properties::SessionProperties;
 
+/// Represents the networking part of clients session for QUIC.
+///
 #[allow(unused)]
 pub(crate) struct QuicOnlyConnectionHandler {
   connection: Arc<Mutex<Connection>>,
@@ -31,6 +33,11 @@ pub(crate) struct QuicOnlyConnectionHandler {
 }
 
 impl QuicOnlyConnectionHandler {
+  /// Constructs a new handler for QUIC connections.
+  ///
+  /// Initializes a new data channel wrapper from the connection. Also creates a new session for
+  /// the client. [`SessionProperties`] and [`CommandProcessor`] are setup with default settings.
+  ///
   pub(crate) fn new(connection: Connection) -> Self {
     let addr = connection.local_addr().unwrap();
     let connection = Arc::new(Mutex::new(connection));
@@ -55,6 +62,15 @@ impl QuicOnlyConnectionHandler {
     }
   }
 
+  /// Waits until the client sends a command or the connection closes.
+  ///
+  /// Reads data from the client until newline. If the connection closes, this returns an [`error`].
+  /// Otherwise it will return [`Ok(())`].
+  ///
+  /// After reading clients message, it sent for evaluation to [`CommandProcessor`].
+  ///
+  /// [`error`]: anyhow::Error
+  ///
   #[tracing::instrument(skip(self))]
   pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
     let cc = self
@@ -91,6 +107,14 @@ impl QuicOnlyConnectionHandler {
     Ok(())
   }
 
+  /// Initiates a bidirectional stream, that will function as the control channel.
+  ///
+  /// Opens a new bidirectional stream. This stream will be split into reader and writer halves.
+  /// The writer will be used to construct [`ReplySender`], the reader will be used to read
+  /// messages from client.
+  ///
+  /// This will return an [`anyhow::Error`] if creating the stream fails.
+  ///
   async fn create_control_channel(&mut self) -> Result<(), anyhow::Error> {
     let conn = self.connection.clone();
 

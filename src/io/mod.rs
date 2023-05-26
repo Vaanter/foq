@@ -1,3 +1,4 @@
+//! Contains implementation of functions that access the filesystem.
 pub(crate) mod entry_data;
 pub(crate) mod error;
 pub(crate) mod file_system_view;

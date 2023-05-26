@@ -14,7 +14,7 @@ pub(crate) struct Pass;
 
 #[async_trait]
 impl Executable for Pass {
-  #[tracing::instrument(skip(command_processor, reply_sender))]
+  #[tracing::instrument(skip_all)]
   async fn execute(
     command_processor: &mut CommandProcessor,
     command: &Command,

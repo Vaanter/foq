@@ -1,9 +1,12 @@
+//! An authentication data source backed by an SQLite database.
+
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use async_trait::async_trait;
 use sqlx::SqlitePool;
+use tracing::warn;
 
 use crate::auth::auth_error::AuthError;
 use crate::auth::data_source::DataSource;
@@ -18,6 +21,7 @@ pub(crate) struct SqliteDataSource {
 }
 
 impl SqliteDataSource {
+  /// Constructs a new [`SqliteDataSource`] instance.
   pub(crate) fn new(pool: SqlitePool) -> Self {
     SqliteDataSource { pool }
   }
@@ -25,6 +29,30 @@ impl SqliteDataSource {
 
 #[async_trait]
 impl DataSource for SqliteDataSource {
+  /// Attempts to authenticate a user.
+  ///
+  /// Queries the database for an entry with matching username. Afterwards the passwords are
+  /// compared. If passwords match, then users [`FileSystemView`]s are loaded and the [`UserData`]
+  /// entity is constructed and returned.
+  ///
+  /// # Arguments
+  ///
+  /// - `login_form`: A [`LoginForm`] that contains the username and password.
+  ///
+  /// # Returns
+  ///
+  /// A [`Result`] containing the [`UserData`] entity if successful, or an [`AuthError`] if an
+  /// error occurs.
+  ///
+  /// # Errors
+  ///
+  /// This function can return the following [`AuthError`] variants:
+  ///
+  /// - [`AuthError::BackendError`]: If a database errors occurs.
+  /// - [`AuthError::UserNotFoundError`]: If the username is not in database.
+  /// - [`AuthError::InvalidCredentials`]: If the password is incorrect.
+  /// - [`AuthError::PermissionParsingError`]: If permissions have incorrect format.
+  ///
   async fn authenticate(&self, login_form: &LoginForm) -> Result<UserData, AuthError> {
     if login_form.username.is_none() || login_form.password.is_none() {
       return Err(AuthError::BackendError);
@@ -74,8 +102,10 @@ impl DataSource for SqliteDataSource {
           .filter(|&p| !p.is_empty())
           .map(|p| UserPermission::from_str(p).map_err(|_| AuthError::PermissionParsingError)),
       )?;
-      let view = FileSystemView::new(PathBuf::from(&view.root), &view.label, permissions);
-      user_data.add_view(view);
+      match FileSystemView::new_option(PathBuf::from(&view.root), &view.label, permissions) {
+        Ok(v) => user_data.add_view(v),
+        Err(_) => warn!("Failed to load view, the path may not exist! View: {:?}", view)
+      }
     }
 
     Ok(user_data)

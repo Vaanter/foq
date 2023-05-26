@@ -1,3 +1,5 @@
+//! Various errors that can result during user authentication.
+
 use strum_macros::Display;
 use thiserror::Error;
 

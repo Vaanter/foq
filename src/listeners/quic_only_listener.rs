@@ -17,6 +17,20 @@ pub(crate) struct QuicOnlyListener {
 }
 
 impl QuicOnlyListener {
+  /// Construct a new QUIC listener listening on specified [`SocketAddr`].
+  ///
+  /// # TLS config
+  /// TLS is backed by [`rustls`]. Configuration uses default settings, and the ALPN is set to
+  /// 'ftpoq-1'. If the 'SSLKEYLOGFILE' environment variable is set, then the session secrets are
+  /// exported.
+  ///
+  /// # Failure points
+  /// Constructing the listener will fail under these circumstances:
+  /// - IPv6 address is specified
+  /// - The certificate and key are not set or invalid
+  /// - Binding to the IP address fails (e.g.: the port is in use)
+  ///
+  ///
   pub(crate) fn new(addr: SocketAddr) -> Result<Self, Error> {
     if addr.is_ipv6() {
       return Err(Error::new(ErrorKind::Unsupported, "IPv6 is not supported!"));
@@ -51,6 +65,11 @@ impl QuicOnlyListener {
     Ok(QuicOnlyListener { server })
   }
 
+  /// Accepts a connection from the client.
+  ///
+  /// This function awaits a connections from client. If the [`CancellationToken`] is triggered,
+  /// this will return [`Option::None`], otherwise it will contain the created connection.
+  ///
   #[tracing::instrument(skip_all)]
   pub(crate) async fn accept(&mut self, token: CancellationToken) -> Option<Connection> {
     let value = tokio::select! {

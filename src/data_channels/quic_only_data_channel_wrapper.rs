@@ -19,6 +19,23 @@ pub(crate) struct QuicOnlyDataChannelWrapper {
 }
 
 impl QuicOnlyDataChannelWrapper {
+  /// Creates a new instance of a [`QuicOnlyDataChannelWrapper`].
+  ///
+  /// This function takes in a [`SocketAddr`] and an [`Arc<Mutex<Connection>>`], and returns a new
+  /// [`QuicOnlyDataChannelWrapper`] instance.
+  /// The [`QuicOnlyDataChannelWrapper`] represents a wrapper for a QUIC-only data channel which
+  /// uses streams for sending data.
+  ///
+  /// # Arguments
+  ///
+  /// - `addr`: A [`SocketAddr`] representing the address for the data channel.
+  /// The port is set to 0.
+  /// - `connection`: An [`Arc<Mutex<Connection>>`] containing the clients connection.
+  ///
+  /// # Returns
+  ///
+  /// A new instance of [`QuicOnlyDataChannelWrapper`].
+  ///
   pub(crate) fn new(mut addr: SocketAddr, connection: Arc<Mutex<Connection>>) -> Self {
     addr.set_port(0);
     QuicOnlyDataChannelWrapper {
@@ -28,6 +45,13 @@ impl QuicOnlyDataChannelWrapper {
     }
   }
 
+  /// Creates a new stream for the data channel.
+  ///
+  /// Creates a new [`tokio::task`] that creates a new stream and waits 20 seconds for the stream
+  /// to be accepted. If the client accepts the stream, then the `data_channel` property is set
+  /// and the data channel can be used. If the connection is closed, the client does not accept
+  /// the stream in time or some other error occurs it will logged.
+  ///
   #[tracing::instrument(skip(self))]
   async fn create_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
     debug!("Creating passive listener");
@@ -57,6 +81,7 @@ impl QuicOnlyDataChannelWrapper {
 
 #[async_trait]
 impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
+  /// Opens a data channel using [`QuicOnlyDataChannelWrapper::create_stream`].
   async fn open_data_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
     self.create_stream().await
   }

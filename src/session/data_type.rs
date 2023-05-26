@@ -1,3 +1,8 @@
+//! Possible representations of data.
+//!
+//! Only the binary type is implemented although the ASCII type is required by
+//! [RFC959](https://datatracker.ietf.org/doc/html/rfc959).
+
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum DataType {
   ASCII { sub_type: SubType },

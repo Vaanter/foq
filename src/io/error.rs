@@ -1,3 +1,5 @@
+//! Various errors that can result from I/O operations.
+
 use std::io;
 
 use thiserror::Error;

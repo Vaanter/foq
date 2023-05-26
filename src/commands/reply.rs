@@ -1,9 +1,12 @@
+//! Container for a reply that is to be sent to client. Can span multiple lines.
+
 use std::collections::VecDeque;
 use std::str::FromStr;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::commands::reply_code::ReplyCode;
 
+/// Struct containing the reply code and a message for the client.
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct Reply {
   pub(crate) code: ReplyCode,

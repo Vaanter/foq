@@ -10,6 +10,13 @@ pub(crate) struct StandardListener {
 }
 
 impl StandardListener {
+  /// Construct a new TCP listener, listening on specified [`SocketAddr`].
+  ///
+  /// # Failure points
+  /// Constructing the listener will fail under these circumstances:
+  /// - IPv6 address is specified
+  /// - Binding to the IP address fails (e.g.: the port is in use)
+  ///
   pub(crate) async fn new(addr: SocketAddr) -> Result<Self, Error> {
     if addr.is_ipv6() {
       return Err(Error::new(ErrorKind::Unsupported, "IPv6 is not supported!"));
@@ -19,6 +26,11 @@ impl StandardListener {
     })
   }
 
+  /// Accepts a connection from the client.
+  ///
+  /// This function awaits a connections from client. If the [`CancellationToken`] is triggered,
+  /// this will return [`Option::None`], otherwise it will contain the created connection.
+  ///
   #[tracing::instrument(skip_all)]
   pub(crate) async fn accept(
     &mut self,

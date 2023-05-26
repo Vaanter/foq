@@ -1,3 +1,5 @@
+//! All reply codes as specified by [RFC959](https://datatracker.ietf.org/doc/html/rfc959).
+
 use strum_macros::FromRepr;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone, FromRepr)]
