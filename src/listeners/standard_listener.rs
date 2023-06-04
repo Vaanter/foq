@@ -1,7 +1,7 @@
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -21,8 +21,11 @@ impl StandardListener {
     if addr.is_ipv6() {
       return Err(Error::new(ErrorKind::Unsupported, "IPv6 is not supported!"));
     }
+    let socket = TcpSocket::new_v4()?;
+    socket.bind(addr)?;
+
     Ok(StandardListener {
-      listener: TcpListener::bind(addr).await?,
+      listener: socket.listen(16392)?,
     })
   }
 

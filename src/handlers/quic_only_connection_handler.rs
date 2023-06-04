@@ -89,7 +89,7 @@ impl QuicOnlyConnectionHandler {
       }
       Err(e) => {
         if e.kind() != ErrorKind::UnexpectedEof {
-          error!("[TCP] Reading client message failed! Error: {e}");
+          error!("[QUIC] Reading client message failed! Error: {e}");
         }
         0
       }
@@ -140,7 +140,7 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
     self.create_control_channel().await?;
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
-    debug!("[TCP] Sending hello to client.");
+    debug!("[QUIC] Sending hello to client.");
     let _ = &mut self
       .reply_sender
       .as_mut()

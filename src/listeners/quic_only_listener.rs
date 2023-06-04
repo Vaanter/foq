@@ -1,12 +1,14 @@
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 use std::sync::Arc;
+// use std::time::Duration;
 
 use rustls::ServerConfig;
 use s2n_quic::{
   provider::io::tokio::Builder as IoBuilder, provider::tls::default::Server as TlsServer,
   Connection, Server,
 };
+// use s2n_quic::provider::limits::{Limits, Provider};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -37,6 +39,7 @@ impl QuicOnlyListener {
     }
 
     let io = IoBuilder::default().with_receive_address(addr)?.build()?;
+    //let limits = Limits::new().with_max_idle_timeout(Duration::from_secs(30)).unwrap().start().unwrap();
 
     let certs = CERTS.clone();
     let key = KEY.clone();
@@ -58,6 +61,8 @@ impl QuicOnlyListener {
       .with_tls(tls_server)
       .unwrap()
       .with_io(io)
+      // .unwrap()
+      // .with_limits(limits)
       .unwrap()
       .start()
       .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;

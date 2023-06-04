@@ -97,9 +97,9 @@ impl DataSource for TestDataSource {
   }
 }
 
-pub static CERT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server-cert.pem");
+pub static CERT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/cert.pem");
 
-pub static KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server-key.pem");
+pub static KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/key.pem");
 
 pub(crate) fn create_test_auth_provider(users: Vec<UserData>) -> AuthProvider {
   let mut provider = AuthProvider::new();

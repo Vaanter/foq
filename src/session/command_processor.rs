@@ -59,7 +59,7 @@ impl CommandProcessor {
     let command = match Command::parse(&message.trim()) {
       Ok(c) => c,
       Err(e) => {
-        info!("Failed to parse command! Error: {e}");
+        info!("Failed to parse command! Message: {message}. Error: {e}");
         if !message.trim().is_empty() {
           reply_sender
             .send_control_message(Reply::new(
