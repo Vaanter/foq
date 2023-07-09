@@ -28,6 +28,8 @@ pub(crate) enum EntryType {
 }
 
 const MLSD_DATETIME_FORMAT: &'static str = "%Y%m%d%H%M%S";
+const LIST_DATETIME_FORMAT_TIME: &'static str = "%b %d %H:%M";
+const LIST_DATETIME_FORMAT_YEAR: &'static str = "%b %d %Y";
 
 /// Holds the various facts about a filesystem object.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -109,6 +111,54 @@ impl EntryData {
   }
   pub fn name(&self) -> &str {
     &self.name
+  }
+
+  pub(crate) fn to_list_string(&self) -> String {
+    let mut buffer = String::with_capacity(64);
+    let type_str = match self.entry_type {
+      EntryType::FILE => "-",
+      EntryType::DIR | EntryType::CDIR | EntryType::PDIR => "d",
+      EntryType::LINK => "l",
+    };
+    buffer.push_str(type_str);
+    let mut perm_str = ["-", "-", "-"];
+    if self.perm.contains(&UserPermission::READ) {
+      perm_str[0] = "r";
+    }
+    if self.perm.contains(&UserPermission::WRITE) {
+      perm_str[1] = "w";
+    }
+    if self.perm.contains(&UserPermission::EXECUTE) {
+      perm_str[2] = "x";
+    }
+    buffer.push_str(&perm_str.repeat(3).join(""));
+    buffer.push(' ');
+
+    buffer.push('1');
+    buffer.push(' ');
+
+    let owners = ["user", "group"];
+    buffer.push_str(&owners.join(" "));
+    buffer.push(' ');
+
+    buffer.push_str(&format!("{:>13}", self.size));
+    buffer.push(' ');
+
+    let modify_dt: DateTime<Local> = self.modify.into();
+    let modify_formatted: DelayedFormat<StrftimeItems> =
+      if Local::now().signed_duration_since(modify_dt).num_days() > 180 {
+        modify_dt.format(LIST_DATETIME_FORMAT_YEAR)
+      } else {
+        modify_dt.format(LIST_DATETIME_FORMAT_TIME)
+      };
+
+    buffer.push_str(&modify_formatted.to_string());
+    buffer.push(' ');
+
+    buffer.push_str(&self.name);
+    buffer.push('\r');
+    buffer.push('\n');
+    buffer
   }
 }
 

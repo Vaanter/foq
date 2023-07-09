@@ -9,6 +9,7 @@ use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::io::error::IoError;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::io::entry_data::EntryData;
 
 pub(crate) async fn get_data_channel_lock(
   data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
@@ -69,4 +70,17 @@ pub(crate) fn get_open_file_result(file: Result<File, IoError>) -> Result<File, 
     )),
     Err(_) => unreachable!(),
   }
+}
+
+pub(crate) fn get_listing_or_error_reply(listing: Result<Vec<EntryData>, IoError>) -> Result<Vec<EntryData>, Reply> {
+  return listing.map_err(|e| {
+    match e {
+        IoError::UserError => Reply::new(ReplyCode::NotLoggedIn, IoError::UserError.to_string()),
+        IoError::OsError(_) | IoError::SystemError => Reply::new(ReplyCode::RequestedActionAborted,"Requested action aborted: local error in processing."),
+        IoError::NotADirectoryError => Reply::new(ReplyCode::SyntaxErrorInParametersOrArguments,IoError::NotADirectoryError.to_string()),
+        IoError::PermissionError => Reply::new(ReplyCode::FileUnavailable,IoError::PermissionError.to_string()),
+        IoError::NotFoundError(message) | IoError::InvalidPathError(message) => Reply::new(ReplyCode::FileUnavailable, message),
+        _ => unreachable!(),
+    }
+  });
 }

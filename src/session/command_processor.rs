@@ -11,6 +11,7 @@ use crate::commands::executable::Executable;
 use crate::commands::r#impl::cdup::Cdup;
 use crate::commands::r#impl::cwd::Cwd;
 use crate::commands::r#impl::feat::Feat;
+use crate::commands::r#impl::list::List;
 use crate::commands::r#impl::mlsd::Mlsd;
 use crate::commands::r#impl::noop::Noop;
 use crate::commands::r#impl::pass::Pass;
@@ -76,6 +77,7 @@ impl CommandProcessor {
       Commands::CDUP => Cdup::execute(self, &command, reply_sender).await,
       Commands::CWD => Cwd::execute(self, &command, reply_sender).await,
       Commands::FEAT => Feat::execute(self, &command, reply_sender).await,
+      Commands::LIST => List::execute(self, &command, reply_sender).await,
       Commands::MLSD => Mlsd::execute(self, &command, reply_sender).await,
       Commands::NOOP => Noop::execute(self, &command, reply_sender).await,
       Commands::PASS => Pass::execute(self, &command, reply_sender).await,
@@ -87,6 +89,7 @@ impl CommandProcessor {
       Commands::TYPE => Type::execute(self, &command, reply_sender).await,
       Commands::USER => User::execute(self, &command, reply_sender).await,
       _ => {
+        info!("Couldn't execute command, not implemented! Command: {command:?}");
         reply_sender
           .send_control_message(Reply::new(
             ReplyCode::CommandNotImplemented,
