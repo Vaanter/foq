@@ -5,9 +5,9 @@ use tracing::{debug, info, trace};
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
+use crate::commands::r#impl::shared::get_listing_or_error_reply;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
-use crate::io::error::IoError;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 
@@ -29,58 +29,9 @@ impl Executable for Mlsd {
       .file_system_view_root
       .list_dir(&command.argument);
 
-    let listing = match listing {
+    let listing = match get_listing_or_error_reply(listing) {
       Ok(l) => l,
-      Err(IoError::UserError) => {
-        Self::reply(
-          Reply::new(ReplyCode::NotLoggedIn, IoError::UserError.to_string()),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-      Err(IoError::OsError(_)) | Err(IoError::SystemError) => {
-        Self::reply(
-          Reply::new(
-            ReplyCode::RequestedActionAborted,
-            "Requested action aborted: local error in processing.",
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-      Err(IoError::NotADirectoryError) => {
-        Self::reply(
-          Reply::new(
-            ReplyCode::SyntaxErrorInParametersOrArguments,
-            IoError::NotADirectoryError.to_string(),
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-      Err(IoError::PermissionError) => {
-        Self::reply(
-          Reply::new(
-            ReplyCode::FileUnavailable,
-            IoError::PermissionError.to_string(),
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-      Err(IoError::NotFoundError(message)) | Err(IoError::InvalidPathError(message)) => {
-        Self::reply(
-          Reply::new(ReplyCode::FileUnavailable, message),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-      Err(_) => unreachable!(),
+      Err(r) => return Self::reply(r, reply_sender).await
     };
 
     debug!("Locking data stream!");
@@ -94,7 +45,7 @@ impl Executable for Mlsd {
     match stream.lock().await.as_mut() {
       Some(s) => {
         let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
-        trace!("Sending listing to client:\n{}", mem);
+        trace!("Sending listing to client:\n{}", mem.replace("\r\n", "\\r\\n"));
         let len = s.write_all(mem.as_ref()).await;
         debug!("Sending listing result: {:?}", len);
       }
