@@ -133,7 +133,7 @@ pub(crate) mod tests {
     let data_source = SqliteDataSource::new(pool);
 
     let mut form = LoginForm::default();
-    let _ = form.username.insert("user1".to_string());
+    let _ = form.username.insert("testuser1".to_string());
     let _ = form.password.insert("user1".to_string());
 
     let result = data_source
@@ -169,7 +169,7 @@ pub(crate) mod tests {
     let data_source = SqliteDataSource::new(pool);
 
     let mut form = LoginForm::default();
-    let _ = form.username.insert("user1".to_string());
+    let _ = form.username.insert("testuser1".to_string());
     let _ = form.password.insert("NONEXISTENT".to_string());
 
     let result = data_source.authenticate(&form).await;
@@ -186,12 +186,12 @@ pub(crate) mod tests {
     let data_source = SqliteDataSource::new(pool);
 
     let mut form = LoginForm::default();
-    let _ = form.username.insert("user3".to_string());
+    let _ = form.username.insert("testuser3".to_string());
     let _ = form.password.insert("user3".to_string());
 
     let result = data_source.authenticate(&form).await;
     let Err(AuthError::PermissionParsingError) = result else {
-      panic!("Expected UserNotFound error!");
+      panic!("Expected PermissionParsing error! Got: {result:?}");
     };
 
     Ok(())

@@ -54,24 +54,26 @@ mod tests {
   use crate::auth::sqlite_data_source::SqliteDataSource;
 
   #[sqlx::test]
-  async fn authenticate_test(pool: SqlitePool) {
-    setup_test_db(&pool).await.unwrap();
+  async fn authenticate_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_test_db(&pool).await?;
     let mut provider = AuthProvider::new();
     provider.add_data_source(Box::new(SqliteDataSource::new(pool)));
     let mut form = LoginForm::default();
-    let _ = form.username.insert("user1".to_string());
+    let _ = form.username.insert("testuser1".to_string());
     let _ = form.password.insert("user1".to_string());
     assert!(provider.authenticate(form).await.is_some());
+    Ok(())
   }
 
   #[sqlx::test]
-  async fn authenticate_invalid_test(pool: SqlitePool) {
-    setup_test_db(&pool).await.unwrap();
+  async fn authenticate_invalid_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_test_db(&pool).await?;
     let mut provider = AuthProvider::new();
     provider.add_data_source(Box::new(SqliteDataSource::new(pool)));
     let mut form = LoginForm::default();
-    let _ = form.username.insert("user1".to_string());
+    let _ = form.username.insert("testuser1".to_string());
     let _ = form.password.insert("INVALID".to_string());
     assert!(provider.authenticate(form).await.is_none());
+    Ok(())
   }
 }
