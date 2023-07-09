@@ -4,6 +4,7 @@
 //! [`File system view`]: crate::io::file_system_view
 
 use std::collections::BTreeMap;
+use std::time::SystemTime;
 
 use tokio::fs::File;
 use tracing::debug;
@@ -316,7 +317,7 @@ impl FileSystemViewRoot {
       0,
       EntryType::CDIR,
       ROOT_PERMISSIONS.to_vec(),
-      String::new(),
+      SystemTime::now(),
       "/",
     ));
     entries.extend(self.file_system_views.as_ref().unwrap().iter().map(|v| {
@@ -324,7 +325,7 @@ impl FileSystemViewRoot {
         0,
         EntryType::DIR,
         v.1.permissions.iter().cloned().collect(),
-        String::new(),
+        SystemTime::now(),
         v.1.label.clone(),
       )
     }));

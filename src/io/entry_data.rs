@@ -27,13 +27,15 @@ pub(crate) enum EntryType {
   LINK,
 }
 
+const MLSD_DATETIME_FORMAT: &'static str = "%Y%m%d%H%M%S";
+
 /// Holds the various facts about a filesystem object.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub(crate) struct EntryData {
   size: u64,
   entry_type: EntryType,
   perm: Vec<UserPermission>,
-  modify: String,
+  modify: SystemTime,
   name: String,
 }
 
@@ -47,14 +49,9 @@ impl EntryData {
     size: u64,
     entry_type: EntryType,
     perm: Vec<UserPermission>,
-    modify: impl Into<String>,
+    modify: SystemTime,
     name: impl Into<String>,
   ) -> Self {
-    let mut modify = modify.into();
-    if modify.is_empty() {
-      let new_modify: DateTime<Local> = SystemTime::now().into();
-      modify = new_modify.format("%Y%m%d%H%M%S").to_string();
-    }
     EntryData {
       size,
       entry_type,
@@ -78,8 +75,8 @@ impl EntryData {
   ) -> Result<Self, Error> {
     let metadata = metadata?;
     let size = metadata.len();
-    let modify: DateTime<Local> = metadata.modified().unwrap_or(SystemTime::now()).into();
-    let modify_formatted: DelayedFormat<StrftimeItems> = modify.format("%Y%m%d%H%M%S");
+
+    let modify = metadata.modified().unwrap_or(SystemTime::now());
 
     let entry_type = if metadata.is_file() {
       EntryType::FILE
@@ -96,13 +93,7 @@ impl EntryData {
       .filter_map(|p| permissions.get(p).map(|v| v.to_owned()))
       .collect();
 
-    Ok(EntryData::new(
-      size,
-      entry_type,
-      permissions,
-      modify_formatted.to_string(),
-      name,
-    ))
+    Ok(EntryData::new(size, entry_type, permissions, modify, name))
   }
   pub fn size(&self) -> u64 {
     self.size
@@ -113,7 +104,7 @@ impl EntryData {
   pub fn perm(&self) -> &Vec<UserPermission> {
     &self.perm
   }
-  pub fn modify(&self) -> &str {
+  pub fn modify(&self) -> &SystemTime {
     &self.modify
   }
   pub fn name(&self) -> &str {
@@ -124,9 +115,11 @@ impl EntryData {
 impl ToString for EntryData {
   fn to_string(&self) -> String {
     let mut buffer = String::new();
+    let modify_dt: DateTime<Local> = self.modify.into();
+    let modify_formatted: DelayedFormat<StrftimeItems> = modify_dt.format(MLSD_DATETIME_FORMAT);
     buffer.push_str(&format!("size={};", self.size));
     buffer.push_str(&format!("type={};", self.entry_type));
-    buffer.push_str(&format!("modify={};", self.modify));
+    buffer.push_str(&format!("modify={};", modify_formatted));
     buffer.push_str(&format!(
       "perm={};",
       self
