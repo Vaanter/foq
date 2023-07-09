@@ -1,5 +1,6 @@
 //! The command and its argument.
 
+use std::str::FromStr;
 use tracing::trace;
 
 use crate::commands::commands::Commands;
@@ -17,23 +18,13 @@ impl Command {
       argument: argument.into(),
     };
   }
+}
 
-  /// Parses a message into a command.
-  ///
-  /// This function takes a string slice and returns a [`Result`] containing the parsed [`Command`]
-  /// or an [`anyhow::Error`] if parsing fails.
-  ///
-  /// # Arguments
-  ///
-  /// - `message`: A string slice representing the message to be parsed.
-  ///
-  /// # Returns
-  ///
-  /// A [`Result`] containing the parsed [`Command`] if successful, or an [`anyhow::Error`] if
-  /// parsing fails.
-  ///
+impl FromStr for Command {
+  type Err = anyhow::Error;
+
   #[tracing::instrument(skip(message))]
-  pub(crate) fn parse(message: &str) -> Result<Self, anyhow::Error> {
+  fn from_str(message: &str) -> Result<Self, Self::Err> {
     trace!("Parsing message to command.");
     let message_trimmed = message.trim_end_matches(|c| c == '\n' || c == '\r');
     let split = message_trimmed
@@ -49,12 +40,13 @@ impl Command {
 
 #[cfg(test)]
 mod tests {
+  use std::str::FromStr;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
 
   #[test]
   fn mlsd_test() {
-    let parsed = Command::parse("mlsd test");
+    let parsed: Result<Command, anyhow::Error> = Command::from_str("mlsd test");
     assert!(parsed.is_ok());
     assert_eq!(Commands::MLSD, parsed.as_ref().unwrap().command);
     assert_eq!("test", parsed.as_ref().unwrap().argument);
@@ -62,7 +54,7 @@ mod tests {
 
   #[test]
   fn noop_test() {
-    let parsed = Command::parse("noop");
+    let parsed: Result<Command, anyhow::Error> = Command::from_str("noop");
     assert!(parsed.is_ok());
     assert_eq!(Commands::NOOP, parsed.as_ref().unwrap().command);
     assert!(parsed.as_ref().unwrap().argument.is_empty());
@@ -70,7 +62,7 @@ mod tests {
 
   #[test]
   fn user_test() {
-    let parsed = Command::parse("user test");
+    let parsed: Result<Command, anyhow::Error> = Command::from_str("user test");
     assert!(parsed.is_ok());
     assert_eq!(Commands::USER, parsed.as_ref().unwrap().command);
     assert_eq!("test", parsed.as_ref().unwrap().argument);

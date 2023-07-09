@@ -56,7 +56,7 @@ impl CommandProcessor {
   #[tracing::instrument(skip_all)]
   pub(crate) async fn evaluate(&mut self, message: String, reply_sender: &mut impl ReplySend) {
     debug!("Evaluating command");
-    let command = match Command::parse(&message.trim()) {
+    let command: Command = match message.trim().parse() {
       Ok(c) => c,
       Err(e) => {
         info!("Failed to parse command! Message: {message}. Error: {e}");
