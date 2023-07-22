@@ -176,11 +176,11 @@ mod tests {
       .await
       .username
       .insert("test".to_string());
-    session_properties
+    assert!(session_properties
       .write()
       .await
       .file_system_view_root
-      .change_working_directory(label);
+      .change_working_directory(label.clone()).unwrap());
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 

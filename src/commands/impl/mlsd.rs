@@ -128,9 +128,9 @@ mod tests {
     session_properties
       .file_system_view_root
       .set_views(vec![view]);
-    session_properties
+    assert!(session_properties
       .file_system_view_root
-      .change_working_directory(label.clone());
+      .change_working_directory(label.clone()).unwrap());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
@@ -228,9 +228,9 @@ mod tests {
     session_properties
       .file_system_view_root
       .set_views(vec![view]);
-    session_properties
+    assert!(session_properties
       .file_system_view_root
-      .change_working_directory(label.clone());
+      .change_working_directory(label.clone()).unwrap());
     let _ = session_properties.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
@@ -301,9 +301,9 @@ mod tests {
     session_properties
       .file_system_view_root
       .set_views(vec![view]);
-    session_properties
+    assert!(session_properties
       .file_system_view_root
-      .change_working_directory(label.clone());
+      .change_working_directory(label.clone()).unwrap());
     let _ = session_properties.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));

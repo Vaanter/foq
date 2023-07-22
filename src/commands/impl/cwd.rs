@@ -46,7 +46,7 @@ impl Executable for Cwd {
 
     if session_properties
       .file_system_view_root
-      .change_working_directory(new_path)
+      .change_working_directory(new_path).is_ok()
     {
       Self::reply(
         Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed."),

@@ -16,7 +16,7 @@ use crate::io::file_system_view::FileSystemView;
 use crate::io::open_options_flags::OpenOptionsWrapper;
 
 /// Contains the users file system views.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub(crate) struct FileSystemViewRoot {
   pub(crate) file_system_views: Option<BTreeMap<String, FileSystemView>>,
   current_view: Option<String>,
@@ -39,37 +39,50 @@ impl FileSystemViewRoot {
     self.file_system_views = Some(views);
   }
 
-  // TODO better return
   /// Changes the current path to the specified one.
   ///
-  /// This function changes the current path to `dir` and returns **true** if the new path is
-  /// valid, **false** otherwise. New path can be absolute or relative and also the current path
+  /// This function changes the current path to `path` and returns [`Ok`] if the new path is valid,
+  /// [`Err(IoError)`] otherwise. New path can be absolute or relative and also the current path
   /// (.), parent (..) and root (/).
   ///
   /// # Arguments
   ///
-  /// `dir`: A type that can be converted into a `String`, that will be used to construct the new
+  /// `path`: A type that can be converted into a `String`, that will be used to construct the new
   /// path.
-  ///
-  /// # Invalid paths
-  /// A path can be invalid for these reasons:
-  /// - A user is not logged in.
-  /// - The `path` refers to parent path (..) but the path is already at root.
-  /// - The `path` refers to nonexistent [`FileSystemView`].
-  /// - [`FileSystemView::change_working_directory`] returns **false**
   ///
   /// # Returns
   ///
-  /// **true** if the new path is valid, **false** otherwise.
+  /// A [`Result`] containing **bool** if successful, or an [`IoError`] if an error occurs.
+  /// If the [`Result`] is **true** then the path actually changed, i.e.: new and old paths differ.
   ///
-  pub(crate) fn change_working_directory(&mut self, path: impl Into<String>) -> bool {
+  /// # Errors
+  ///
+  /// This function can return the following [`IoError`] variants:
+  ///
+  /// - [`IoError::UserError`]: If the user is not logged in.
+  /// - [`IoError::SystemError`]: If a programmatic error occurs, e.g.: the current view_view
+  /// refers to nonexistent [`FileSystemView`].
+  /// - [`IoError::InvalidPathError`]: If the `path` refers to parent (..) but current path is
+  /// already at root.
+  /// - Other [`IoError`] returned by [`FileSystemView::change_working_directory`].
+  ///
+  pub(crate) fn change_working_directory(
+    &mut self,
+    path: impl Into<String>,
+  ) -> Result<bool, IoError> {
     let path = path.into();
+    if self.file_system_views.is_none() {
+      // User is not logged in
+      return Err(IoError::UserError);
+    }
     if path == "." || path.is_empty() {
-      return self.file_system_views.is_some();
+      return Ok(false);
     } else if path == ".." {
-      // Not logged in / at root
-      if self.file_system_views.is_none() || self.current_view.is_none() {
-        return false;
+      // At root
+      if self.current_view.is_none() {
+        return Err(IoError::InvalidPathError(String::from(
+          "Cannot change to parent from root!",
+        )));
       }
 
       let view = self
@@ -77,60 +90,70 @@ impl FileSystemViewRoot {
         .as_mut()
         .unwrap()
         .get_mut(self.current_view.as_ref().unwrap());
-      if view.is_none() {
-        return false;
-      }
 
-      return if view.unwrap().change_working_directory_up() {
-        true
-      } else {
-        self.current_view = None;
-        true
+      let view = match view {
+        Some(v) => v,
+        None => return Err(IoError::SystemError),
       };
-    } else if path == "~" || path == "/" {
-      let mut changed = false;
-      if let (Some(view), Some(views)) = (&self.current_view, self.file_system_views.as_mut()) {
-        views.get_mut(view).unwrap().change_working_directory("/");
-        changed = true;
-        self.current_view = None;
-      }
-      return changed;
-    } else if path.starts_with("/") {
-      let label = path.split("/").nth(1);
-      if label.is_none() || self.file_system_views.is_none() {
-        return false;
-      }
-      let label = label.unwrap();
 
-      let view = self.file_system_views.as_mut().unwrap().get_mut(label);
-      if view.is_none() {
-        return false;
-      }
+      let changed = view.change_working_directory_up();
+
+      if let Err(IoError::InvalidPathError(_)) = changed {
+        self.current_view = None;
+        return Ok(true);
+      };
+      return changed;
+    } else if path == "~" || path == "/" {
+      return match (&self.current_view, self.file_system_views.as_mut()) {
+        (Some(view), Some(views)) => {
+          let _ = views.get_mut(view).unwrap().change_working_directory("/");
+          self.current_view = None;
+          Ok(true)
+        }
+        (_, _) => Ok(false),
+      };
+    } else if path.starts_with("/") {
+      let label = match path.split("/").nth(1) {
+        Some(l) => l,
+        None => return Err(IoError::SystemError),
+      };
+
+      let view = self
+        .file_system_views
+        .as_mut()
+        .unwrap()
+        .get_mut(label);
+
+      let view = match view {
+        Some(v) => v,
+        None => return Err(IoError::SystemError),
+      };
+
       let mut sub_path = path.split("/").skip(2).collect::<Vec<&str>>().join("/");
       sub_path.insert(0, '/');
-      let changed = view.unwrap().change_working_directory(sub_path);
-      if changed {
+      let changed = view.change_working_directory(sub_path);
+      if changed.is_ok() {
         self.current_view.replace(label.to_string());
+        return Ok(true);
       }
       changed
     } else {
-      if self.file_system_views.is_none() {
-        return false;
-      }
       if self.current_view.is_none() {
-        let label = path.split("/").nth(0);
-        if label.is_none() {
-          return false;
-        }
-        let label = label.unwrap();
-        let view = self.file_system_views.as_mut().unwrap().get_mut(label);
-        if view.is_none() {
-          return false;
-        }
-        let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
-        let changed = view.unwrap().change_working_directory(sub_path);
-        if changed {
+        let mut path_parts = path.split("/");
+        let label = match path_parts.next() {
+          Some(l) => l,
+          None => return Err(IoError::SystemError),
+        };
+        let view = match self.file_system_views.as_mut().unwrap().get_mut(label) {
+          Some(v) => v,
+          None => return Err(IoError::SystemError),
+        };
+
+        let sub_path = path_parts.next().unwrap_or("/");
+        let changed = view.change_working_directory(sub_path);
+        if let Ok(_) | Err(IoError::InvalidPathError(_)) = changed {
           self.current_view.replace(label.to_string());
+          return Ok(true);
         }
         return changed;
       }
@@ -148,7 +171,7 @@ impl FileSystemViewRoot {
   /// Changes current path to parent.
   ///
   /// See [`FileSystemViewRoot::change_working_directory`].
-  pub(crate) fn change_working_directory_up(&mut self) -> bool {
+  pub(crate) fn change_working_directory_up(&mut self) -> Result<bool, IoError> {
     self.change_working_directory("..")
   }
 
@@ -299,11 +322,11 @@ impl FileSystemViewRoot {
   ///
   /// A [`Result`] containing the listing as [`Vec<EntryData>`] if successful or an [`IoError`] if
   /// an error occurs.
-  /// 
+  ///
   /// # Errors
   ///
   /// This function can return the following `IoError` variants:
-  /// 
+  ///
   /// - [`IoError::UserError`]: If the user is not logged in.
   ///
   fn list_root(&self) -> Result<Vec<EntryData>, IoError> {
@@ -334,7 +357,7 @@ impl FileSystemViewRoot {
   }
 
   /// Opens a file with the specified path and options.
-  /// 
+  ///
   /// See: [`FileSystemView::open_file`].
   #[tracing::instrument(skip(self, path, options))]
   pub(crate) async fn open_file(
@@ -368,7 +391,9 @@ impl FileSystemViewRoot {
         let label = path.split("/").nth(0).expect("Path cannot be empty here!");
         let view = self.file_system_views.as_ref().unwrap().get(label);
         if view.is_none() {
-          return Err(IoError::InvalidPathError(String::from("Path doesn't exist!")));
+          return Err(IoError::InvalidPathError(String::from(
+            "Path doesn't exist!",
+          )));
         }
         let sub_path = path.split("/").skip(1).collect::<Vec<&str>>().join("/");
         return view.unwrap().open_file(sub_path, options).await;
@@ -502,7 +527,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("{}/test_files", label.clone())));
+    assert!(root.change_working_directory(format!("{}/test_files", label.clone())).unwrap());
     assert_eq!(
       root.get_current_working_directory(),
       format!("/{}/test_files", label.clone())
@@ -510,7 +535,17 @@ mod tests {
   }
 
   #[test]
-  fn cwd_to_root_test() {
+  fn cwd_not_logged_in_test() {
+    let mut root = FileSystemViewRoot::new(None);
+    let result = root.change_working_directory("/");
+    let Err(IoError::UserError) = result else {
+      panic!("Expected User Error, Got: {:?}", result);
+    };
+    assert!(root.current_view.is_none());
+  }
+
+  #[test]
+  fn cwd_to_root_from_file_system_test() {
     let permissions = HashSet::from([UserPermission::READ]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -518,8 +553,40 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("{}/test_files", label.clone())));
-    assert!(root.change_working_directory("~"));
+    assert!(root.change_working_directory(format!("{}/test_files", label.clone())).unwrap());
+    assert!(root.change_working_directory("~").unwrap());
+    assert!(root.current_view.is_none());
+  }
+
+  #[test]
+  fn cwd_to_root_from_root_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+    let root1 = std::env::current_dir().unwrap();
+    let label = "current_dir";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    let change = root.change_working_directory("~");
+    let Ok(false) = change else {
+      panic!("Expected Ok(false), Got: {:?}", change);
+    };
+    assert!(root.current_view.is_none());
+  }
+
+  #[test]
+  fn cwd_to_current_from_root_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+    let root1 = std::env::current_dir().unwrap();
+    let label = "current_dir";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    let change = root.change_working_directory(".");
+    let Ok(false) = change else {
+      panic!("Expected Ok(false), Got: {:?}", change);
+    };
     assert!(root.current_view.is_none());
   }
 
@@ -532,7 +599,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(label.clone()));
+    assert!(root.change_working_directory(label.clone()).unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
     assert_eq!(
@@ -555,7 +622,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("{label}/test_files")));
+    assert!(root.change_working_directory(format!("{label}/test_files")).unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
     assert_eq!(
@@ -570,6 +637,22 @@ mod tests {
   }
 
   #[test]
+  fn cwd_to_file_system_from_root_invalid_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+    let root1 = std::env::current_dir().unwrap();
+    let label = "current_dir";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    assert!(root.change_working_directory(label.clone()).unwrap());
+    let result = root.change_working_directory("NONEXISTENT");
+    let Err(IoError::NotFoundError(_)) = result else {
+      panic!("Expected NotFound Error, Got: {:?}", result);
+    };
+  }
+
+  #[test]
   fn cwd_to_file_system_from_root_absolute_multi_test() {
     let permissions = HashSet::from([UserPermission::READ]);
     let root1 = std::env::current_dir().unwrap();
@@ -578,7 +661,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("/{label}/test_files")));
+    assert!(root.change_working_directory(format!("/{label}/test_files")).unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
     assert_eq!(
@@ -601,8 +684,8 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("/{label}")));
-    assert!(root.change_working_directory("test_files"));
+    assert!(root.change_working_directory(format!("/{label}")).unwrap());
+    assert!(root.change_working_directory("test_files").unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
     assert_eq!(
@@ -613,6 +696,29 @@ mod tests {
         .unwrap()
         .display_path,
       format!("/{label}/test_files")
+    );
+  }
+
+  #[test]
+  fn cwd_from_current_to_parent_test() {
+    let permissions = HashSet::from([UserPermission::READ]);
+    let root1 = std::env::current_dir().unwrap();
+    let label = "current_dir";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    assert!(root.change_working_directory(format!("/{label}")).unwrap());
+    assert!(root.change_working_directory("..").unwrap());
+    assert!(root.current_view.is_none());
+    assert_eq!(
+      root
+        .file_system_views
+        .unwrap()
+        .get(label)
+        .unwrap()
+        .display_path,
+      format!("/{label}")
     );
   }
 
@@ -733,7 +839,7 @@ mod tests {
     let views = create_root(vec![view1, view2]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root.change_working_directory("test_files");
+    root.change_working_directory("test_files").unwrap();
 
     let listing = root.list_dir(".").unwrap();
 
@@ -755,7 +861,7 @@ mod tests {
     let views = create_root(vec![view1, view2]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root.change_working_directory("test_files");
+    root.change_working_directory("test_files").unwrap();
 
     let listing = root.list_dir("subfolder").unwrap();
 
@@ -798,7 +904,7 @@ mod tests {
     let views = create_root(vec![view1, view2]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root.change_working_directory(format!("/{}", label1.clone()));
+    root.change_working_directory(format!("/{}", label1.clone())).unwrap();
 
     let listing = root.list_dir("..").map_err(|e| println!("{}", e)).unwrap();
 
@@ -821,7 +927,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root.change_working_directory(format!("/{}/subfolder", label1.clone()));
+    root.change_working_directory(format!("/{}/subfolder", label1.clone())).unwrap();
 
     let listing = root.list_dir("..").unwrap();
 
