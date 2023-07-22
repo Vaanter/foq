@@ -18,6 +18,7 @@ use crate::commands::r#impl::pass::Pass;
 use crate::commands::r#impl::pasv::Pasv;
 use crate::commands::r#impl::pwd::Pwd;
 use crate::commands::r#impl::r#type::Type;
+use crate::commands::r#impl::rest::Rest;
 use crate::commands::r#impl::retr::Retr;
 use crate::commands::r#impl::stor::Stor;
 use crate::commands::r#impl::syst::Syst;
@@ -83,6 +84,7 @@ impl CommandProcessor {
       Commands::PASS => Pass::execute(self, &command, reply_sender).await,
       Commands::PASV => Pasv::execute(self, &command, reply_sender).await,
       Commands::PWD => Pwd::execute(self, &command, reply_sender).await,
+      Commands::REST => Rest::execute(self, &command, reply_sender).await,
       Commands::RETR => Retr::execute(self, &command, reply_sender).await,
       Commands::STOR => Stor::execute(self, &command, reply_sender).await,
       Commands::SYST => Syst::execute(self, &command, reply_sender).await,

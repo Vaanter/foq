@@ -16,6 +16,7 @@ pub(crate) struct SessionProperties {
   pub(crate) transfer_mode: TransferMode,
   pub(crate) data_type: DataType,
   pub(crate) login_form: LoginForm,
+  pub(crate) offset: u64,
 }
 
 impl SessionProperties {
