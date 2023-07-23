@@ -15,4 +15,5 @@ pub(crate) mod syst;
 pub(crate) mod r#type;
 pub(crate) mod user;
 pub(crate) mod rest;
+pub(crate) mod nlst;
 pub(crate) mod list;
