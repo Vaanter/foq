@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use regex::Regex;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, trace};
 
@@ -26,19 +27,21 @@ impl Executable for List {
 
     let session_properties = command_processor.session_properties.read().await;
 
-    let path = if command.argument == "-a" {
-      "."
-    } else {
-      &command.argument
+    let arguments_re = Regex::new("^(-[al])? ?(.*)?$").expect("Regex should be valid!");
+
+    let path = match arguments_re.captures(&command.argument) {
+      Some(caps) => match caps.get(2) {
+        Some(p) => p.as_str(),
+        None => ".",
+      },
+      None => ".",
     };
 
-    let listing = session_properties
-      .file_system_view_root
-      .list_dir(path);
+    let listing = session_properties.file_system_view_root.list_dir(path);
 
     let listing = match get_listing_or_error_reply(listing) {
       Ok(l) => l,
-      Err(r) => return Self::reply(r, reply_sender).await
+      Err(r) => return Self::reply(r, reply_sender).await,
     };
 
     debug!("Locking data stream!");
@@ -128,7 +131,9 @@ mod tests {
   use crate::io::file_system_view::FileSystemView;
   use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
+  use crate::utils::test_utils::{
+    receive_and_verify_reply, setup_test_command_processor, TestReplySender, LOCALHOST,
+  };
 
   #[tokio::test]
   async fn simple_listing_tcp() {
@@ -145,7 +150,8 @@ mod tests {
       .set_views(vec![view]);
     assert!(session_properties
       .file_system_view_root
-      .change_working_directory(label.clone()).unwrap());
+      .change_working_directory(label.clone())
+      .unwrap());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
@@ -228,7 +234,7 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -250,7 +256,8 @@ mod tests {
       .set_views(vec![view]);
     assert!(session_properties
       .file_system_view_root
-      .change_working_directory(label.clone()).unwrap());
+      .change_working_directory(label.clone())
+      .unwrap());
     let _ = session_properties.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
@@ -263,7 +270,7 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -274,7 +281,7 @@ mod tests {
       ReplyCode::SyntaxErrorInParametersOrArguments,
       None,
     )
-      .await;
+    .await;
   }
 
   #[tokio::test]
@@ -302,8 +309,8 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timeout!");
+    .await
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileUnavailable, None).await;
   }
@@ -323,7 +330,8 @@ mod tests {
       .set_views(vec![view]);
     assert!(session_properties
       .file_system_view_root
-      .change_working_directory(label.clone()).unwrap());
+      .change_working_directory(label.clone())
+      .unwrap());
     let _ = session_properties.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
@@ -336,7 +344,7 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
+    .await
     {
       panic!("Command timeout!");
     };
@@ -347,7 +355,7 @@ mod tests {
       ReplyCode::FileUnavailable,
       Some("Insufficient permissions!"),
     )
-      .await;
+    .await;
   }
 
   #[tokio::test]
@@ -375,8 +383,8 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timeout!");
+    .await
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::BadSequenceOfCommands, None).await;
   }
