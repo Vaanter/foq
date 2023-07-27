@@ -2,11 +2,13 @@
 
 use std::str::FromStr;
 use tracing::trace;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::commands::commands::Commands;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct Command {
+  #[zeroize(skip)]
   pub(crate) command: Commands,
   pub(crate) argument: String,
 }

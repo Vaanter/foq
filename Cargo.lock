@@ -545,6 +545,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-segmentation",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
