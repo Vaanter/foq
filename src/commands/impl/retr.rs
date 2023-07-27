@@ -92,8 +92,8 @@ impl Executable for Retr {
         debug!("Sent {len} bytes.");
         true
       }
-      Err(_) => {
-        warn!("Error sending file!");
+      Err(e) => {
+        warn!("Failed to send file! Error: {e}");
         false
       }
     };

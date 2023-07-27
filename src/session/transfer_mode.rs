@@ -1,4 +1,4 @@
-//! Possible modes of tranfering data.
+//! Possible modes of transferring data.
 //!
 //! Only the STREAM mode is implemented and used.
 

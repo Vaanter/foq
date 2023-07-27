@@ -55,7 +55,7 @@ mod tests {
   use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
   #[tokio::test]
-  async fn format() {
+  async fn format_test() {
     const EXPECTED: &str = " MLSD UTF8";
     assert_eq!(EXPECTED, Feat::format_features().join(""))
   }

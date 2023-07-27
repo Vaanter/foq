@@ -235,7 +235,7 @@ async fn run_quic(addr: SocketAddr, token: CancellationToken) {
     match quic_only_listener.accept(cancel.clone()).await {
       Some(mut conn) => {
         let peer = conn.remote_addr().unwrap();
-        conn.keep_alive(true).unwrap();
+        conn.keep_alive(false).unwrap();
         info!("[QUIC] Received connection from: {:?}", peer);
         tokio::spawn(async move {
           debug!("[QUIC] Creating handler for connection from {:?}", peer);

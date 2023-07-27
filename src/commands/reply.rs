@@ -2,6 +2,7 @@
 
 use std::collections::VecDeque;
 use std::str::FromStr;
+
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::commands::reply_code::ReplyCode;

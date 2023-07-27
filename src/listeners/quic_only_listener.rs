@@ -52,7 +52,7 @@ impl QuicOnlyListener {
       .with_safe_defaults()
       .with_no_client_auth()
       .with_single_cert(certs, key)
-      .map_err(|err| tokio::io::Error::new(tokio::io::ErrorKind::InvalidInput, err))?;
+      .map_err(|err| Error::new(ErrorKind::InvalidInput, err))?;
     config.alpn_protocols = vec!["ftpoq-1".as_bytes().to_vec()];
 
     if std::env::var_os("SSLKEYLOGFILE").is_some() {
