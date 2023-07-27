@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
+use crate::commands::r#impl::shared::get_change_directory_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
@@ -44,24 +45,12 @@ impl Executable for Cwd {
       return;
     }
 
-    if session_properties
+    let result = session_properties
       .file_system_view_root
-      .change_working_directory(new_path).is_ok()
-    {
-      Self::reply(
-        Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed."),
-        reply_sender,
-      )
-      .await;
-      return;
-    } else {
-      Self::reply(
-        Reply::new(ReplyCode::RequestedFileActionOkay, "Path not changed!"),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
+      .change_working_directory(new_path);
+    let reply = get_change_directory_reply(result);
+
+    Self::reply(reply, reply_sender).await;
   }
 }
 
@@ -131,7 +120,7 @@ mod tests {
       panic!("Command timeout!");
     };
 
-    receive_and_verify_reply(2, &mut rx, ReplyCode::RequestedFileActionOkay, Some("not")).await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::RequestedFileActionOkay, None).await;
     assert_eq!(
       command_processor
         .session_properties

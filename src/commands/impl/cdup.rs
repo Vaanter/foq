@@ -3,10 +3,11 @@ use async_trait::async_trait;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
+use crate::commands::r#impl::shared::get_change_directory_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::session::command_processor::CommandProcessor;
 
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub struct Cdup;
@@ -23,7 +24,7 @@ impl Executable for Cdup {
     let mut session_properties = command_processor.session_properties.write().await;
 
     if !session_properties.is_logged_in() {
-      Cdup::reply(
+      Self::reply(
         Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
         reply_sender,
       )
@@ -31,16 +32,23 @@ impl Executable for Cdup {
       return;
     }
 
+    if !command.argument.is_empty() {
+      return Self::reply(
+        Reply::new(
+          ReplyCode::SyntaxErrorInParametersOrArguments,
+          "CDUP must not have an argument!",
+        ),
+        reply_sender,
+      )
+      .await;
+    }
+
     let result = session_properties
       .file_system_view_root
       .change_working_directory_up();
-    let reply = if result {
-      Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed!")
-    } else {
-      Reply::new(ReplyCode::RequestedFileActionNotTaken, "Path not changed!")
-    };
+    let reply = get_change_directory_reply(result);
 
-    Cdup::reply(reply, reply_sender).await;
+    Self::reply(reply, reply_sender).await;
   }
 }
 
@@ -59,24 +67,25 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::cdup::Cdup;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::io::file_system_view::FileSystemView;
   use crate::commands::reply_code::ReplyCode;
-  use crate::commands::reply_code::ReplyCode::{NotLoggedIn, RequestedFileActionNotTaken, RequestedFileActionOkay};
+  use crate::commands::reply_code::ReplyCode::{FileUnavailable, NotLoggedIn, RequestedFileActionOkay};
+  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::io::file_system_view::FileSystemView;
+  use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{TestReplySender, LOCALHOST};
 
   async fn common(
     label: &str,
     root: PathBuf,
+    argument: &str,
     change_path: &str,
     reply_code: ReplyCode,
     expected_path: PathBuf,
     expected_display_path: &str,
-    user: Option<String>
+    user: Option<String>,
   ) {
-    let command = Command::new(Commands::CDUP, "".to_string());
+    let command = Command::new(Commands::CDUP, argument);
 
     let mut session_properties = SessionProperties::new();
 
@@ -86,7 +95,7 @@ mod tests {
     session_properties
       .file_system_view_root
       .set_views(vec![view]);
-    session_properties
+    let _ = session_properties
       .file_system_view_root
       .change_working_directory(change_path);
     let _ = session_properties.username = user;
@@ -116,16 +125,33 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn cdup_with_argument_should_reply_501() {
+    let path = PathBuf::from("/");
+    common(
+      "test",
+      path.clone(),
+      "path",
+      "",
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      path.clone().canonicalize().unwrap(),
+      "/",
+      Some("test".to_string()),
+    )
+      .await;
+  }
+
+  #[tokio::test]
   async fn cdup_from_root_should_reply_450() {
     let path = PathBuf::from("/");
     common(
       "test",
       path.clone(),
       "",
-      RequestedFileActionNotTaken,
+      "",
+      FileUnavailable,
       path.clone().canonicalize().unwrap(),
       "/",
-      Some("test".to_string())
+      Some("test".to_string()),
     )
     .await;
   }
@@ -136,11 +162,12 @@ mod tests {
     common(
       "test",
       path.clone(),
+      "",
       "test",
       RequestedFileActionOkay,
       path.clone().canonicalize().unwrap(),
       "/",
-      Some("test".to_string())
+      Some("test".to_string()),
     )
     .await;
   }
@@ -152,11 +179,12 @@ mod tests {
       "test",
       path.clone(),
       "",
+      "",
       NotLoggedIn,
       path.clone().canonicalize().unwrap(),
       "/",
-      None
+      None,
     )
-      .await;
+    .await;
   }
 }

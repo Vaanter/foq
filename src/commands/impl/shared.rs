@@ -4,12 +4,12 @@ use tokio::fs::File;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 use tracing::{debug, info};
 
-use crate::handlers::connection_handler::AsyncReadWrite;
-use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
-use crate::io::error::IoError;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
+use crate::handlers::connection_handler::AsyncReadWrite;
 use crate::io::entry_data::EntryData;
+use crate::io::error::IoError;
 
 pub(crate) async fn get_data_channel_lock(
   data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
@@ -49,38 +49,45 @@ pub(crate) fn get_open_file_result(file: Result<File, IoError>) -> Result<File, 
   debug!("Checking file open result.");
   match file {
     Ok(f) => Ok(f),
-    Err(IoError::UserError) => Err(Reply::new(
-      ReplyCode::NotLoggedIn,
-      IoError::UserError.to_string(),
-    )),
-    Err(IoError::NotFoundError(m)) | Err(IoError::InvalidPathError(m)) => {
-      Err(Reply::new(ReplyCode::FileUnavailable, m))
-    }
-    Err(IoError::PermissionError) => Err(Reply::new(
-      ReplyCode::FileUnavailable,
-      IoError::PermissionError.to_string(),
-    )),
-    Err(IoError::NotAFileError) => Err(Reply::new(
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      IoError::NotAFileError.to_string(),
-    )),
-    Err(IoError::OsError(_)) => Err(Reply::new(
-      ReplyCode::RequestedActionAborted,
-      "Requested action aborted: local error in processing.",
-    )),
-    Err(_) => unreachable!(),
+    Err(e) => Err(map_error_to_reply(e)),
   }
 }
 
-pub(crate) fn get_listing_or_error_reply(listing: Result<Vec<EntryData>, IoError>) -> Result<Vec<EntryData>, Reply> {
-  return listing.map_err(|e| {
-    match e {
-        IoError::UserError => Reply::new(ReplyCode::NotLoggedIn, IoError::UserError.to_string()),
-        IoError::OsError(_) | IoError::SystemError => Reply::new(ReplyCode::RequestedActionAborted,"Requested action aborted: local error in processing."),
-        IoError::NotADirectoryError => Reply::new(ReplyCode::SyntaxErrorInParametersOrArguments,IoError::NotADirectoryError.to_string()),
-        IoError::PermissionError => Reply::new(ReplyCode::FileUnavailable,IoError::PermissionError.to_string()),
-        IoError::NotFoundError(message) | IoError::InvalidPathError(message) => Reply::new(ReplyCode::FileUnavailable, message),
-        _ => unreachable!(),
+pub(crate) fn get_listing_or_error_reply(
+  listing: Result<Vec<EntryData>, IoError>,
+) -> Result<Vec<EntryData>, Reply> {
+  return listing.map_err(|e| map_error_to_reply(e));
+}
+
+fn map_error_to_reply(error: IoError) -> Reply {
+  return match error {
+    IoError::UserError => Reply::new(ReplyCode::NotLoggedIn, IoError::UserError.to_string()),
+    IoError::OsError(_) | IoError::SystemError => Reply::new(
+      ReplyCode::RequestedActionAborted,
+      "Requested action aborted: local error in processing.",
+    ),
+    IoError::NotADirectoryError => Reply::new(
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      IoError::NotADirectoryError.to_string(),
+    ),
+    IoError::PermissionError => Reply::new(
+      ReplyCode::FileUnavailable,
+      IoError::PermissionError.to_string(),
+    ),
+    IoError::NotFoundError(message) | IoError::InvalidPathError(message) => {
+      Reply::new(ReplyCode::FileUnavailable, message)
     }
-  });
+    IoError::NotAFileError => Reply::new(
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      IoError::NotAFileError.to_string(),
+    ),
+  };
+}
+
+pub(crate) fn get_change_directory_reply(cd_result: Result<bool, IoError>) -> Reply {
+  return match cd_result {
+    Ok(true) => Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed"),
+    Ok(false) => Reply::new(ReplyCode::RequestedFileActionOkay, "Path not changed"),
+    Err(e) => map_error_to_reply(e),
+  };
 }
