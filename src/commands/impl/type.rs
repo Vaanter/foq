@@ -3,11 +3,11 @@ use async_trait::async_trait;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::data_type::{DataType, SubType};
-use crate::commands::reply::Reply;
-use crate::commands::reply_code::ReplyCode;
 
 pub(crate) struct Type;
 
@@ -19,6 +19,17 @@ impl Executable for Type {
     reply_sender: &mut impl ReplySend,
   ) {
     debug_assert_eq!(command.command, Commands::TYPE);
+
+    let mut session_properties = command_processor.session_properties.write().await;
+
+    if !session_properties.is_logged_in() {
+      Self::reply(
+        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
+        reply_sender,
+      )
+      .await;
+      return;
+    }
 
     if command.argument.is_empty() {
       Self::reply(
@@ -39,21 +50,21 @@ impl Executable for Type {
 
     match (new_type, sub_type) {
       ("A", "N") | ("A", "") => {
-        command_processor.session_properties.write().await.data_type = DataType::ASCII {
+        session_properties.data_type = DataType::ASCII {
           sub_type: SubType::NonPrint,
         }
       }
       ("A", "T") => {
-        command_processor.session_properties.write().await.data_type = DataType::ASCII {
+        session_properties.data_type = DataType::ASCII {
           sub_type: SubType::TelnetFormatEffectors,
         }
       }
       ("A", "C") => {
-        command_processor.session_properties.write().await.data_type = DataType::ASCII {
+        session_properties.data_type = DataType::ASCII {
           sub_type: SubType::CarriageControl,
         }
       }
-      ("I", _) => command_processor.session_properties.write().await.data_type = DataType::BINARY,
+      ("I", _) => session_properties.data_type = DataType::BINARY,
       (_, _) => {
         Self::reply(
           Reply::new(
