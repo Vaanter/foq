@@ -2,13 +2,15 @@ use std::collections::HashSet;
 use std::env::current_dir;
 use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
+use derive_builder::Builder;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
+use strum::IntoEnumIterator;
 use tokio::io::{
   AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter,
 };
@@ -25,16 +27,16 @@ use crate::auth::auth_provider::AuthProvider;
 use crate::auth::data_source::DataSource;
 use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
-use crate::auth::user_permission::UserPermission;
-use crate::handlers::connection_handler::ConnectionHandler;
-use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
+use crate::auth::user_permission::{UserPermission, UserPermissionIter};
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+use crate::handlers::connection_handler::ConnectionHandler;
+use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
+use crate::handlers::reply_sender::ReplySend;
 use crate::io::file_system_view::FileSystemView;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
+use crate::session::command_processor::CommandProcessor;
 use crate::session::session_properties::SessionProperties;
 use crate::utils::tls_utils::{load_certs, load_keys};
 
@@ -230,24 +232,57 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
   client_dc
 }
 
-pub(crate) fn setup_test_command_processor() -> (&'static str, CommandProcessor) {
-  let label = "test";
-  let view = FileSystemView::new(
-    current_dir().unwrap(),
-    label.clone(),
-    HashSet::from([UserPermission::READ]),
-  );
+pub(crate) fn setup_test_command_processor() -> (CommandProcessorSettings, CommandProcessor) {
+  let settings = CommandProcessorSettingsBuilder::default()
+    .username(Some("testuser".to_string()))
+    .build()
+    .unwrap();
+  let command_processor = setup_test_command_processor_custom(&settings);
+  (settings, command_processor)
+}
 
+pub(crate) fn setup_test_command_processor_custom(
+  settings: &CommandProcessorSettings,
+) -> CommandProcessor {
   let mut session_properties = SessionProperties::new();
-  session_properties
-    .file_system_view_root
-    .set_views(vec![view]);
-  let _ = session_properties.username.insert("test".to_string());
+  if let Some(username) = &settings.username {
+    let view = FileSystemView::new(
+      settings.view_root.clone(),
+      settings.label.clone(),
+      settings.permissions.clone(),
+    );
+    session_properties
+      .file_system_view_root
+      .set_views(vec![view]);
+    session_properties.username.replace(username.clone());
+  }
+
+  if let Some(change_path) = &settings.change_path {
+    session_properties
+      .file_system_view_root
+      .change_working_directory(change_path)
+      .expect("change_path should be valid");
+  }
 
   let session_properties = Arc::new(RwLock::new(session_properties));
   let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
   let command_processor = CommandProcessor::new(session_properties, wrapper);
-  (label, command_processor)
+  command_processor
+}
+
+#[derive(Builder, Default, Clone)]
+#[builder(pattern = "owned")]
+pub(crate) struct CommandProcessorSettings {
+  #[builder(default = "String::from(\"test\")")]
+  pub(crate) label: String,
+  #[builder(default = "std::env::current_dir().unwrap()")]
+  pub(crate) view_root: PathBuf,
+  #[builder(default = "UserPermission::iter().collect()")]
+  pub(crate) permissions: HashSet<UserPermission>,
+  #[builder(default)]
+  pub(crate) username: Option<String>,
+  #[builder(default)]
+  pub(crate) change_path: Option<String>,
 }
 
 pub(crate) async fn run_quic_listener(

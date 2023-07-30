@@ -68,14 +68,13 @@ impl Pasv {
 
 #[cfg(test)]
 mod tests {
+  use std::env::current_dir;
   use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
   use std::str::FromStr;
-  use std::sync::Arc;
   use std::time::Duration;
 
   use tokio::net::TcpStream;
   use tokio::sync::mpsc::channel;
-  use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
@@ -84,10 +83,7 @@ mod tests {
   use crate::commands::r#impl::pasv::Pasv;
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{TestReplySender, LOCALHOST};
+  use crate::utils::test_utils::{TestReplySender, CommandProcessorSettingsBuilder, setup_test_command_processor_custom};
 
   #[test]
   fn response_test() {
@@ -102,9 +98,17 @@ mod tests {
   async fn simple_open_dc() {
     let command = Command::new(Commands::PASV, String::new());
 
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper.clone());
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap())
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);

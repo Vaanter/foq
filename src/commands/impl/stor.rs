@@ -8,11 +8,11 @@ use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::{
   get_data_channel_lock, get_open_file_result, get_transfer_reply,
 };
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
-use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+use crate::session::command_processor::CommandProcessor;
 
 pub(crate) struct Stor;
 
@@ -134,13 +134,14 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::stor::Stor;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::io::file_system_view::FileSystemView;
   use crate::commands::reply_code::ReplyCode;
+  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::io::file_system_view::FileSystemView;
+  use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
-    open_tcp_data_channel, receive_and_verify_reply, TestReplySender, LOCALHOST,
+    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
+    CommandProcessorSettingsBuilder, TestReplySender, LOCALHOST,
   };
 
   async fn common(local_file: &'static str, remote_file: &str) {
@@ -153,36 +154,17 @@ mod tests {
 
     let command = Command::new(Commands::STOR, remote_file);
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let label = "test_files".to_string();
 
-    let label = "test";
-    let view = FileSystemView::new(
-      temp_dir(),
-      label.clone(),
-      HashSet::from([
-        UserPermission::READ,
-        UserPermission::CREATE,
-        UserPermission::WRITE,
-      ]),
-    );
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(temp_dir())
+      .build()
+      .expect("Settings should be valid");
 
-    session_properties
-      .write()
-      .await
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties
-      .write()
-      .await
-      .username
-      .insert("test".to_string());
-    assert!(session_properties
-      .write()
-      .await
-      .file_system_view_root
-      .change_working_directory(label.clone()).unwrap());
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
 

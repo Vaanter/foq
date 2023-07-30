@@ -54,69 +54,52 @@ impl Executable for Cdup {
 
 #[cfg(test)]
 mod tests {
-  use std::collections::HashSet;
+  use std::env::current_dir;
   use std::path::PathBuf;
-  use std::sync::Arc;
   use std::time::Duration;
 
-  use tokio::sync::{mpsc, Mutex, RwLock};
+  use tokio::sync::mpsc;
   use tokio::time::timeout;
 
-  use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::cdup::Cdup;
   use crate::commands::reply_code::ReplyCode;
-  use crate::commands::reply_code::ReplyCode::{FileUnavailable, NotLoggedIn, RequestedFileActionOkay};
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::file_system_view::FileSystemView;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{TestReplySender, LOCALHOST};
+  use crate::utils::test_utils::{
+    setup_test_command_processor_custom, CommandProcessorSettings, CommandProcessorSettingsBuilder,
+    TestReplySender,
+  };
 
   async fn common(
-    label: &str,
-    root: PathBuf,
-    argument: &str,
-    change_path: &str,
+    settings: &CommandProcessorSettings,
+    command: Command,
     reply_code: ReplyCode,
     expected_path: PathBuf,
     expected_display_path: &str,
-    user: Option<String>,
   ) {
-    let command = Command::new(Commands::CDUP, argument);
-
-    let mut session_properties = SessionProperties::new();
-
-    let permissions = HashSet::from([UserPermission::READ]);
-    let view = FileSystemView::new(root, label.clone(), permissions);
-
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties
-      .file_system_view_root
-      .change_working_directory(change_path);
-    let _ = session_properties.username = user;
-
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let mut session = CommandProcessor::new(
-      session_properties.clone(),
-      Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST))),
-    );
-
+    let mut command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    Cdup::execute(&mut session, &command, &mut reply_sender).await;
+    Cdup::execute(&mut command_processor, &command, &mut reply_sender).await;
     match timeout(Duration::from_secs(2), rx.recv()).await {
       Ok(Some(result)) => {
         assert_eq!(result.code, reply_code);
-        let root = &session_properties.read().await.file_system_view_root;
-        let view = root.file_system_views.as_ref().unwrap().get(label);
-        assert!(view.is_some());
-        assert_eq!(view.unwrap().current_path, expected_path);
-        assert_eq!(root.get_current_working_directory(), expected_display_path);
+        if reply_code != ReplyCode::NotLoggedIn {
+          let root = &command_processor
+            .session_properties
+            .read()
+            .await
+            .file_system_view_root;
+          let view = root
+            .file_system_views
+            .as_ref()
+            .unwrap()
+            .get(&settings.label.clone());
+          assert!(view.is_some());
+          assert_eq!(view.unwrap().current_path, expected_path);
+          assert_eq!(root.get_current_working_directory(), expected_display_path);
+        }
       }
       Err(_) | Ok(None) => {
         panic!("Failed to receive reply!");
@@ -126,64 +109,93 @@ mod tests {
 
   #[tokio::test]
   async fn cdup_with_argument_should_reply_501() {
-    let path = PathBuf::from("/");
+    let path = current_dir().unwrap();
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .username(Some("testuser".to_string()))
+      .view_root(path.clone())
+      .build()
+      .expect("Settings should be valid");
+
+    let command = Command::new(Commands::CDUP, "path");
+
     common(
-      "test",
-      path.clone(),
-      "path",
-      "",
+      &settings,
+      command,
       ReplyCode::SyntaxErrorInParametersOrArguments,
       path.clone().canonicalize().unwrap(),
       "/",
-      Some("test".to_string()),
     )
-      .await;
+    .await;
   }
 
   #[tokio::test]
-  async fn cdup_from_root_should_reply_450() {
-    let path = PathBuf::from("/");
+  async fn cdup_from_root_should_reply_550() {
+    let path = current_dir().unwrap();
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .username(Some("testuser".to_string()))
+      .view_root(path.clone())
+      .build()
+      .expect("Settings should be valid");
+
+    let command = Command::new(Commands::CDUP, "");
+
     common(
-      "test",
-      path.clone(),
-      "",
-      "",
-      FileUnavailable,
+      &settings,
+      command,
+      ReplyCode::FileUnavailable,
       path.clone().canonicalize().unwrap(),
       "/",
-      Some("test".to_string()),
     )
     .await;
   }
 
   #[tokio::test]
   async fn cdup_from_view_should_return_to_root_and_reply_250() {
-    let path = std::env::current_dir().unwrap();
+    let path = current_dir().unwrap();
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .username(Some("testuser".to_string()))
+      .view_root(path.clone())
+      .change_path(Some(label.clone()))
+      .build()
+      .expect("Settings should be valid");
+
+    let command = Command::new(Commands::CDUP, "");
+
     common(
-      "test",
-      path.clone(),
-      "",
-      "test",
-      RequestedFileActionOkay,
+      &settings,
+      command,
+      ReplyCode::RequestedFileActionOkay,
       path.clone().canonicalize().unwrap(),
       "/",
-      Some("test".to_string()),
     )
     .await;
   }
 
   #[tokio::test]
   async fn cdup_not_logged_in_should_reply_530() {
-    let path = std::env::current_dir().unwrap();
+    let path = current_dir().unwrap();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .build()
+      .expect("Settings should be valid");
+
+    let command = Command::new(Commands::CDUP, "");
+
     common(
-      "test",
-      path.clone(),
-      "",
-      "",
-      NotLoggedIn,
+      &settings,
+      command,
+      ReplyCode::NotLoggedIn,
       path.clone().canonicalize().unwrap(),
       "/",
-      None,
     )
     .await;
   }

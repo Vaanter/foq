@@ -126,11 +126,10 @@ mod tests {
   use tokio::fs::OpenOptions;
   use tokio::io::{AsyncRead, AsyncReadExt};
   use tokio::sync::mpsc::channel;
-  use tokio::sync::{Mutex, RwLock};
+  use tokio::sync::Mutex;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
 
-  use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
@@ -139,13 +138,12 @@ mod tests {
   use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
   use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::file_system_view::FileSystemView;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
   use crate::session::command_processor::CommandProcessor;
-  use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
     create_tls_client_config, open_tcp_data_channel, receive_and_verify_reply,
-    setup_test_command_processor, TestReplySender, LOCALHOST,
+    setup_test_command_processor, setup_test_command_processor_custom,
+    CommandProcessorSettingsBuilder, TestReplySender, LOCALHOST,
   };
 
   async fn common_tcp(file_name: &'static str) {
@@ -217,25 +215,19 @@ mod tests {
 
     let command = Command::new(Commands::RETR, file_name);
 
-    let label = "test";
-    let view = FileSystemView::new(
-      current_dir().unwrap(),
-      label.clone(),
-      HashSet::from([UserPermission::READ]),
-    );
+    let label = "test_files".to_string();
 
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    assert!(session_properties
-      .file_system_view_root
-      .change_working_directory(label.clone()).unwrap());
-    let _ = session_properties.username.insert("test".to_string());
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap())
+      .change_path(Some(label.clone()))
+      .build()
+      .expect("Settings should be valid");
 
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(data_channel_wrapper));
-    let command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let mut command_processor = setup_test_command_processor_custom(&settings);
+    command_processor.data_wrapper = Arc::new(Mutex::new(data_channel_wrapper));
     println!("Setup completed.");
     (command, command_processor)
   }
@@ -361,11 +353,16 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
-
     let command = Command::new(Commands::RETR, "NONEXISTENT");
+
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
@@ -380,11 +377,11 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
-    let (label, mut command_processor) = setup_test_command_processor();
+    let (settings, mut command_processor) = setup_test_command_processor();
 
     let command = Command::new(
       Commands::RETR,
-      format!("{}/test_files/1MiB.txt", label.clone()),
+      format!("{}/test_files/1MiB.txt", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -424,12 +421,12 @@ mod tests {
 
   #[tokio::test]
   async fn invalid_file_test() {
-    let (label, mut command_processor) = setup_test_command_processor();
+    let (settings, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
     let command = Command::new(
       Commands::RETR,
-      format!("{}/test_files/NONEXISTENT", label.clone()),
+      format!("{}/test_files/NONEXISTENT", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -445,22 +442,22 @@ mod tests {
 
   #[tokio::test]
   async fn no_read_permission_test() {
-    let (label, mut command_processor) = setup_test_command_processor();
-    command_processor
-      .session_properties
-      .write()
-      .await
-      .file_system_view_root
-      .file_system_views
-      .as_mut()
-      .unwrap()
-      .iter_mut()
-      .for_each(|v| v.1.permissions.clear());
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap())
+      .permissions(HashSet::new())
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
     let command = Command::new(
       Commands::RETR,
-      format!("{}/test_files/2KiB.txt", label.clone()),
+      format!("{}/test_files/2KiB.txt", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -476,10 +473,13 @@ mod tests {
 
   #[tokio::test]
   async fn folder_specified_test() {
-    let (label, mut command_processor) = setup_test_command_processor();
+    let (settings, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
-    let command = Command::new(Commands::RETR, format!("{}/test_files", label.clone()));
+    let command = Command::new(
+      Commands::RETR,
+      format!("{}/test_files", settings.label.clone()),
+    );
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     timeout(

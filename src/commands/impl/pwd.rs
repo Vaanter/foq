@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::session::command_processor::CommandProcessor;
 
 pub(crate) struct Pwd;
 
@@ -18,6 +18,8 @@ impl Executable for Pwd {
     reply_sender: &mut impl ReplySend,
   ) {
     debug_assert_eq!(command.command, Commands::PWD);
+
+    let session_properties = command_processor.session_properties.read().await;
 
     if !command.argument.is_empty() {
       Self::reply(
@@ -31,12 +33,7 @@ impl Executable for Pwd {
       return;
     }
 
-    if !command_processor
-      .session_properties
-      .read()
-      .await
-      .is_logged_in()
-    {
+    if !session_properties.is_logged_in() {
       Self::reply(
         Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
         reply_sender,
@@ -45,7 +42,6 @@ impl Executable for Pwd {
       return;
     }
 
-    let session_properties = command_processor.session_properties.read().await;
     let reply_message = format!(
       "\"{}\"",
       session_properties
@@ -62,30 +58,36 @@ impl Executable for Pwd {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
+  use std::env::current_dir;
   use std::time::Duration;
 
   use tokio::sync::mpsc::channel;
-  use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::pwd::Pwd;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
   use crate::commands::reply_code::ReplyCode;
-  use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
+  use crate::utils::test_utils::{
+    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
+    TestReplySender,
+  };
 
   #[tokio::test]
   async fn with_argument_test() {
     let command = Command::new(Commands::PWD, "/test_files");
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -109,9 +111,10 @@ mod tests {
   async fn not_logged_in_test() {
     let command = Command::new(Commands::PWD, "");
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let settings = CommandProcessorSettingsBuilder::default()
+      .build()
+      .expect("Settings should be valid");
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -129,12 +132,16 @@ mod tests {
   async fn format_test() {
     let command = Command::new(Commands::PWD, "");
 
-    let mut session_properties = SessionProperties::new();
-    let _ = session_properties.username.insert("test".to_string());
+    let label = "test_files".to_string();
 
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);

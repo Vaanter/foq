@@ -111,71 +111,24 @@ impl Executable for List {
 mod tests {
   use std::collections::HashSet;
   use std::env::current_dir;
-  use std::sync::Arc;
   use std::time::Duration;
 
   use regex::Regex;
   use tokio::io::AsyncReadExt;
-  use tokio::net::TcpStream;
   use tokio::sync::mpsc::channel;
-  use tokio::sync::{Mutex, RwLock};
   use tokio::time::timeout;
 
-  use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::list::List;
   use crate::commands::reply_code::ReplyCode;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::file_system_view::FileSystemView;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor, TestReplySender, LOCALHOST,
-  };
+  use crate::utils::test_utils::{open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender, CommandProcessorSettings};
 
-  #[tokio::test]
-  async fn simple_listing_tcp() {
-    let command = Command::new(Commands::LIST, String::new());
+  async fn listing_common(command: Command, settings: &CommandProcessorSettings) {
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root_path = current_dir().unwrap().join("test_files");
-    let label = "test_files";
-    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
-
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    assert!(session_properties
-      .file_system_view_root
-      .change_working_directory(label.clone())
-      .unwrap());
-
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
-    let addr = match command_processor
-      .data_wrapper
-      .clone()
-      .lock()
-      .await
-      .open_data_stream()
-      .await
-    {
-      Ok(addr) => addr,
-      Err(_) => panic!("Failed to open passive data listener!"),
-    };
-
-    println!("Connecting to passive listener");
-    let mut client_dc = match TcpStream::connect(addr).await {
-      Ok(c) => c,
-      Err(e) => {
-        panic!("Client passive connection failed: {}", e);
-      }
-    };
-    println!("Client passive connection successful!");
+    let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -183,8 +136,8 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-    .await
-    .expect("Command timeout!");
+      .await
+      .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
@@ -194,7 +147,8 @@ mod tests {
         let msg = String::from_utf8_lossy(&buffer[..len]);
         assert!(!msg.is_empty());
 
-        let file_count = root_path
+        let file_count = settings
+          .view_root
           .read_dir()
           .expect("Failed to read current path!")
           .count();
@@ -220,24 +174,90 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn simple_listing_tcp() {
+    let command = Command::new(Commands::LIST, String::new());
+
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    listing_common(command, &settings).await;
+  }
+
+  #[tokio::test]
+  async fn listing_with_argument_tcp() {
+    let command = Command::new(Commands::LIST, "-a".to_string());
+
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    listing_common(command, &settings).await;
+  }
+
+  #[tokio::test]
+  async fn listing_with_path_parameter_tcp() {
+    let command = Command::new(Commands::LIST, ".".to_string());
+
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    listing_common(command, &settings).await;
+  }
+
+  #[tokio::test]
+  async fn listing_with_argument_with_path_parameter_tcp() {
+    let command = Command::new(Commands::LIST, "-l .".to_string());
+
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    listing_common(command, &settings).await;
+  }
+
+  #[tokio::test]
   async fn not_logged_in_test() {
     let command = Command::new(Commands::LIST, String::new());
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let settings = CommandProcessorSettingsBuilder::default()
+      .build()
+      .expect("Settings should be valid");
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command should finish before timeout");
     receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
   }
 
@@ -245,35 +265,26 @@ mod tests {
   async fn not_directory_test() {
     let command = Command::new(Commands::LIST, String::from("1MiB.txt"));
 
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root_path = current_dir().unwrap().join("test_files");
-    let label = "test_files";
-    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let label = "test_files".to_string();
 
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    assert!(session_properties
-      .file_system_view_root
-      .change_working_directory(label.clone())
-      .unwrap());
-    let _ = session_properties.username.insert("test".to_string());
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
 
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command should finish before timeout");
 
     receive_and_verify_reply(
       2,
@@ -288,20 +299,17 @@ mod tests {
   async fn nonexistent_test() {
     let command = Command::new(Commands::LIST, String::from("NONEXISTENT"));
 
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root_path = current_dir().unwrap().join("test_files");
-    let label = "test_files";
-    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let label = "test_files".to_string();
 
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties.username.insert("test".to_string());
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
 
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -319,24 +327,18 @@ mod tests {
   async fn insufficient_permissions_test() {
     let command = Command::new(Commands::LIST, String::new());
 
-    let permissions = HashSet::from([]);
-    let root_path = current_dir().unwrap().join("test_files");
-    let label = "test_files";
-    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let label = "test_files".to_string();
 
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    assert!(session_properties
-      .file_system_view_root
-      .change_working_directory(label.clone())
-      .unwrap());
-    let _ = session_properties.username.insert("test".to_string());
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .permissions(HashSet::new())
+      .build()
+      .expect("Settings should be valid");
 
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -362,20 +364,17 @@ mod tests {
   async fn data_channel_not_open_tcp() {
     let command = Command::new(Commands::LIST, String::new());
 
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
-    let root_path = current_dir().unwrap().join("test_files");
-    let label = "test_files";
-    let view = FileSystemView::new(root_path.clone(), label.clone(), permissions.clone());
+    let label = "test_files".to_string();
 
-    let mut session_properties = SessionProperties::new();
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties.username.insert("test".to_string());
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
 
-    let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);

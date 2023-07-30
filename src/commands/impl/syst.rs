@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::session::command_processor::CommandProcessor;
 
 pub(crate) struct Syst;
 
@@ -28,31 +28,37 @@ impl Executable for Syst {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
+  use std::env::current_dir;
   use std::time::Duration;
 
-  use tokio::sync::{mpsc, Mutex, RwLock};
+  use tokio::sync::mpsc;
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::syst::Syst;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
   use crate::commands::reply_code::ReplyCode;
-  use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
+  use crate::utils::test_utils::{
+    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
+    TestReplySender,
+  };
 
   #[tokio::test]
   async fn response_test() {
     let command = Command::new(Commands::SYST, "");
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
+    let label = "test_files".to_string();
 
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
 
+    let mut command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(

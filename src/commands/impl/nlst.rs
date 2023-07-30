@@ -117,7 +117,8 @@ mod tests {
   use crate::commands::r#impl::nlst::Nlst;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor, TestReplySender,
+    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor,
+    setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender,
   };
 
   #[tokio::test]
@@ -163,8 +164,10 @@ mod tests {
   #[tokio::test]
   async fn not_logged_in_test() {
     let command = Command::new(Commands::NLST, String::new());
-    let (_, mut command_processor) = setup_test_command_processor();
-    command_processor.session_properties.write().await.username = None;
+    let settings = CommandProcessorSettingsBuilder::default()
+      .build()
+      .expect("Settings should be valid");
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);

@@ -77,28 +77,36 @@ impl Executable for Type {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
+  use std::env::current_dir;
   use std::time::Duration;
 
-  use tokio::sync::{mpsc, Mutex, RwLock};
+  use tokio::sync::mpsc;
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::r#type::Type;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::session::data_type::{DataType, SubType};
   use crate::commands::reply_code::ReplyCode;
-  use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
+  use crate::session::data_type::{DataType, SubType};
+  use crate::utils::test_utils::{
+    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
+    TestReplySender,
+  };
 
   #[tokio::test]
   async fn ascii_non_print_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap())
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "A N");
 
@@ -115,7 +123,7 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
-      session_properties.read().await.data_type,
+      command_processor.session_properties.read().await.data_type,
       DataType::ASCII {
         sub_type: SubType::NonPrint
       }
@@ -124,9 +132,17 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_no_subtype_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap())
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "A");
 
@@ -143,7 +159,7 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
-      session_properties.read().await.data_type,
+      command_processor.session_properties.read().await.data_type,
       DataType::ASCII {
         sub_type: SubType::NonPrint
       }
@@ -152,49 +168,64 @@ mod tests {
 
   #[tokio::test]
   async fn binary_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap())
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "I");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
-    assert_eq!(session_properties.read().await.data_type, DataType::BINARY);
+    assert_eq!(
+      command_processor.session_properties.read().await.data_type,
+      DataType::BINARY
+    );
   }
 
   #[tokio::test]
   async fn ascii_tfe_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "A T");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
-      session_properties.read().await.data_type,
+      command_processor.session_properties.read().await.data_type,
       DataType::ASCII {
         sub_type: SubType::TelnetFormatEffectors
       }
@@ -203,26 +234,32 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_cc_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "A C");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
-      session_properties.read().await.data_type,
+      command_processor.session_properties.read().await.data_type,
       DataType::ASCII {
         sub_type: SubType::CarriageControl
       }
@@ -231,24 +268,30 @@ mod tests {
 
   #[tokio::test]
   async fn empty_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "");
 
-    let original_type = session_properties.read().await.data_type;
+    let original_type = command_processor.session_properties.read().await.data_type;
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(
       2,
@@ -257,29 +300,38 @@ mod tests {
       None,
     )
     .await;
-    assert_eq!(session_properties.read().await.data_type, original_type);
+    assert_eq!(
+      command_processor.session_properties.read().await.data_type,
+      original_type
+    );
   }
 
   #[tokio::test]
   async fn ebcdic_no_subtype_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let label = "test_files".to_string();
+
+    let settings = CommandProcessorSettingsBuilder::default()
+      .label(label.clone())
+      .change_path(Some(label.clone()))
+      .username(Some("testuser".to_string()))
+      .view_root(current_dir().unwrap().join("test_files"))
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let command = Command::new(Commands::TYPE, "E");
 
-    let original_type = session_properties.read().await.data_type;
+    let original_type = command_processor.session_properties.read().await.data_type;
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(
       2,
@@ -288,6 +340,9 @@ mod tests {
       None,
     )
     .await;
-    assert_eq!(session_properties.read().await.data_type, original_type);
+    assert_eq!(
+      command_processor.session_properties.read().await.data_type,
+      original_type
+    );
   }
 }

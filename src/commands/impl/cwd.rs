@@ -56,10 +56,9 @@ impl Executable for Cwd {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
   use std::time::Duration;
 
-  use tokio::sync::{mpsc, Mutex, RwLock};
+  use tokio::sync::mpsc;
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
@@ -67,11 +66,9 @@ mod tests {
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::cwd::Cwd;
   use crate::commands::reply_code::ReplyCode;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
-  use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor, TestReplySender, LOCALHOST,
+    receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
+    CommandProcessorSettingsBuilder, TestReplySender,
   };
 
   #[tokio::test]
@@ -82,14 +79,12 @@ mod tests {
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Cwd::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::RequestedFileActionOkay, None).await;
     assert_eq!(
@@ -111,14 +106,12 @@ mod tests {
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Cwd::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-    {
-      panic!("Command timeout!");
-    };
+    .await
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::RequestedFileActionOkay, None).await;
     assert_eq!(
@@ -136,24 +129,25 @@ mod tests {
   async fn not_logged_in_test() {
     let command = Command::new(Commands::CWD, "/test");
 
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let settings = CommandProcessorSettingsBuilder::default()
+      .build()
+      .expect("Settings should be valid");
+
+    let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    timeout(
       Duration::from_secs(3),
       Cwd::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
-    {
-      panic!("Command timeout!");
-    };
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
     assert_eq!(
-      session_properties
+      command_processor
+        .session_properties
         .read()
         .await
         .file_system_view_root
