@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
-use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::session::command_processor::CommandProcessor;
 
 pub(crate) struct Noop;
 
@@ -37,9 +37,9 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::noop::Noop;
+  use crate::commands::reply_code::ReplyCode;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::session::command_processor::CommandProcessor;
-  use crate::commands::reply_code::ReplyCode;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
 

@@ -4,11 +4,11 @@ use tracing::{error, info};
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
 use crate::global_context::AUTH_PROVIDER;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
-use crate::commands::reply::Reply;
-use crate::commands::reply_code::ReplyCode;
 
 pub(crate) struct Pass;
 
@@ -111,10 +111,10 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::pass::Pass;
-  use crate::global_context::AUTH_PROVIDER;
-  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::session::command_processor::CommandProcessor;
   use crate::commands::reply_code::ReplyCode;
+  use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+  use crate::global_context::AUTH_PROVIDER;
+  use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
     create_test_auth_provider, receive_and_verify_reply, TestReplySender, LOCALHOST,

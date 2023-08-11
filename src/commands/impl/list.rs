@@ -123,7 +123,10 @@ mod tests {
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::list::List;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender, CommandProcessorSettings};
+  use crate::utils::test_utils::{
+    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
+    CommandProcessorSettings, CommandProcessorSettingsBuilder, TestReplySender,
+  };
 
   async fn listing_common(command: Command, settings: &CommandProcessorSettings) {
     let mut command_processor = setup_test_command_processor_custom(&settings);
@@ -136,8 +139,8 @@ mod tests {
       Duration::from_secs(3),
       List::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timeout!");
+    .await
+    .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 

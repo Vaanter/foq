@@ -108,7 +108,10 @@ mod tests {
       None,
     )
     .await;
-    assert_eq!(123, command_processor.session_properties.read().await.offset);
+    assert_eq!(
+      123,
+      command_processor.session_properties.read().await.offset
+    );
   }
 
   #[tokio::test]
@@ -124,16 +127,10 @@ mod tests {
       Duration::from_secs(3),
       Rest::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timeout!");
+    .await
+    .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::NotLoggedIn,
-      None,
-    )
-      .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
     assert_eq!(0, command_processor.session_properties.read().await.offset);
   }
 
@@ -149,8 +146,8 @@ mod tests {
       Duration::from_secs(3),
       Rest::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timeout!");
+    .await
+    .expect("Command timeout!");
 
     receive_and_verify_reply(
       2,
@@ -158,7 +155,7 @@ mod tests {
       ReplyCode::SyntaxErrorInParametersOrArguments,
       None,
     )
-      .await;
+    .await;
     assert_eq!(0, command_processor.session_properties.read().await.offset);
   }
 
@@ -174,8 +171,8 @@ mod tests {
       Duration::from_secs(3),
       Rest::execute(&mut command_processor, &command, &mut reply_sender),
     )
-      .await
-      .expect("Command timeout!");
+    .await
+    .expect("Command timeout!");
 
     receive_and_verify_reply(
       2,
@@ -183,7 +180,7 @@ mod tests {
       ReplyCode::SyntaxErrorInParametersOrArguments,
       None,
     )
-      .await;
+    .await;
     assert_eq!(0, command_processor.session_properties.read().await.offset);
   }
 }

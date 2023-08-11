@@ -118,11 +118,7 @@ impl FileSystemViewRoot {
         None => return Err(IoError::SystemError),
       };
 
-      let view = self
-        .file_system_views
-        .as_mut()
-        .unwrap()
-        .get_mut(label);
+      let view = self.file_system_views.as_mut().unwrap().get_mut(label);
 
       let view = match view {
         Some(v) => v,
@@ -527,7 +523,9 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("{}/test_files", label.clone())).unwrap());
+    assert!(root
+      .change_working_directory(format!("{}/test_files", label.clone()))
+      .unwrap());
     assert_eq!(
       root.get_current_working_directory(),
       format!("/{}/test_files", label.clone())
@@ -553,7 +551,9 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("{}/test_files", label.clone())).unwrap());
+    assert!(root
+      .change_working_directory(format!("{}/test_files", label.clone()))
+      .unwrap());
     assert!(root.change_working_directory("~").unwrap());
     assert!(root.current_view.is_none());
   }
@@ -622,7 +622,9 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("{label}/test_files")).unwrap());
+    assert!(root
+      .change_working_directory(format!("{label}/test_files"))
+      .unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
     assert_eq!(
@@ -661,7 +663,9 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("/{label}/test_files")).unwrap());
+    assert!(root
+      .change_working_directory(format!("/{label}/test_files"))
+      .unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label.clone());
     assert_eq!(
@@ -904,7 +908,9 @@ mod tests {
     let views = create_root(vec![view1, view2]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root.change_working_directory(format!("/{}", label1.clone())).unwrap();
+    root
+      .change_working_directory(format!("/{}", label1.clone()))
+      .unwrap();
 
     let listing = root.list_dir("..").map_err(|e| println!("{}", e)).unwrap();
 
@@ -927,7 +933,9 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root.change_working_directory(format!("/{}/subfolder", label1.clone())).unwrap();
+    root
+      .change_working_directory(format!("/{}/subfolder", label1.clone()))
+      .unwrap();
 
     let listing = root.list_dir("..").unwrap();
 

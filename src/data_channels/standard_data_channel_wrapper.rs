@@ -10,8 +10,8 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
-use crate::handlers::connection_handler::AsyncReadWrite;
 use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
+use crate::handlers::connection_handler::AsyncReadWrite;
 
 pub(crate) struct StandardDataChannelWrapper {
   addr: SocketAddr,

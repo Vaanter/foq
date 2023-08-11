@@ -24,10 +24,10 @@ use crate::commands::r#impl::retr::Retr;
 use crate::commands::r#impl::stor::Stor;
 use crate::commands::r#impl::syst::Syst;
 use crate::commands::r#impl::user::User;
-use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
-use crate::handlers::reply_sender::ReplySend;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
+use crate::handlers::reply_sender::ReplySend;
 use crate::session::session_properties::SessionProperties;
 
 #[derive(Clone)]
@@ -38,7 +38,7 @@ pub(crate) struct CommandProcessor {
 
 impl CommandProcessor {
   /// Constructs new processor.
-  /// 
+  ///
   /// Holds session properties and data wrapper which can be used in commands.
   pub(crate) fn new(
     session_properties: Arc<RwLock<SessionProperties>>,
@@ -51,11 +51,11 @@ impl CommandProcessor {
   }
 
   /// Parses users message into command and then executes it.
-  /// 
-  /// The commands is first parsed. If parsing fails a reply is sent and this returns. If parsing 
-  /// succeeds and the command is implemented, then it is executed. If it's not implemented then 
+  ///
+  /// The commands is first parsed. If parsing fails a reply is sent and this returns. If parsing
+  /// succeeds and the command is implemented, then it is executed. If it's not implemented then
   /// a reply is sent stating such.
-  /// 
+  ///
   #[tracing::instrument(skip_all)]
   pub(crate) async fn evaluate(&mut self, message: String, reply_sender: &mut impl ReplySend) {
     debug!("Evaluating command");

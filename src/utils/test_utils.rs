@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::env::current_dir;
 use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -11,9 +10,7 @@ use derive_builder::Builder;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
 use strum::IntoEnumIterator;
-use tokio::io::{
-  AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter,
-};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
@@ -27,7 +24,7 @@ use crate::auth::auth_provider::AuthProvider;
 use crate::auth::data_source::DataSource;
 use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
-use crate::auth::user_permission::{UserPermission, UserPermissionIter};
+use crate::auth::user_permission::UserPermission;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;

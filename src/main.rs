@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use tracing::Level;
 
-use crate::global_context::{CONFIG};
+use crate::global_context::CONFIG;
 
 mod auth;
 mod commands;

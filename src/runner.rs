@@ -3,14 +3,14 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::auth::auth_provider::AuthProvider;
+use crate::auth::sqlite_data_source::SqliteDataSource;
 use tokio::io::{Error, ErrorKind};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
-use crate::auth::auth_provider::AuthProvider;
-use crate::auth::sqlite_data_source::SqliteDataSource;
 
 use crate::global_context::{AUTH_PROVIDER, CERTS, CONFIG, DB_LAZY, KEY};
 use crate::handlers::connection_handler::ConnectionHandler;
@@ -19,7 +19,6 @@ use crate::handlers::standard_connection_handler::StandardConnectionHandler;
 use crate::handlers::standard_tls_connection_handler::StandardTlsConnectionHandler;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
 use crate::listeners::standard_listener::StandardListener;
-
 
 /// Starts all available listeners.
 ///

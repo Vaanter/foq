@@ -1,4 +1,4 @@
-//! Contains properties used throughout a session, such as username, datatype file system views 
+//! Contains properties used throughout a session, such as username, datatype file system views
 //! and other.
 
 use crate::auth::auth_provider::AuthProvider;

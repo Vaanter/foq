@@ -66,7 +66,10 @@ impl QuicOnlyDataChannelWrapper {
 
       match conn {
         Ok(Ok(Some(stream))) => {
-          debug!("Passive listener connection successful! ID: {}.", stream.id());
+          debug!(
+            "Passive listener connection successful! ID: {}.",
+            stream.id()
+          );
           let _ = data_channel.insert(Box::new(stream));
         }
         Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),

@@ -42,9 +42,9 @@ impl FromStr for Command {
 
 #[cfg(test)]
 mod tests {
-  use std::str::FromStr;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
+  use std::str::FromStr;
 
   #[test]
   fn mlsd_test() {

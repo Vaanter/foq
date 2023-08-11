@@ -251,14 +251,12 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
 
     let command_fut = tokio::spawn(async move {
-      if let Err(_) = timeout(
-        Duration::from_secs(timeout_secs as u64),
+      timeout(
+        Duration::from_secs(TIMEOUT_SECS),
         Retr::execute(&mut command_processor, &command, &mut reply_sender),
       )
       .await
-      {
-        panic!("Command timeout!");
-      };
+      .expect("Command timeout!");
     });
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;

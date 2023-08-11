@@ -83,7 +83,9 @@ mod tests {
   use crate::commands::r#impl::pasv::Pasv;
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{TestReplySender, CommandProcessorSettingsBuilder, setup_test_command_processor_custom};
+  use crate::utils::test_utils::{
+    setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender,
+  };
 
   #[test]
   fn response_test() {

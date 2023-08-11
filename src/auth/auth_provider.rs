@@ -16,20 +16,20 @@ impl AuthProvider {
   }
 
   /// Attempts to authenticate the user.
-  /// 
-  /// Iterative goes through all the [`DataSource`]s checking if the user can be authenticated by 
-  /// any of them. This function will skip the remaining data sources as soon as the user is 
+  ///
+  /// Iterative goes through all the [`DataSource`]s checking if the user can be authenticated by
+  /// any of them. This function will skip the remaining data sources as soon as the user is
   /// authenticated.
-  /// 
+  ///
   /// # Arguments
-  /// 
+  ///
   /// - `login_form`: A [`LoginForm`] containing the users username and password.
-  /// 
+  ///
   /// # Returns
-  /// 
-  /// An [`Option`] that contains the [`UserData`] entity if the authentication was successful, 
+  ///
+  /// An [`Option`] that contains the [`UserData`] entity if the authentication was successful,
   /// [`None`] otherwise.
-  /// 
+  ///
   pub(crate) async fn authenticate(&self, login_form: LoginForm) -> Option<UserData> {
     for data_source in self.data_sources.iter() {
       if let Ok(ud) = data_source.authenticate(&login_form).await {

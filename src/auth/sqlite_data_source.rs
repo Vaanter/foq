@@ -104,7 +104,10 @@ impl DataSource for SqliteDataSource {
       )?;
       match FileSystemView::new_option(PathBuf::from(&view.root), &view.label, permissions) {
         Ok(v) => user_data.add_view(v),
-        Err(_) => warn!("Failed to load view, the path may not exist! View: {:?}", view)
+        Err(_) => warn!(
+          "Failed to load view, the path may not exist! View: {:?}",
+          view
+        ),
       }
     }
 
@@ -157,7 +160,7 @@ pub(crate) mod tests {
 
     let result = data_source.authenticate(&form).await;
     let Err(AuthError::UserNotFoundError) = result else {
-      panic!("Expected UserNotFound error!");
+      panic!("Expected UserNotFound error! Got: {:?}", result);
     };
 
     Ok(())
@@ -174,7 +177,7 @@ pub(crate) mod tests {
 
     let result = data_source.authenticate(&form).await;
     let Err(AuthError::InvalidCredentials) = result else {
-      panic!("Expected UserNotFound error!");
+      panic!("Expected InvalidCredentials error! Got: {:?}", result);
     };
 
     Ok(())
