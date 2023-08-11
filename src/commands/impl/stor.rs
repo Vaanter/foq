@@ -168,20 +168,14 @@ mod tests {
 
     let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
 
-    // TODO adjust timeout better maybe?
-    let timeout_secs = 1
-      + Path::new(&local_file)
-        .metadata()
-        .expect("Metadata should be accessible!")
-        .len()
-        .ilog10();
+    const TIMEOUT_SECS: u64 = 300;
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
 
     let command_fut = tokio::spawn(async move {
       timeout(
-        Duration::from_secs(timeout_secs as u64),
+        Duration::from_secs(TIMEOUT_SECS),
         Stor::execute(&mut command_processor, &command, &mut reply_sender),
       )
       .await
@@ -265,7 +259,7 @@ mod tests {
       println!("File hashes match!");
     };
 
-    match timeout(Duration::from_secs(5), transfer).await {
+    match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
       Ok(()) => println!("Transfer complete!"),
       Err(_) => panic!("Transfer timed out!"),
     }

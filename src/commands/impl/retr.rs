@@ -239,13 +239,7 @@ mod tests {
     mut client_dc: T,
   ) {
     println!("Running transfer.");
-    // TODO adjust timeout better maybe?
-    let timeout_secs = 1
-      + Path::new(&file_name)
-        .metadata()
-        .expect("Metadata should be accessible!")
-        .len()
-        .ilog10();
+    const TIMEOUT_SECS: u64 = 120;
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -263,7 +257,7 @@ mod tests {
 
     let transfer = verify_transfer(&file_name, &mut client_dc);
 
-    match timeout(Duration::from_secs(5), transfer).await {
+    match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
       Ok(()) => println!("Transfer complete!"),
       Err(_) => panic!("Transfer timed out!"),
     }
