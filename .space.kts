@@ -5,7 +5,7 @@
 */
 
 job("Build, latest") {
-    container(displayName = "Run script", image = "rustlang/rust:latest") {
+    container(displayName = "Run script", image = "rust:latest") {
         shellScript {
             content = """
                 set -e
