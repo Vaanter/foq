@@ -4,8 +4,8 @@
 * For more info, see https://www.jetbrains.com/help/space/automation.html
 */
 
-job("Build, run tests, and publish") {
-    container(displayName = "Run script", image = "rustlang/rust:nightly") {
+job("Build, latest") {
+    container(displayName = "Run script", image = "rustlang/rust:latest") {
         shellScript {
             content = """
                 set -e
