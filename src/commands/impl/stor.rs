@@ -279,21 +279,29 @@ mod tests {
   #[tokio::test]
   async fn two_kib_test() {
     const LOCAL_FILE: &'static str = "test_files/2KiB.txt";
-    let remote_file = format!("{}.txt", Uuid::new_v4().as_hyphenated());
+    let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(LOCAL_FILE, &remote_file).await;
   }
 
   #[tokio::test]
   async fn test_one_mib() {
     const LOCAL_FILE: &'static str = "test_files/1MiB.txt";
-    let remote_file = format!("{}.txt", Uuid::new_v4().as_hyphenated());
+    let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    common(LOCAL_FILE, &remote_file).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn one_gib_test() {
+    const LOCAL_FILE: &'static str = "test_files/1GiB.txt";
+    let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(LOCAL_FILE, &remote_file).await;
   }
 
   #[tokio::test]
   async fn test_ten_paragraphs() {
     const LOCAL_FILE: &'static str = "test_files/lorem_10_paragraphs.txt";
-    let remote_file = format!("{}.txt", Uuid::new_v4().as_hyphenated());
+    let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(LOCAL_FILE, &remote_file).await;
   }
 

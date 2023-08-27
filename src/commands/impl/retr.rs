@@ -324,6 +324,13 @@ mod tests {
   }
 
   #[tokio::test]
+  #[ignore]
+  async fn one_gib_test() {
+    const FILE_NAME: &'static str = "test_files/1GiB.txt";
+    common_tcp(FILE_NAME).await;
+  }
+
+  #[tokio::test]
   async fn two_kib_quic_test() {
     const FILE_NAME: &'static str = "test_files/2KiB.txt";
     timeout(Duration::from_secs(2), common_quic(FILE_NAME))
@@ -340,6 +347,20 @@ mod tests {
   #[tokio::test]
   async fn ten_paragraphs_quic_test() {
     const FILE_NAME: &'static str = "test_files/lorem_10_paragraphs.txt";
+    common_quic(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn hundred_mib_quic_test() {
+    const FILE_NAME: &'static str = "test_files/100MiB.txt";
+    common_quic(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn one_gib_quic_test() {
+    const FILE_NAME: &'static str = "test_files/1GiB.txt";
     common_quic(FILE_NAME).await;
   }
 
