@@ -21,7 +21,6 @@ job("Build Windows on host") {
         requirements {
             os {
                 type = OSType.Windows
-                arch = "x86_64"
             }
         }
 
