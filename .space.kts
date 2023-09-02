@@ -11,6 +11,7 @@ job("Build Linux on latest container") {
                 set -e
                 # Build the Rust project
                 cargo build --release --verbose
+                cargo test --release --verbose
             """
         }
 
@@ -39,6 +40,7 @@ job("Build Windows on host") {
         shellScript {
             content = """
                 cargo build --release --verbose
+                cargo test --release --verbose
             """
         }
 
