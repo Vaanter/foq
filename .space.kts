@@ -80,7 +80,7 @@ job("Build Windows MSVC x86_64 with Cross") {
 
         fileArtifacts {
             // Local path to artifact relative to working dir
-            localPath = "target/x86_64-pc-windows-msvc/release/foq"
+            localPath = "target/x86_64-pc-windows-msvc/release/foq.exe"
             // Don't fail job if artifact is not found
             optional = true
             // Target path to artifact in file repository.
