@@ -3,7 +3,7 @@
 //! The user has a set of permissions which specify which operations are permitted.
 
 use std::collections::HashSet;
-use std::fs::ReadDir;
+use std::fs::{create_dir_all, ReadDir};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 
@@ -208,6 +208,28 @@ impl FileSystemView {
     self.change_working_directory("..")
   }
 
+  pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
+    let path = path.into().replace("\\", "/");
+
+    if !self.permissions.contains(&UserPermission::CREATE) {
+      return Err(IoError::PermissionError);
+    }
+    let mut virtual_path = self.display_path.clone();
+
+    let new_directory_path = if path.starts_with("/") {
+      self.root.join(&path[1..])
+    } else {
+      virtual_path.push_str("/");
+      self.current_path.join(&path)
+    };
+
+    virtual_path.push_str(&path);
+
+    return create_dir_all(&new_directory_path)
+      .map(|_| virtual_path)
+      .map_err(|e| FileSystemView::map_error(e));
+  }
+
   /// Opens a file with the specified path and options.
   ///
   /// This function asynchronously opens a file using the provided `path` and `options`, and
@@ -260,11 +282,7 @@ impl FileSystemView {
 
     let file = OpenOptions::from(options).open(&path).await.map_err(|e| {
       warn!("Error opening file: {}", e);
-      match e.kind() {
-        ErrorKind::NotFound => IoError::NotFoundError(e.to_string()),
-        ErrorKind::PermissionDenied => IoError::PermissionError,
-        _ => IoError::OsError(e),
-      }
+      FileSystemView::map_error(e)
     });
 
     return if path.is_dir() {
@@ -473,7 +491,11 @@ impl FileSystemView {
 #[cfg(test)]
 pub(crate) mod tests {
   use std::collections::HashSet;
-  use std::env::current_dir;
+  use std::env::{current_dir, temp_dir};
+  use std::fs::remove_dir_all;
+  use std::path::PathBuf;
+
+  use uuid::Uuid;
 
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::{EntryData, EntryType};
@@ -857,6 +879,120 @@ pub(crate) mod tests {
     let listing = view.list_dir("/").unwrap();
 
     validate_listing(label, &listing, 9, permissions.len(), 4, 5);
+  }
+
+  #[test]
+  fn create_dir_relative_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let path = Uuid::new_v4().to_string();
+    let dir_path = temp_dir().join(&path);
+    let d = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(&path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}/{}", &label, &path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_relative_multi_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let path_root = Uuid::new_v4().to_string();
+    let path = format!("{}/{}", &path_root, Uuid::new_v4());
+    let dir_path = temp_dir().join(&path_root);
+    let d = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(&path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}/{}", label, &path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_absolute_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let path = format!("/{}", Uuid::new_v4());
+    let dir_path = temp_dir().join(&path[1..]);
+    let d = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(&path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_absolute_multi_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let path_root = Uuid::new_v4().to_string();
+    let path = format!("/{}/{}", path_root, Uuid::new_v4());
+    let dir_path = temp_dir().join(&path_root);
+    let d = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(&path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_then_cwd_unicode_absolute_multi_test() {
+    let permissions = HashSet::from([UserPermission::READ, UserPermission::CREATE]);
+    let root = temp_dir();
+    let label = "test";
+    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+
+    let path_root = "测试目录";
+    let path = format!("/{}/测试子目录", path_root);
+    let dir_path = temp_dir().join(&path_root);
+    let d = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(&path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
+
+    assert!(view.change_working_directory(path_root).unwrap());
+    assert!(view.change_working_directory("..").unwrap());
+    assert_eq!(format!("/{label}"), view.display_path);
+    assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
+    assert_eq!(root.canonicalize().unwrap(), view.root);
+    drop(d);
+  }
+
+  struct DirCleanup<'a> {
+    directory_path: &'a PathBuf,
+  }
+
+  impl<'a> DirCleanup<'a> {
+    fn new(directory_path: &'a PathBuf) -> Self {
+      DirCleanup {
+        directory_path
+      }
+    }
+  }
+
+  impl<'a> Drop for DirCleanup<'a> {
+    fn drop(&mut self) {
+      if let Err(remove_result) = remove_dir_all(&self.directory_path) {
+        eprintln!("Failed to remove directory: {}", remove_result);
+      }
+    }
   }
 
   pub(crate) fn validate_listing(
