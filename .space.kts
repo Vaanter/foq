@@ -4,54 +4,87 @@
 * For more info, see https://www.jetbrains.com/help/space/automation.html
 */
 
-job("Build Linux on latest container") {
+job("Test Linux on latest container") {
     container(displayName = "Run script", image = "rust:latest") {
         shellScript {
             content = """
                 set -e
-                # Build the Rust project
-                cargo build --release --verbose
+                # Run tests with release optimizations
                 cargo test --release --verbose
+            """
+        }
+    }
+}
+
+job("Build Linux aarch64 with Cross") {
+    host(displayName = "Cross") {
+        requirements {
+            workerTags("cross")
+        }
+
+        shellScript {
+            content = """
+                cross build --release --target aarch64-unknown-linux-gnu --verbose
             """
         }
 
         fileArtifacts {
-            val artifactName = "foq"
             // Local path to artifact relative to working dir
-            localPath = "target/release/$artifactName"
+            localPath = "target/aarch64-unknown-linux-gnu/release/foq"
             // Don't fail job if artifact is not found
             optional = true
             // Target path to artifact in file repository.
-            remotePath = "{{ run:number }}/$artifactName"
+            remotePath = "foq-aarch64-unknown-linux-gnu"
             // Upload condition (job run result): SUCCESS (default), ERROR, ALWAYS
             onStatus = OnStatus.SUCCESS
         }
     }
 }
 
-job("Build Windows on host") {
-    host(displayName = "Windows") {
+job("Build Linux x86_64 with Cross") {
+    host(displayName = "Cross") {
         requirements {
-            os {
-                type = OSType.Windows
-            }
+            workerTags("cross")
         }
 
         shellScript {
             content = """
-                cargo build --release --verbose
-                cargo test --release --verbose
+                cross build --release --target x86_64-unknown-linux-gnu --verbose
             """
         }
 
         fileArtifacts {
-            val artifactName = "foq.exe"
             // Local path to artifact relative to working dir
-            localPath = "target/release/$artifactName"
+            localPath = "target/x86_64-unknown-linux-gnu/release/foq"
             // Don't fail job if artifact is not found
             optional = true
             // Target path to artifact in file repository.
-            remotePath = "{{ run:number }}/$artifactName"
+            remotePath = "foq-x86_64-unknown-linux-gnu"
+            // Upload condition (job run result): SUCCESS (default), ERROR, ALWAYS
+            onStatus = OnStatus.SUCCESS
+        }
+    }
+}
+
+job("Build Windows MSVC x86_64 with Cross") {
+    host(displayName = "Cross") {
+        requirements {
+            workerTags("cross")
+        }
+
+        shellScript {
+            content = """
+                cross build --release --target x86_64-pc-windows-msvc --verbose
+            """
+        }
+
+        fileArtifacts {
+            // Local path to artifact relative to working dir
+            localPath = "target/x86_64-pc-windows-msvc/release/foq"
+            // Don't fail job if artifact is not found
+            optional = true
+            // Target path to artifact in file repository.
+            remotePath = "foq-x86_64-pc-windows-msvc.exe"
             // Upload condition (job run result): SUCCESS (default), ERROR, ALWAYS
             onStatus = OnStatus.SUCCESS
         }
