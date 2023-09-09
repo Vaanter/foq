@@ -1,20 +1,20 @@
 use std::collections::HashSet;
 use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use derive_builder::Builder;
-use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
+use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use strum::IntoEnumIterator;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::net::TcpStream;
+use tokio::sync::{Mutex, RwLock};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -28,6 +28,7 @@ use crate::auth::user_permission::UserPermission;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
+use crate::global_context::{CERTS, KEY};
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
 use crate::handlers::reply_sender::ReplySend;
@@ -35,7 +36,6 @@ use crate::io::file_system_view::FileSystemView;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::session_properties::SessionProperties;
-use crate::utils::tls_utils::{load_certs, load_keys};
 
 pub(crate) struct TestReplySender {
   tx: Sender<Reply>,
@@ -95,10 +95,6 @@ impl DataSource for TestDataSource {
     };
   }
 }
-
-pub static CERT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/cert.pem");
-
-pub static KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/key.pem");
 
 pub(crate) fn create_test_auth_provider(users: Vec<UserData>) -> AuthProvider {
   let mut provider = AuthProvider::new();
@@ -185,12 +181,10 @@ pub(crate) fn create_test_client_config() -> ClientConfig {
 }
 
 pub(crate) fn create_test_server_config() -> ServerConfig {
-  let cert = load_certs(Path::new(CERT_PATH)).unwrap();
-  let mut key = load_keys(Path::new(KEY_PATH)).unwrap();
   ServerConfig::builder()
     .with_safe_defaults()
     .with_no_client_auth()
-    .with_single_cert(cert, key.remove(0))
+    .with_single_cert(CERTS.clone(), KEY.clone())
     .unwrap()
 }
 
