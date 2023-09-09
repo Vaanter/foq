@@ -1,7 +1,11 @@
 /target
 /.idea
-/certs
+certs/*
+!certs/test-cert.pem
+!certs/test-key.pem
+!certs/test-ca-chain.pem
 /coverage
 /docs
 
 *.profraw
+foq.log

@@ -939,7 +939,7 @@ mod tests {
 
     let listing = root.list_dir("..").unwrap();
 
-    validate_listing(&format!("{}", label1), &listing, 5, permissions.len(), 3, 1);
+    validate_listing(&format!("{}", label1), &listing, 4, permissions.len(), 3, 1);
   }
 
   pub(crate) fn create_root(views: Vec<FileSystemView>) -> BTreeMap<String, FileSystemView> {

@@ -743,7 +743,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir(".").unwrap();
 
-    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 4, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -755,7 +755,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("test_files").unwrap();
 
-    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 4, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -779,7 +779,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/test_files").unwrap();
 
-    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 4, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -850,7 +850,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("..").unwrap();
 
-    validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
+    validate_listing("test_files", &listing, 4, permissions.len(), 3, 1);
   }
 
   #[test]
@@ -878,7 +878,7 @@ pub(crate) mod tests {
 
     let listing = view.list_dir("/").unwrap();
 
-    validate_listing(label, &listing, 9, permissions.len(), 4, 5);
+    validate_listing(label, &listing, 9, permissions.len(), 4, 4);
   }
 
   #[test]
