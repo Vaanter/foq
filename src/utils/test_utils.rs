@@ -1,22 +1,27 @@
-use std::collections::HashSet;
-use std::io::Error;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-
 use async_trait::async_trait;
 use derive_builder::Builder;
-use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
+use once_cell::sync::Lazy;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
+use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
+use std::cmp::min;
+use std::collections::HashSet;
+use std::env::temp_dir;
+use std::fs::{remove_dir_all, remove_file};
+use std::io::Error;
+use std::iter::Iterator;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use strum::IntoEnumIterator;
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
-use tokio::sync::{Mutex, RwLock};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
 use crate::auth::auth_error::AuthError;
@@ -92,6 +97,41 @@ impl DataSource for TestDataSource {
       Ok(user.clone())
     } else {
       Err(AuthError::UserNotFoundError)
+    };
+  }
+}
+
+pub(crate) struct DirCleanup<'a> {
+  directory_path: &'a PathBuf,
+}
+
+impl<'a> DirCleanup<'a> {
+  pub(crate) fn new(directory_path: &'a PathBuf) -> Self {
+    DirCleanup { directory_path }
+  }
+}
+
+impl<'a> Drop for DirCleanup<'a> {
+  fn drop(&mut self) {
+    if let Err(remove_result) = remove_dir_all(&self.directory_path) {
+      eprintln!("Failed to remove directory: {}", remove_result);
+    }
+  }
+}
+
+// Removes the temp file used in tests when dropped
+pub(crate) struct TempFileCleanup<'a>(&'a str);
+
+impl<'a> TempFileCleanup<'a> {
+  pub(crate) fn new(path: &'a str) -> Self {
+    TempFileCleanup { 0: path }
+  }
+}
+
+impl<'a> Drop for TempFileCleanup<'a> {
+  fn drop(&mut self) {
+    if let Err(e) = remove_file(temp_dir().join(self.0)) {
+      eprintln!("Failed to remove: {}, {}", self.0, e);
     };
   }
 }
@@ -301,4 +341,30 @@ pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
     .with_no_client_auth();
   client_config.alpn_protocols = vec![alpn.as_bytes().to_vec()];
   client_config
+}
+
+pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
+  println!("Generating test file, size: {}B, path: {:?}", amount, output_file.as_os_str());
+  const MAX_CHUNK_SIZE: usize = 32864;
+  let file = OpenOptions::new()
+    .create(true)
+    .write(true)
+    .truncate(true)
+    .append(false)
+    .open(output_file)
+    .await
+    .unwrap();
+  let mut output_writer = BufWriter::with_capacity(MAX_CHUNK_SIZE, file);
+
+  let mut remaining = amount;
+  while remaining > 0 {
+    let chunk_size = min(remaining, MAX_CHUNK_SIZE);
+    let chunk = vec![0u8; chunk_size];
+    output_writer
+      .write(&chunk)
+      .await
+      .expect("Writing chunk to test file should succeed");
+    output_writer.flush().await.unwrap();
+    remaining -= chunk_size;
+  }
 }

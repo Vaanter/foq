@@ -223,6 +223,10 @@ impl FileSystemView {
       self.current_path.join(&path)
     };
 
+    if !new_directory_path.starts_with(&self.root) {
+      return Err(IoError::InvalidPathError(String::from("Invalid path!")));
+    }
+
     virtual_path.push_str(&path);
 
     return create_dir_all(&new_directory_path)
@@ -492,8 +496,6 @@ impl FileSystemView {
 pub(crate) mod tests {
   use std::collections::HashSet;
   use std::env::{current_dir, temp_dir};
-  use std::fs::remove_dir_all;
-  use std::path::PathBuf;
 
   use uuid::Uuid;
 
@@ -502,6 +504,7 @@ pub(crate) mod tests {
   use crate::io::error::IoError;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+  use crate::utils::test_utils::DirCleanup;
 
   #[test]
   fn derives_test() {
@@ -899,6 +902,21 @@ pub(crate) mod tests {
   }
 
   #[test]
+  fn create_dir_relative_invalid_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+
+    let path = "..";
+
+    let result = view.create_directory(path);
+    let Err(IoError::InvalidPathError(_)) = result else {
+      panic!("Expected InvalidPath error, Got: {:?}", result);
+    };
+  }
+
+  #[test]
   fn create_dir_relative_multi_test() {
     let permissions = HashSet::from([UserPermission::CREATE]);
     let root = temp_dir();
@@ -973,26 +991,6 @@ pub(crate) mod tests {
     assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
     assert_eq!(root.canonicalize().unwrap(), view.root);
     drop(d);
-  }
-
-  struct DirCleanup<'a> {
-    directory_path: &'a PathBuf,
-  }
-
-  impl<'a> DirCleanup<'a> {
-    fn new(directory_path: &'a PathBuf) -> Self {
-      DirCleanup {
-        directory_path
-      }
-    }
-  }
-
-  impl<'a> Drop for DirCleanup<'a> {
-    fn drop(&mut self) {
-      if let Err(remove_result) = remove_dir_all(&self.directory_path) {
-        eprintln!("Failed to remove directory: {}", remove_result);
-      }
-    }
   }
 
   pub(crate) fn validate_listing(

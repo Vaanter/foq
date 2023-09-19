@@ -116,7 +116,6 @@ impl Executable for Stor {
 mod tests {
   use std::collections::HashSet;
   use std::env::{current_dir, temp_dir};
-  use std::fs::remove_file;
   use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
@@ -140,17 +139,18 @@ mod tests {
   use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
-    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
-    CommandProcessorSettingsBuilder, TestReplySender, LOCALHOST,
+    generate_test_file, open_tcp_data_channel, receive_and_verify_reply,
+    setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TempFileCleanup,
+    TestReplySender, LOCALHOST,
   };
 
-  async fn common(local_file: &'static str, remote_file: &str) {
+  async fn common(local_file: &str, remote_file: &str) {
     if !Path::new(&local_file).exists() {
       panic!("Test file does not exist! Cannot proceed!");
     }
     println!("Remote file: {:?}", temp_dir().join(&remote_file));
 
-    let _cleanup = Cleanup { 0: &remote_file };
+    let _cleanup = TempFileCleanup::new(&remote_file);
 
     let command = Command::new(Commands::STOR, remote_file);
 
@@ -265,17 +265,6 @@ mod tests {
     }
   }
 
-  // Removes the temp file used in tests when dropped
-  struct Cleanup<'a>(&'a str);
-
-  impl<'a> Drop for Cleanup<'a> {
-    fn drop(&mut self) {
-      if let Err(e) = remove_file(temp_dir().join(self.0)) {
-        eprintln!("Failed to remove: {}, {}", self.0, e);
-      };
-    }
-  }
-
   #[tokio::test]
   async fn two_kib_test() {
     const LOCAL_FILE: &'static str = "test_files/2KiB.txt";
@@ -293,9 +282,12 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_test() {
-    const LOCAL_FILE: &'static str = "test_files/1GiB.txt";
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
-    common(LOCAL_FILE, &remote_file).await;
+    common(file_path_str, &remote_file).await;
   }
 
   #[tokio::test]

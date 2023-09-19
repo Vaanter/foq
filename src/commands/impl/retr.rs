@@ -114,12 +114,14 @@ impl Executable for Retr {
 #[cfg(test)]
 mod tests {
   use std::collections::HashSet;
-  use std::env::current_dir;
+  use std::env::{current_dir, temp_dir};
   use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
 
   use blake3::Hasher;
+  use quinn::TransportConfig;
+  use rustls::KeyLogFile;
   use s2n_quic::client::Connect;
   use s2n_quic::provider::tls::default::Client as TlsClient;
   use s2n_quic::Client;
@@ -129,6 +131,7 @@ mod tests {
   use tokio::sync::Mutex;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
+  use uuid::Uuid;
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
@@ -141,30 +144,42 @@ mod tests {
   use crate::listeners::quic_only_listener::QuicOnlyListener;
   use crate::session::command_processor::CommandProcessor;
   use crate::utils::test_utils::{
-    create_tls_client_config, open_tcp_data_channel, receive_and_verify_reply,
+    create_tls_client_config, generate_test_file, open_tcp_data_channel, receive_and_verify_reply,
     setup_test_command_processor, setup_test_command_processor_custom,
-    CommandProcessorSettingsBuilder, TestReplySender, LOCALHOST,
+    CommandProcessorSettingsBuilder, TempFileCleanup, TestReplySender, LOCALHOST,
   };
 
-  async fn common_tcp(file_name: &'static str) {
+  async fn common_tcp(file_name: &str) {
+    if !Path::new(&file_name).exists() {
+      panic!("Test file does not exist! Cannot proceed!");
+    }
+
+    let command = Command::new(Commands::RETR, file_name);
+
     let wrapper = StandardDataChannelWrapper::new(LOCALHOST);
-    let (command, mut command_processor) = setup(&file_name, wrapper);
+    let mut command_processor = setup(wrapper);
     let client_dc = open_tcp_data_channel(&mut command_processor).await;
     transfer(&file_name, command, command_processor, client_dc).await;
   }
 
-  async fn common_quic(file_name: &'static str) {
+  async fn common_quic(file_name: &str) {
+    if !Path::new(&file_name).exists() {
+      panic!("Test file does not exist! Cannot proceed!");
+    }
+
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
     let token = CancellationToken::new();
+    let command = Command::new(Commands::RETR, file_name);
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
       let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
-      let (command, command_processor) = setup(&file_name, wrapper);
-      (command, command_processor)
+      setup(wrapper)
     });
 
-    let tls_client = TlsClient::new(create_tls_client_config("ftpoq-1"));
+    let mut tls_config = create_tls_client_config("ftpoq-1");
+    tls_config.key_log = Arc::new(KeyLogFile::new());
+    let tls_client = TlsClient::new(tls_config);
 
     let client = Client::builder()
       .with_tls(tls_client)
@@ -182,7 +197,9 @@ mod tests {
       Err(_) => panic!("Client failed to connect to the server in time!"),
     };
 
-    let (command, command_processor) = match timeout(Duration::from_secs(1), test_handle).await {
+    client_connection.keep_alive(true).unwrap();
+
+    let command_processor = match timeout(Duration::from_secs(1), test_handle).await {
       Ok(Ok(c)) => c,
       Ok(Err(_)) => panic!("Future error!"),
       Err(_) => panic!("Connection setup failed!"),
@@ -204,16 +221,63 @@ mod tests {
     transfer(&file_name, command, command_processor, client_dc).await;
   }
 
-  fn setup<T: DataChannelWrapper + 'static>(
-    file_name: &str,
-    data_channel_wrapper: T,
-  ) -> (Command, CommandProcessor) {
-    eprintln!("Running setup.");
+  async fn common_quic_quinn(file_name: &str) {
     if !Path::new(&file_name).exists() {
       panic!("Test file does not exist! Cannot proceed!");
     }
 
+    let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
+    let addr = listener.server.local_addr().unwrap();
     let command = Command::new(Commands::RETR, file_name);
+    let token = CancellationToken::new();
+    let test_handle = tokio::spawn(async move {
+      let connection = listener.accept(token.clone()).await.unwrap();
+      let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
+      setup(wrapper)
+    });
+
+    let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
+
+    let mut tls_config = create_tls_client_config("ftpoq-1");
+    tls_config.key_log = Arc::new(KeyLogFile::new());
+    let mut transport_config = TransportConfig::default();
+    transport_config.keep_alive_interval(Some(Duration::from_secs(5)));
+    let mut client_config = quinn::ClientConfig::new(Arc::new(tls_config));
+    client_config.transport_config(Arc::new(transport_config));
+    quinn_client.set_default_client_config(client_config);
+
+    let connection = match quinn_client.connect(addr, "localhost").unwrap().await {
+      Ok(conn) => conn,
+      Err(e) => {
+        panic!("Client failed to connect to the server! {}", e);
+      }
+    };
+
+    let command_processor = match timeout(Duration::from_secs(1), test_handle).await {
+      Ok(Ok(c)) => c,
+      Ok(Err(_)) => panic!("Future error!"),
+      Err(_) => panic!("Connection setup failed!"),
+    };
+
+    let _ = command_processor
+      .data_wrapper
+      .lock()
+      .await
+      .open_data_stream()
+      .await
+      .unwrap();
+
+    let (_, cliend_dc_recv) = match connection.open_bi().await {
+      Ok(client_dc) => client_dc,
+      Err(e) => panic!("Failed to open data channel! Error: {}", e),
+    };
+
+    transfer(&file_name, command, command_processor, cliend_dc_recv).await;
+    //println!("stats: {:#?}", connection);
+  }
+
+  fn setup<T: DataChannelWrapper + 'static>(data_channel_wrapper: T) -> CommandProcessor {
+    eprintln!("Running setup.");
 
     let label = "test_files".to_string();
 
@@ -229,7 +293,7 @@ mod tests {
     let mut command_processor = setup_test_command_processor_custom(&settings);
     command_processor.data_wrapper = Arc::new(Mutex::new(data_channel_wrapper));
     println!("Setup completed.");
-    (command, command_processor)
+    command_processor
   }
 
   async fn transfer<T: AsyncRead + Unpin>(
@@ -239,7 +303,7 @@ mod tests {
     mut client_dc: T,
   ) {
     println!("Running transfer.");
-    const TIMEOUT_SECS: u64 = 120;
+    const TIMEOUT_SECS: u64 = 600;
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -277,14 +341,15 @@ mod tests {
       .await
       .expect("Test file must exist!");
 
-    let mut transfer_buffer = [0; 1024];
-    let mut local_buffer = [0; 1024];
+    const BUFFER_MAX: usize = 8096;
+    let mut transfer_buffer = [0; BUFFER_MAX];
     loop {
       let transfer_len = match client_dc.read(&mut transfer_buffer).await {
         Ok(len) => len,
         Err(e) => panic!("File transfer failed! {e}"),
       };
-      let local_len = match local_file.read(&mut local_buffer).await {
+      let mut local_buffer = vec![0u8; transfer_len];
+      let local_len = match local_file.read_exact(&mut local_buffer).await {
         Ok(len) => len,
         Err(e) => panic!("Failed to read local file! {e}"),
       };
@@ -302,37 +367,40 @@ mod tests {
       sent_file_hasher.finalize(),
       "File hashes do not match!"
     );
-    println!("File hashes match!");
+    println!("File hashes match! Hash: {}", sent_file_hasher.finalize());
   }
 
   #[tokio::test]
   async fn test_two_kib() {
-    const FILE_NAME: &'static str = "test_files/2KiB.txt";
+    const FILE_NAME: &str = "test_files/2KiB.txt";
     common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn test_one_mib() {
-    const FILE_NAME: &'static str = "test_files/1MiB.txt";
+    const FILE_NAME: &str = "test_files/1MiB.txt";
     common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn test_ten_paragraphs() {
-    const FILE_NAME: &'static str = "test_files/lorem_10_paragraphs.txt";
+    const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_test() {
-    const FILE_NAME: &'static str = "test_files/1GiB.txt";
-    common_tcp(FILE_NAME).await;
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    common_tcp(file_path_str).await;
   }
 
   #[tokio::test]
   async fn two_kib_quic_test() {
-    const FILE_NAME: &'static str = "test_files/2KiB.txt";
+    const FILE_NAME: &str = "test_files/2KiB.txt";
     timeout(Duration::from_secs(2), common_quic(FILE_NAME))
       .await
       .unwrap();
@@ -340,28 +408,94 @@ mod tests {
 
   #[tokio::test]
   async fn one_mib_quic_test() {
-    const FILE_NAME: &'static str = "test_files/1MiB.txt";
+    const FILE_NAME: &str = "test_files/1MiB.txt";
     common_quic(FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_quic_test() {
-    const FILE_NAME: &'static str = "test_files/lorem_10_paragraphs.txt";
+    const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_quic(FILE_NAME).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_test() {
-    const FILE_NAME: &'static str = "test_files/100MiB.txt";
-    common_quic(FILE_NAME).await;
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((100 * 2u64.pow(20)) as usize, Path::new(file_path_str)).await;
+    common_quic(file_path_str).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_test() {
-    const FILE_NAME: &'static str = "test_files/1GiB.txt";
-    common_quic(FILE_NAME).await;
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    common_quic(file_path_str).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn five_gib_quic_test() {
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((5 * 2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    common_quic(file_path_str).await;
+  }
+
+  #[tokio::test]
+  async fn two_kib_quic_quinn_test() {
+    const FILE_NAME: &str = "test_files/2KiB.txt";
+    timeout(Duration::from_secs(2), common_quic_quinn(FILE_NAME))
+      .await
+      .unwrap();
+  }
+
+  #[tokio::test]
+  async fn one_mib_quic_quinn_test() {
+    const FILE_NAME: &str = "test_files/1MiB.txt";
+    common_quic_quinn(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  async fn ten_paragraphs_quic_quinn_test() {
+    const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
+    common_quic_quinn(FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn hundred_mib_quic_quinn_test() {
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((200 * 2u64.pow(20)) as usize, Path::new(file_path_str)).await;
+    common_quic_quinn(file_path_str).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn one_gib_quic_quinn_test() {
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    common_quic_quinn(file_path_str).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn five_gib_quic_quinn_test() {
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path_str = file_path.to_str().unwrap();
+    let _cleanup = TempFileCleanup::new(file_path_str);
+    generate_test_file((5 * 2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    common_quic_quinn(file_path_str).await;
   }
 
   #[tokio::test]
