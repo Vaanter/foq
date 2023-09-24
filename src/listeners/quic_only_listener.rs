@@ -39,10 +39,16 @@ impl QuicOnlyListener {
       return Err(Error::new(ErrorKind::Unsupported, "IPv6 is not supported!"));
     }
 
-    let io = IoBuilder::default().with_receive_address(addr)?.build()?;
+    let io = IoBuilder::default()
+      .with_receive_address(addr)?
+      .with_send_buffer_size(50 * 2usize.pow(20))?
+      .with_recv_buffer_size(50 * 2usize.pow(20))?
+      .with_internal_send_buffer_size(50 * 2usize.pow(20))?
+      .with_internal_recv_buffer_size(50 * 2usize.pow(20))?
+      .build()?;
     let limits = Limits::new()
       .with_max_idle_timeout(Duration::from_secs(30))
-      .unwrap()
+      .map_err(|e| Error::new(ErrorKind::Other, e))?
       .start()
       .unwrap();
 

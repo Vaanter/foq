@@ -100,6 +100,7 @@ pub(crate) fn get_change_directory_reply(cd_result: Result<bool, IoError>) -> Re
   };
 }
 
+#[tracing::instrument(skip_all)]
 pub(crate) async fn transfer_data<F, T>(from: &mut F, to: &mut T, buffer: &mut [u8]) -> bool
 where
   F: AsyncRead + Unpin,
@@ -109,13 +110,13 @@ where
     let result = from.read(buffer).await;
     match result {
       Ok(n) => {
-        trace!("Read {n} bytes from server");
+        trace!("Read {n} bytes from source");
         let mut sent = 0;
         while sent < n {
           match to.write(&buffer[sent..n]).await {
             Ok(current_sent) => sent += current_sent,
             Err(e) => {
-              error!("Write to client failed! {e}");
+              error!("Write to target failed! {e}");
               break;
             }
           }
@@ -125,14 +126,14 @@ where
         }
       }
       Err(e) => {
-        error!("Failed to send server's data to client. {e}");
+        error!("Failed to send data to target. {e}");
         break false;
       }
     }
   };
-  debug!("Flushing data to client");
+  debug!("Flushing data to target");
   if let Err(e) = to.flush().await {
-    warn!("Failed to flush data to client data channel! {e}");
+    warn!("Failed to flush data to target! {e}");
     success = false;
   }
   success

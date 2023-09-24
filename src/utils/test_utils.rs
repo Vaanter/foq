@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use derive_builder::Builder;
-use once_cell::sync::Lazy;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
 use std::cmp::min;
@@ -21,7 +20,7 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, timeout};
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 use crate::auth::auth_error::AuthError;
