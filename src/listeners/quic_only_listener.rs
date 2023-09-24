@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rustls::ServerConfig;
+use s2n_quic::provider::congestion_controller::Bbr;
 use s2n_quic::provider::limits::{Limits, Provider};
 use s2n_quic::{
   provider::io::tokio::Builder as IoBuilder, provider::tls::default::Server as TlsServer,
@@ -45,6 +46,8 @@ impl QuicOnlyListener {
       .start()
       .unwrap();
 
+    let congestion_controller = Bbr::default();
+
     let certs = CERTS.clone();
     let key = KEY.clone();
 
@@ -62,6 +65,8 @@ impl QuicOnlyListener {
     let tls_server = TlsServer::new(config);
 
     let server = Server::builder()
+      .with_congestion_controller(congestion_controller)
+      .unwrap()
       .with_tls(tls_server)
       .unwrap()
       .with_io(io)
