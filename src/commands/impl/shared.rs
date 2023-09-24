@@ -85,6 +85,13 @@ fn map_error_to_reply(error: IoError) -> Reply {
   };
 }
 
+pub(crate) fn get_create_directory_reply(result: Result<String, IoError>) -> Reply {
+  return match result {
+    Ok(new_path) => Reply::new(ReplyCode::PathnameCreated, format!("\"{}\"", new_path)),
+    Err(error) => map_error_to_reply(error),
+  };
+}
+
 pub(crate) fn get_change_directory_reply(cd_result: Result<bool, IoError>) -> Reply {
   return match cd_result {
     Ok(true) => Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed"),

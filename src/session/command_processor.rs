@@ -12,6 +12,7 @@ use crate::commands::r#impl::cdup::Cdup;
 use crate::commands::r#impl::cwd::Cwd;
 use crate::commands::r#impl::feat::Feat;
 use crate::commands::r#impl::list::List;
+use crate::commands::r#impl::mkd::Mkd;
 use crate::commands::r#impl::mlsd::Mlsd;
 use crate::commands::r#impl::nlst::Nlst;
 use crate::commands::r#impl::noop::Noop;
@@ -80,6 +81,7 @@ impl CommandProcessor {
       Commands::CWD => Cwd::execute(self, &command, reply_sender).await,
       Commands::FEAT => Feat::execute(self, &command, reply_sender).await,
       Commands::LIST => List::execute(self, &command, reply_sender).await,
+      Commands::MKD => Mkd::execute(self, &command, reply_sender).await,
       Commands::NLST => Nlst::execute(self, &command, reply_sender).await,
       Commands::MLSD => Mlsd::execute(self, &command, reply_sender).await,
       Commands::NOOP => Noop::execute(self, &command, reply_sender).await,

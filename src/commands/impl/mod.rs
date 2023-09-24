@@ -4,6 +4,7 @@ pub(crate) mod cdup;
 pub(crate) mod cwd;
 pub(crate) mod feat;
 pub(crate) mod list;
+pub(crate) mod mkd;
 pub(crate) mod mlsd;
 pub(crate) mod nlst;
 pub(crate) mod noop;

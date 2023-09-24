@@ -171,6 +171,57 @@ impl FileSystemViewRoot {
     self.change_working_directory("..")
   }
 
+  pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
+    let path = path.into();
+    if self.file_system_views.is_none() {
+      // User is not logged in
+      return Err(IoError::UserError);
+    }
+
+    return if path.starts_with("/") {
+      let label = match path.split("/").nth(1) {
+        Some(l) => l,
+        None => return Err(IoError::SystemError),
+      };
+
+      let view = self.file_system_views.as_ref().unwrap().get(label);
+
+      let view = match view {
+        Some(v) => v,
+        None => return Err(IoError::SystemError),
+      };
+
+      let mut sub_path = path.split("/").skip(2).collect::<Vec<&str>>().join("/");
+      sub_path.insert(0, '/');
+      view.create_directory(sub_path)
+    } else {
+      match self.current_view {
+        Some(ref view) => match self.file_system_views.as_ref().unwrap().get(view) {
+          Some(view) => view.create_directory(path),
+          None => Err(IoError::SystemError),
+        },
+        None => {
+          let mut path_parts = path.splitn(2, "/");
+          let label = match path_parts.next() {
+            Some(l) => l,
+            None => return Err(IoError::SystemError),
+          };
+          let view = match self.file_system_views.as_ref().unwrap().get(label) {
+            Some(v) => v,
+            None => return Err(IoError::SystemError),
+          };
+          return if let Some(new_dir_path) = path_parts.next() {
+            view.create_directory(new_dir_path)
+          } else {
+            Err(IoError::InvalidPathError(String::from(
+              "Directory path is invalid",
+            )))
+          };
+        }
+      }
+    };
+  }
+
   /// Returns the path to current working directory.
   #[tracing::instrument(skip(self))]
   pub(crate) fn get_current_working_directory(&self) -> String {
@@ -409,6 +460,8 @@ impl FileSystemViewRoot {
 #[cfg(test)]
 mod tests {
   use std::collections::{BTreeMap, HashSet};
+  use std::env::temp_dir;
+  use uuid::Uuid;
 
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::EntryData;
@@ -417,6 +470,7 @@ mod tests {
   use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view_root::FileSystemViewRoot;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+  use crate::utils::test_utils::DirCleanup;
 
   #[tokio::test]
   async fn open_file_not_logged_in_test() {
@@ -724,6 +778,146 @@ mod tests {
         .display_path,
       format!("/{label}")
     );
+  }
+
+  #[test]
+  fn create_dir_relative_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+    let path_start = Uuid::new_v4().to_string();
+    let dir_path = temp_dir().join(&path_start);
+    let d = DirCleanup::new(&dir_path);
+    let test_path = format!("{}/{}", &label, &path_start);
+
+    let result = root.create_directory(&test_path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}", &test_path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_relative_multi_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+    let path_start = Uuid::new_v4().to_string();
+    let dir_path = temp_dir().join(&path_start);
+    let d = DirCleanup::new(&dir_path);
+    let test_path = format!("{}/{}/{}", &label, &path_start, Uuid::new_v4());
+
+    let result = root.create_directory(&test_path);
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}", &test_path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_relative_invalid_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+    let mut invalid_characters = vec![":", "|", "?", "<", ">", "*", "\0"];
+
+    let mut additional: Vec<String> = Vec::new();
+    if cfg!(windows) {
+      additional.extend(('\0'..='\u{001F}').map(|c| c.to_string()));
+    }
+    invalid_characters.extend(additional.iter().map(|c| c.as_str()));
+    for path_start in invalid_characters {
+      let dir_path = temp_dir().join(&path_start);
+      let d = DirCleanup::new(&dir_path);
+      let test_path = format!("{}/{}", &label, &path_start);
+
+      let result = root.create_directory(&test_path);
+      let Err(IoError::OsError(_)) = result else {
+        panic!(
+          "['{}'] Expected InvalidPath Error, Got {:?}",
+          path_start, result
+        );
+      };
+      drop(d);
+    }
+  }
+
+  #[test]
+  fn create_dir_absolute_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+    let path_start = Uuid::new_v4().to_string();
+    let dir_path = temp_dir().join(&path_start);
+    let d = DirCleanup::new(&dir_path);
+    let test_path = format!("/{}/{}", &label, &path_start);
+
+    let result = root.create_directory(&test_path);
+    assert!(result.is_ok());
+    assert_eq!(format!("{}", &test_path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_absolute_multi_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+    let path_start = Uuid::new_v4().to_string();
+    let dir_path = temp_dir().join(&path_start);
+    let d = DirCleanup::new(&dir_path);
+    let test_path = format!("/{}/{}/{}", &label, &path_start, Uuid::new_v4());
+
+    let result = root.create_directory(&test_path);
+    assert!(result.is_ok());
+    assert_eq!(format!("{}", &test_path), result.unwrap());
+    drop(d);
+  }
+
+  #[test]
+  fn create_dir_then_cwd_unicode_absolute_multi_test() {
+    let permissions = HashSet::from([UserPermission::CREATE]);
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label.clone(), permissions.clone());
+    let views = create_root(vec![view1.clone()]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    let path_start = "测试目录";
+    let dir_path = temp_dir().join(&path_start);
+    let d = DirCleanup::new(&dir_path);
+    let test_path = format!("/{}/{}", &label, &path_start);
+    let test_sub_path = "测试子目录";
+    let full_test_path = format!("{}/{}", &test_path, &test_sub_path);
+
+    let result = root.create_directory(&full_test_path);
+    assert!(result.is_ok());
+    assert_eq!(format!("{}", &full_test_path), result.unwrap());
+
+    assert!(root.change_working_directory(&test_path).unwrap());
+    assert!(root.change_working_directory("..").unwrap());
+    assert_eq!(format!("/{label}"), view1.display_path);
+    assert_eq!(root1.clone().canonicalize().unwrap(), view1.current_path);
+    assert_eq!(root1.clone().canonicalize().unwrap(), view1.root);
+    drop(d);
   }
 
   #[test]
