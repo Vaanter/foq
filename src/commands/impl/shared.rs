@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use tokio::fs::File;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{Mutex, OwnedMutexGuard};
-use tracing::{debug, info};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -90,4 +91,42 @@ pub(crate) fn get_change_directory_reply(cd_result: Result<bool, IoError>) -> Re
     Ok(false) => Reply::new(ReplyCode::RequestedFileActionOkay, "Path not changed"),
     Err(e) => map_error_to_reply(e),
   };
+}
+
+pub(crate) async fn transfer_data<F, T>(from: &mut F, to: &mut T, buffer: &mut [u8]) -> bool
+where
+  F: AsyncRead + Unpin,
+  T: AsyncWrite + Unpin,
+{
+  let mut success = loop {
+    let result = from.read(buffer).await;
+    match result {
+      Ok(n) => {
+        trace!("Read {n} bytes from server");
+        let mut sent = 0;
+        while sent < n {
+          match to.write(&buffer[sent..n]).await {
+            Ok(current_sent) => sent += current_sent,
+            Err(e) => {
+              error!("Write to client failed! {e}");
+              break;
+            }
+          }
+        }
+        if n == 0 {
+          break true;
+        }
+      }
+      Err(e) => {
+        error!("Failed to send server's data to client. {e}");
+        break false;
+      }
+    }
+  };
+  debug!("Flushing data to client");
+  if let Err(e) = to.flush().await {
+    warn!("Failed to flush data to client data channel! {e}");
+    success = false;
+  }
+  success
 }

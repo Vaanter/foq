@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use tokio::io::AsyncWriteExt;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::{
-  get_data_channel_lock, get_open_file_result, get_transfer_reply,
+  get_data_channel_lock, get_open_file_result, get_transfer_reply, transfer_data,
 };
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -88,16 +87,8 @@ impl Executable for Stor {
     .await;
 
     debug!("Receiving file data!");
-    let success = match tokio::io::copy(&mut data_channel.as_mut().unwrap(), &mut file).await {
-      Ok(len) => {
-        debug!("Received {len} bytes.");
-        file.flush().await.is_ok()
-      }
-      Err(e) => {
-        warn!("Error sending file! {}", e);
-        false
-      }
-    };
+    let mut buffer = vec![0; 4096];
+    let success = transfer_data(&mut data_channel.as_mut().unwrap(), &mut file, &mut buffer).await;
 
     Self::reply(get_transfer_reply(success), reply_sender).await;
 

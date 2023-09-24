@@ -5,7 +5,7 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::{
-  get_data_channel_lock, get_open_file_result, get_transfer_reply,
+  get_data_channel_lock, get_open_file_result, get_transfer_reply, transfer_data,
 };
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -87,16 +87,8 @@ impl Executable for Retr {
     .await;
 
     debug!("Sending file data!");
-    let success = match tokio::io::copy(&mut file, &mut data_channel.as_mut().unwrap()).await {
-      Ok(len) => {
-        debug!("Sent {len} bytes.");
-        true
-      }
-      Err(e) => {
-        warn!("Failed to send file! Error: {e}");
-        false
-      }
-    };
+    let mut buffer = vec![0; 4096];
+    let success = transfer_data(&mut file, data_channel.as_mut().unwrap(), &mut buffer).await;
 
     Self::reply(get_transfer_reply(success), reply_sender).await;
 
@@ -123,6 +115,7 @@ mod tests {
   use quinn::TransportConfig;
   use rustls::KeyLogFile;
   use s2n_quic::client::Connect;
+  use s2n_quic::provider::io::tokio::Builder as IoBuilder;
   use s2n_quic::provider::tls::default::Client as TlsClient;
   use s2n_quic::Client;
   use tokio::fs::OpenOptions;
@@ -181,10 +174,20 @@ mod tests {
     tls_config.key_log = Arc::new(KeyLogFile::new());
     let tls_client = TlsClient::new(tls_config);
 
+    let io = IoBuilder::default()
+      .with_recv_buffer_size(50 * 2usize.pow(20))
+      .unwrap()
+      .with_receive_address(LOCALHOST)
+      .unwrap()
+      .with_internal_recv_buffer_size(50 * 2usize.pow(20))
+      .unwrap()
+      .build()
+      .unwrap();
+
     let client = Client::builder()
       .with_tls(tls_client)
       .expect("Client requires valid TLS settings!")
-      .with_io(LOCALHOST)
+      .with_io(io)
       .expect("Client requires valid I/O settings!")
       .start()
       .expect("Client must be able to start");
@@ -241,7 +244,7 @@ mod tests {
     let mut tls_config = create_tls_client_config("ftpoq-1");
     tls_config.key_log = Arc::new(KeyLogFile::new());
     let mut transport_config = TransportConfig::default();
-    transport_config.keep_alive_interval(Some(Duration::from_secs(5)));
+    transport_config.keep_alive_interval(Some(Duration::from_secs(15)));
     let mut client_config = quinn::ClientConfig::new(Arc::new(tls_config));
     client_config.transport_config(Arc::new(transport_config));
     quinn_client.set_default_client_config(client_config);
