@@ -1,4 +1,7 @@
+use std::io::SeekFrom;
+
 use async_trait::async_trait;
+use tokio::io::AsyncSeekExt;
 use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
@@ -25,6 +28,9 @@ impl Executable for Retr {
   ) {
     debug_assert_eq!(command.command, Commands::RETR);
 
+    let mut session_properties = command_processor.session_properties.write().await;
+    session_properties.offset = 0;
+
     if command.argument.is_empty() {
       Self::reply(
         Reply::new(
@@ -36,8 +42,6 @@ impl Executable for Retr {
       .await;
       return;
     }
-
-    let session_properties = command_processor.session_properties.read().await;
 
     if !session_properties.is_logged_in() {
       Self::reply(
@@ -85,6 +89,19 @@ impl Executable for Retr {
       reply_sender,
     )
     .await;
+
+    if session_properties.offset != 0 {
+      debug!("Setting cursor to offset: {}", session_properties.offset);
+      if let Err(e) = file
+        .seek(SeekFrom::Start(session_properties.offset as u64))
+        .await
+      {
+        warn!(
+          "Failed to seek file {} to offset {}. Error: {}",
+          &command.argument, session_properties.offset, e
+        );
+      };
+    }
 
     debug!("Sending file data!");
     let mut buffer = vec![0; 4096];
