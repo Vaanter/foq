@@ -16,6 +16,18 @@ job("Test Linux on latest container") {
     }
 }
 
+job("Test ignored Linux on latest container") {
+    container(displayName = "Run script", image = "rust:latest") {
+        shellScript {
+            content = """
+                set -e
+                # Run tests with release optimizations
+                cargo test --release --verbose -- --ignored
+            """
+        }
+    }
+}
+
 job("Build Linux aarch64 with Cross") {
     host(displayName = "Cross") {
         requirements {
