@@ -21,7 +21,7 @@ impl Executable for Mkd {
     reply_sender: &mut impl ReplySend,
   ) {
     trace!("Executing MKD command");
-    debug_assert_eq!(command.command, Commands::MKD);
+    debug_assert_eq!(command.command, Commands::Mkd);
     let session_properties = command_processor.session_properties.read().await;
 
     if !session_properties.is_logged_in() {
@@ -73,7 +73,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::MKD, "");
+    let command = Command::new(Commands::Mkd, "");
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
@@ -99,7 +99,7 @@ mod tests {
 
     let label = "test".to_string();
     let virtual_path = format!("/{}/{}", label, new_dir_name);
-    let command = Command::new(Commands::MKD, &virtual_path);
+    let command = Command::new(Commands::Mkd, &virtual_path);
 
     let settings = CommandProcessorSettingsBuilder::default()
       .label(label.clone())

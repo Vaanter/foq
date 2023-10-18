@@ -22,7 +22,7 @@ impl Executable for Stor {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::STOR);
+    debug_assert_eq!(command.command, Commands::Stor);
 
     if command.argument.is_empty() {
       Self::reply(
@@ -139,11 +139,11 @@ mod tests {
     if !Path::new(&local_file).exists() {
       panic!("Test file does not exist! Cannot proceed!");
     }
-    println!("Remote file: {:?}", temp_dir().join(&remote_file));
+    println!("Remote file: {:?}", temp_dir().join(remote_file));
 
-    let _cleanup = TempFileCleanup::new(&remote_file);
+    let _cleanup = TempFileCleanup::new(remote_file);
 
-    let command = Command::new(Commands::STOR, remote_file);
+    let command = Command::new(Commands::Stor, remote_file);
 
     let label = "test_files".to_string();
 
@@ -185,7 +185,7 @@ mod tests {
         .await
         .expect("Local test file must exist!");
 
-      let remote = temp_dir().join(&remote_file);
+      let remote = temp_dir().join(remote_file);
       let mut remote_file = OpenOptions::new()
         .read(true)
         .open(remote)
@@ -209,7 +209,7 @@ mod tests {
           break;
         }
 
-        let transfer_len = match client_dc.write(&mut local_buffer).await {
+        let transfer_len = match client_dc.write(&local_buffer).await {
           Ok(len) => len,
           Err(e) => panic!("File transfer failed! {e}"),
         };
@@ -258,14 +258,14 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_test() {
-    const LOCAL_FILE: &'static str = "test_files/2KiB.txt";
+    const LOCAL_FILE: &str = "test_files/2KiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(LOCAL_FILE, &remote_file).await;
   }
 
   #[tokio::test]
   async fn test_one_mib() {
-    const LOCAL_FILE: &'static str = "test_files/1MiB.txt";
+    const LOCAL_FILE: &str = "test_files/1MiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(LOCAL_FILE, &remote_file).await;
   }
@@ -283,7 +283,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_ten_paragraphs() {
-    const LOCAL_FILE: &'static str = "test_files/lorem_10_paragraphs.txt";
+    const LOCAL_FILE: &str = "test_files/lorem_10_paragraphs.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(LOCAL_FILE, &remote_file).await;
   }
@@ -296,7 +296,7 @@ mod tests {
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
 
-    let command = Command::new(Commands::STOR, "NONEXISTENT");
+    let command = Command::new(Commands::Stor, "NONEXISTENT");
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
@@ -316,11 +316,11 @@ mod tests {
     let label = "test";
     let view = FileSystemView::new(
       current_dir().unwrap(),
-      label.clone(),
+      label,
       HashSet::from([
-        UserPermission::READ,
-        UserPermission::WRITE,
-        UserPermission::CREATE,
+        UserPermission::Read,
+        UserPermission::Write,
+        UserPermission::Create,
       ]),
     );
 
@@ -337,7 +337,7 @@ mod tests {
       .insert("test".to_string());
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
-    let command = Command::new(Commands::STOR, format!("NONEXISTENT"));
+    let command = Command::new(Commands::Stor, "NONEXISTENT".to_string());
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
@@ -357,11 +357,11 @@ mod tests {
     let label = "test";
     let view = FileSystemView::new(
       current_dir().unwrap(),
-      label.clone(),
+      label,
       HashSet::from([
-        UserPermission::READ,
-        UserPermission::WRITE,
-        UserPermission::CREATE,
+        UserPermission::Read,
+        UserPermission::Write,
+        UserPermission::Create,
       ]),
     );
 
@@ -380,7 +380,7 @@ mod tests {
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
 
-    let command = Command::new(Commands::STOR, "");
+    let command = Command::new(Commands::Stor, "");
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     timeout(

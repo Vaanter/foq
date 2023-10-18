@@ -10,7 +10,7 @@ pub(crate) fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
   let ec = load_ec_keys(path);
   let rsa = load_rsa_keys(path);
 
-  return match (ec, rsa) {
+  match (ec, rsa) {
     (Ok(mut ec_keys), Ok(rsa_keys)) => Ok({
       ec_keys.extend(rsa_keys);
       ec_keys
@@ -18,7 +18,7 @@ pub(crate) fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
     (Ok(ec_keys), Err(_)) => Ok(ec_keys),
     (Err(_), Ok(rsa_keys)) => Ok(rsa_keys),
     (Err(e_ec), Err(_)) => Err(e_ec),
-  };
+  }
 }
 
 pub(crate) fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {

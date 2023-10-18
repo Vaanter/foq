@@ -17,7 +17,7 @@ impl Executable for Syst {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::SYST);
+    debug_assert_eq!(command.command, Commands::Syst);
     Syst::reply(
       Reply::new(ReplyCode::NameSystemType, "UNIX Type: L8"),
       reply_sender,
@@ -46,7 +46,7 @@ mod tests {
 
   #[tokio::test]
   async fn response_test() {
-    let command = Command::new(Commands::SYST, "");
+    let command = Command::new(Commands::Syst, "");
 
     let label = "test_files".to_string();
 

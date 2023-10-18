@@ -20,16 +20,16 @@ use crate::auth::user_permission::UserPermission;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Display, Hash)]
 #[strum(serialize_all = "lowercase")]
 pub(crate) enum EntryType {
-  FILE,
-  DIR,
-  CDIR,
-  PDIR,
-  LINK,
+  File,
+  Dir,
+  Cdir,
+  Pdir,
+  Link,
 }
 
-const MLSD_DATETIME_FORMAT: &'static str = "%Y%m%d%H%M%S";
-const LIST_DATETIME_FORMAT_TIME: &'static str = "%b %d %H:%M";
-const LIST_DATETIME_FORMAT_YEAR: &'static str = "%b %d %Y";
+const MLSD_DATETIME_FORMAT: &str = "%Y%m%d%H%M%S";
+const LIST_DATETIME_FORMAT_TIME: &str = "%b %d %H:%M";
+const LIST_DATETIME_FORMAT_YEAR: &str = "%b %d %Y";
 
 /// Holds the various facts about a filesystem object.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -81,11 +81,11 @@ impl EntryData {
     let modify = metadata.modified().unwrap_or(SystemTime::now());
 
     let entry_type = if metadata.is_file() {
-      EntryType::FILE
+      EntryType::File
     } else if metadata.is_dir() {
-      EntryType::DIR
+      EntryType::Dir
     } else if metadata.is_symlink() {
-      EntryType::LINK
+      EntryType::Link
     } else {
       unreachable!();
     };
@@ -116,19 +116,19 @@ impl EntryData {
   pub(crate) fn to_list_string(&self) -> String {
     let mut buffer = String::with_capacity(64);
     let type_str = match self.entry_type {
-      EntryType::FILE => "-",
-      EntryType::DIR | EntryType::CDIR | EntryType::PDIR => "d",
-      EntryType::LINK => "l",
+      EntryType::File => "-",
+      EntryType::Dir | EntryType::Cdir | EntryType::Pdir => "d",
+      EntryType::Link => "l",
     };
     buffer.push_str(type_str);
     let mut perm_str = ["-", "-", "-"];
-    if self.perm.contains(&UserPermission::READ) {
+    if self.perm.contains(&UserPermission::Read) {
       perm_str[0] = "r";
     }
-    if self.perm.contains(&UserPermission::WRITE) {
+    if self.perm.contains(&UserPermission::Write) {
       perm_str[1] = "w";
     }
-    if self.perm.contains(&UserPermission::EXECUTE) {
+    if self.perm.contains(&UserPermission::Execute) {
       perm_str[2] = "x";
     }
     buffer.push_str(&perm_str.repeat(3).join(""));
@@ -175,7 +175,7 @@ impl ToString for EntryData {
       self
         .perm
         .iter()
-        .map(|p| p.get_serializations().get(0).map(|s| *s).unwrap_or(""))
+        .map(|p| p.get_serializations().first().copied().unwrap_or(""))
         .collect::<String>()
     ));
     buffer.push_str(&format!(" {}", self.name));

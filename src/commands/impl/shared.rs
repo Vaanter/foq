@@ -57,11 +57,11 @@ pub(crate) fn get_open_file_result(file: Result<File, IoError>) -> Result<File, 
 pub(crate) fn get_listing_or_error_reply(
   listing: Result<Vec<EntryData>, IoError>,
 ) -> Result<Vec<EntryData>, Reply> {
-  return listing.map_err(|e| map_error_to_reply(e));
+  listing.map_err(map_error_to_reply)
 }
 
 fn map_error_to_reply(error: IoError) -> Reply {
-  return match error {
+  match error {
     IoError::UserError => Reply::new(ReplyCode::NotLoggedIn, IoError::UserError.to_string()),
     IoError::OsError(_) | IoError::SystemError => Reply::new(
       ReplyCode::RequestedActionAborted,
@@ -82,22 +82,22 @@ fn map_error_to_reply(error: IoError) -> Reply {
       ReplyCode::SyntaxErrorInParametersOrArguments,
       IoError::NotAFileError.to_string(),
     ),
-  };
+  }
 }
 
 pub(crate) fn get_create_directory_reply(result: Result<String, IoError>) -> Reply {
-  return match result {
+  match result {
     Ok(new_path) => Reply::new(ReplyCode::PathnameCreated, format!("\"{}\"", new_path)),
     Err(error) => map_error_to_reply(error),
-  };
+  }
 }
 
 pub(crate) fn get_change_directory_reply(cd_result: Result<bool, IoError>) -> Reply {
-  return match cd_result {
+  match cd_result {
     Ok(true) => Reply::new(ReplyCode::RequestedFileActionOkay, "Path changed"),
     Ok(false) => Reply::new(ReplyCode::RequestedFileActionOkay, "Path not changed"),
     Err(e) => map_error_to_reply(e),
-  };
+  }
 }
 
 #[tracing::instrument(skip_all)]
@@ -106,7 +106,7 @@ where
   F: AsyncRead + Unpin,
   T: AsyncWrite + Unpin,
 {
-  let mut success = loop {
+  let mut success = 'send_loop: loop {
     let result = from.read(buffer).await;
     match result {
       Ok(n) => {
@@ -117,7 +117,7 @@ where
             Ok(current_sent) => sent += current_sent,
             Err(e) => {
               error!("Write to target failed! {e}");
-              break;
+              break 'send_loop false;
             }
           }
         }

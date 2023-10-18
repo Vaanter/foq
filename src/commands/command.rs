@@ -15,10 +15,10 @@ pub(crate) struct Command {
 
 impl Command {
   pub(crate) fn new(command: Commands, argument: impl Into<String>) -> Self {
-    return Command {
+    Command {
       command,
       argument: argument.into(),
-    };
+    }
   }
 }
 
@@ -30,7 +30,7 @@ impl FromStr for Command {
     trace!("Parsing message to command.");
     let message_trimmed = message.trim_end_matches(|c| c == '\n' || c == '\r');
     let split = message_trimmed
-      .split_once(" ")
+      .split_once(' ')
       .unwrap_or((message_trimmed, ""));
     let command = split.0;
     let argument = split.1;
@@ -50,7 +50,7 @@ mod tests {
   fn mlsd_test() {
     let parsed: Result<Command, anyhow::Error> = Command::from_str("mlsd test");
     assert!(parsed.is_ok());
-    assert_eq!(Commands::MLSD, parsed.as_ref().unwrap().command);
+    assert_eq!(Commands::Mlsd, parsed.as_ref().unwrap().command);
     assert_eq!("test", parsed.as_ref().unwrap().argument);
   }
 
@@ -58,7 +58,7 @@ mod tests {
   fn noop_test() {
     let parsed: Result<Command, anyhow::Error> = Command::from_str("noop");
     assert!(parsed.is_ok());
-    assert_eq!(Commands::NOOP, parsed.as_ref().unwrap().command);
+    assert_eq!(Commands::Noop, parsed.as_ref().unwrap().command);
     assert!(parsed.as_ref().unwrap().argument.is_empty());
   }
 
@@ -66,7 +66,7 @@ mod tests {
   fn user_test() {
     let parsed: Result<Command, anyhow::Error> = Command::from_str("user test");
     assert!(parsed.is_ok());
-    assert_eq!(Commands::USER, parsed.as_ref().unwrap().command);
+    assert_eq!(Commands::User, parsed.as_ref().unwrap().command);
     assert_eq!("test", parsed.as_ref().unwrap().argument);
   }
 }

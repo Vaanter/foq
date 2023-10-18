@@ -17,7 +17,7 @@ impl Executable for User {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::USER);
+    debug_assert_eq!(command.command, Commands::User);
 
     if command.argument.is_empty() {
       User::reply(
@@ -65,7 +65,7 @@ mod tests {
   #[tokio::test]
   async fn set_username_test() {
     let name = String::from("test");
-    let command = Command::new(Commands::USER, name.clone());
+    let command = Command::new(Commands::User, name.clone());
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
@@ -95,7 +95,7 @@ mod tests {
 
   #[tokio::test]
   async fn empty_username_test() {
-    let command = Command::new(Commands::USER, "");
+    let command = Command::new(Commands::User, "");
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()

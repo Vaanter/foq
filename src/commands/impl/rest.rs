@@ -19,7 +19,7 @@ impl Executable for Rest {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::REST);
+    debug_assert_eq!(command.command, Commands::Rest);
 
     if command.argument.is_empty() {
       Self::reply(
@@ -90,7 +90,7 @@ mod tests {
   async fn set_test() {
     let (_, mut command_processor) = setup_test_command_processor();
 
-    let command = Command::new(Commands::REST, "123");
+    let command = Command::new(Commands::Rest, "123");
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -119,7 +119,7 @@ mod tests {
     let (_, mut command_processor) = setup_test_command_processor();
     command_processor.session_properties.write().await.username = None;
 
-    let command = Command::new(Commands::REST, "123");
+    let command = Command::new(Commands::Rest, "123");
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -138,7 +138,7 @@ mod tests {
   async fn set_no_argument_test() {
     let (_, mut command_processor) = setup_test_command_processor();
 
-    let command = Command::new(Commands::REST, String::new());
+    let command = Command::new(Commands::Rest, String::new());
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -163,7 +163,7 @@ mod tests {
   async fn set_not_a_number_test() {
     let (_, mut command_processor) = setup_test_command_processor();
 
-    let command = Command::new(Commands::REST, "test");
+    let command = Command::new(Commands::Rest, "test");
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);

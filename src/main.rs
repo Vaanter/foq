@@ -40,8 +40,8 @@ async fn main() {
     .open("foq.log")
     .expect("Log file should be accessible");
   let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
-  let log_level = Level::from_str(&CONFIG.get_string("log_level").unwrap_or(String::new()))
-    .unwrap_or(Level::INFO);
+  let log_level =
+    Level::from_str(&CONFIG.get_string("log_level").unwrap_or_default()).unwrap_or(Level::INFO);
   let subscriber = tracing_subscriber::fmt()
     .with_writer(non_blocking)
     .with_env_filter(format!("foq={}", log_level))

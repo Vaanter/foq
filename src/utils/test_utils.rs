@@ -343,7 +343,11 @@ pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
 }
 
 pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
-  println!("Generating test file, size: {}B, path: {:?}", amount, output_file.as_os_str());
+  println!(
+    "Generating test file, size: {}B, path: {:?}",
+    amount,
+    output_file.as_os_str()
+  );
   const MAX_CHUNK_SIZE: usize = 32864;
   let file = OpenOptions::new()
     .create(true)

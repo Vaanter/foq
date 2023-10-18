@@ -22,7 +22,7 @@ impl Executable for Mlsd {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::MLSD);
+    debug_assert_eq!(command.command, Commands::Mlsd);
 
     let session_properties = command_processor.session_properties.read().await;
     let listing = session_properties
@@ -115,7 +115,7 @@ mod tests {
 
   #[tokio::test]
   async fn simple_listing_tcp() {
-    let command = Command::new(Commands::MLSD, String::new());
+    let command = Command::new(Commands::Mlsd, String::new());
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -169,7 +169,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::MLSD, String::new());
+    let command = Command::new(Commands::Mlsd, String::new());
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
@@ -191,7 +191,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_directory_test() {
-    let command = Command::new(Commands::MLSD, String::from("1MiB.txt"));
+    let command = Command::new(Commands::Mlsd, String::from("1MiB.txt"));
 
     let label = "test_files".to_string();
     let settings = CommandProcessorSettingsBuilder::default()
@@ -226,7 +226,7 @@ mod tests {
 
   #[tokio::test]
   async fn nonexistent_test() {
-    let command = Command::new(Commands::MLSD, String::from("NONEXISTENT"));
+    let command = Command::new(Commands::Mlsd, String::from("NONEXISTENT"));
 
     let label = "test_files".to_string();
     let settings = CommandProcessorSettingsBuilder::default()
@@ -253,7 +253,7 @@ mod tests {
 
   #[tokio::test]
   async fn insufficient_permissions_test() {
-    let command = Command::new(Commands::MLSD, String::new());
+    let command = Command::new(Commands::Mlsd, String::new());
 
     let label = "test_files".to_string();
     let settings = CommandProcessorSettingsBuilder::default()
@@ -289,7 +289,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_tcp() {
-    let command = Command::new(Commands::MLSD, String::new());
+    let command = Command::new(Commands::Mlsd, String::new());
 
     let label = "test_files".to_string();
     let settings = CommandProcessorSettingsBuilder::default()

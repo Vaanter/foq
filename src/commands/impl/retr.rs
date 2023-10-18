@@ -26,7 +26,7 @@ impl Executable for Retr {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::RETR);
+    debug_assert_eq!(command.command, Commands::Retr);
 
     let mut session_properties = command_processor.session_properties.write().await;
     session_properties.offset = 0;
@@ -93,7 +93,7 @@ impl Executable for Retr {
     if session_properties.offset != 0 {
       debug!("Setting cursor to offset: {}", session_properties.offset);
       if let Err(e) = file
-        .seek(SeekFrom::Start(session_properties.offset as u64))
+        .seek(SeekFrom::Start(session_properties.offset))
         .await
       {
         warn!(
@@ -164,12 +164,12 @@ mod tests {
       panic!("Test file does not exist! Cannot proceed!");
     }
 
-    let command = Command::new(Commands::RETR, file_name);
+    let command = Command::new(Commands::Retr, file_name);
 
     let wrapper = StandardDataChannelWrapper::new(LOCALHOST);
     let mut command_processor = setup(wrapper);
     let client_dc = open_tcp_data_channel(&mut command_processor).await;
-    transfer(&file_name, command, command_processor, client_dc).await;
+    transfer(file_name, command, command_processor, client_dc).await;
   }
 
   async fn common_quic(file_name: &str) {
@@ -180,7 +180,7 @@ mod tests {
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
     let token = CancellationToken::new();
-    let command = Command::new(Commands::RETR, file_name);
+    let command = Command::new(Commands::Retr, file_name);
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
       let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
@@ -238,7 +238,7 @@ mod tests {
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
 
-    transfer(&file_name, command, command_processor, client_dc).await;
+    transfer(file_name, command, command_processor, client_dc).await;
   }
 
   async fn common_quic_quinn(file_name: &str) {
@@ -248,7 +248,7 @@ mod tests {
 
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
-    let command = Command::new(Commands::RETR, file_name);
+    let command = Command::new(Commands::Retr, file_name);
     let token = CancellationToken::new();
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
@@ -292,7 +292,7 @@ mod tests {
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
 
-    transfer(&file_name, command, command_processor, cliend_dc_recv).await;
+    transfer(file_name, command, command_processor, cliend_dc_recv).await;
     //println!("stats: {:#?}", connection);
   }
 
@@ -339,7 +339,7 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
-    let transfer = verify_transfer(&file_name, &mut client_dc);
+    let transfer = verify_transfer(file_name, &mut client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
       Ok(()) => println!("Transfer complete!"),
@@ -520,7 +520,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::RETR, "NONEXISTENT");
+    let command = Command::new(Commands::Retr, "NONEXISTENT");
 
     let label = "test_files".to_string();
 
@@ -547,7 +547,7 @@ mod tests {
     let (settings, mut command_processor) = setup_test_command_processor();
 
     let command = Command::new(
-      Commands::RETR,
+      Commands::Retr,
       format!("{}/test_files/1MiB.txt", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);
@@ -567,7 +567,7 @@ mod tests {
     let (_, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
-    let command = Command::new(Commands::RETR, "");
+    let command = Command::new(Commands::Retr, "");
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
@@ -592,7 +592,7 @@ mod tests {
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
     let command = Command::new(
-      Commands::RETR,
+      Commands::Retr,
       format!("{}/test_files/NONEXISTENT", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);
@@ -623,7 +623,7 @@ mod tests {
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
     let command = Command::new(
-      Commands::RETR,
+      Commands::Retr,
       format!("{}/test_files/2KiB.txt", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);
@@ -644,7 +644,7 @@ mod tests {
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
     let command = Command::new(
-      Commands::RETR,
+      Commands::Retr,
       format!("{}/test_files", settings.label.clone()),
     );
     let (tx, mut rx) = channel(1024);

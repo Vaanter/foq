@@ -17,7 +17,7 @@ impl Executable for Noop {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(Commands::NOOP, command.command);
+    debug_assert_eq!(Commands::Noop, command.command);
     reply_sender
       .send_control_message(Reply::new(ReplyCode::CommandOkay, "OK"))
       .await;
@@ -45,7 +45,7 @@ mod tests {
 
   #[tokio::test]
   async fn response_test() {
-    let command = Command::new(Commands::NOOP, "");
+    let command = Command::new(Commands::Noop, "");
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
 

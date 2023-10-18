@@ -134,8 +134,10 @@ impl QuicOnlyConnectionHandler {
 
 #[async_trait]
 impl ConnectionHandler for QuicOnlyConnectionHandler {
+  #[tracing_attributes::instrument(skip_all, fields(_remote_addr))]
   async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error> {
     debug!("[QUIC] Handler started.");
+    let _remote_addr = self.connection.lock().await.remote_addr().unwrap();
 
     self.create_control_channel().await?;
 
@@ -153,8 +155,12 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
         biased;
         _ = token.cancelled() => {
           info!("[QUIC] Shutdown received!");
-          let _ = timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close());
-          let _ = timeout(Duration::from_secs(2), self.data_channel_wrapper.lock().await.close_data_stream());
+          if timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close()).await.is_err() {
+            warn!("[QUIC] Failed to close command channel in time!");
+          };
+          if timeout(Duration::from_secs(2), self.data_channel_wrapper.lock().await.close_data_stream()).await.is_err() {
+            warn!("[QUIC] Failed to close data channel in time!")
+          };
           break;
         }
         result = self.await_command() => {
@@ -231,7 +237,7 @@ mod tests {
     .await;
     token.cancel();
 
-    if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
+    if timeout(Duration::from_secs(3), handler_fut).await.is_err() {
       panic!("Handler future failed to finish!");
     };
   }
@@ -271,7 +277,7 @@ mod tests {
     .await;
     token.cancel();
 
-    if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
+    if timeout(Duration::from_secs(3), handler_fut).await.is_err() {
       panic!("Handler future failed to finish!");
     };
   }

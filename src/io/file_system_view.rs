@@ -50,6 +50,7 @@ impl FileSystemView {
   ///
   /// New [`FileSystemView`] instance.
   ///
+  #[cfg(test)]
   pub(crate) fn new(
     root: PathBuf,
     label: impl Into<String>,
@@ -91,7 +92,7 @@ impl FileSystemView {
     permissions: HashSet<UserPermission>,
   ) -> Result<Self, ()> {
     let label = label.into();
-    return match root.canonicalize() {
+    match root.canonicalize() {
       Ok(r) => Ok(FileSystemView {
         current_path: r.clone(),
         root: r,
@@ -100,7 +101,7 @@ impl FileSystemView {
         permissions,
       }),
       Err(_) => Err(()),
-    };
+    }
   }
 
   /// Changes the current path to the specified one.
@@ -134,7 +135,7 @@ impl FileSystemView {
     &mut self,
     path: impl Into<String>,
   ) -> Result<bool, IoError> {
-    let path = path.into().replace("\\", "/");
+    let path = path.into().replace('\\', "/");
     let current_path = self.current_path.clone();
     if path.is_empty() || path == "." {
       return Ok(false);
@@ -167,8 +168,8 @@ impl FileSystemView {
     } else if path == "~" || path == "/" {
       self.display_path = format!("/{}", self.label);
       self.current_path = self.root.clone();
-    } else if path.starts_with("/") {
-      let new_current = match self.root.join(&path[1..]).canonicalize() {
+    } else if let Some(stripped) = path.strip_prefix('/') {
+      let new_current = match self.root.join(stripped).canonicalize() {
         Ok(n) => n,
         Err(e) => return Err(Self::map_error(e)),
       };
@@ -194,11 +195,11 @@ impl FileSystemView {
   }
 
   fn map_error(error: Error) -> IoError {
-    return match error.kind() {
+    match error.kind() {
       ErrorKind::NotFound => IoError::NotFoundError(error.to_string()),
       ErrorKind::PermissionDenied => IoError::PermissionError,
       _ => IoError::OsError(error),
-    };
+    }
   }
 
   /// Changes current path to parent.
@@ -209,17 +210,17 @@ impl FileSystemView {
   }
 
   pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
-    let path = path.into().replace("\\", "/");
+    let path = path.into().replace('\\', "/");
 
-    if !self.permissions.contains(&UserPermission::CREATE) {
+    if !self.permissions.contains(&UserPermission::Create) {
       return Err(IoError::PermissionError);
     }
     let mut virtual_path = self.display_path.clone();
 
-    let new_directory_path = if path.starts_with("/") {
-      self.root.join(&path[1..])
+    let new_directory_path = if let Some(stripped) = path.strip_prefix('/') {
+      self.root.join(stripped)
     } else {
-      virtual_path.push_str("/");
+      virtual_path.push('/');
       self.current_path.join(&path)
     };
 
@@ -229,9 +230,9 @@ impl FileSystemView {
 
     virtual_path.push_str(&path);
 
-    return create_dir_all(&new_directory_path)
+    create_dir_all(&new_directory_path)
       .map(|_| virtual_path)
-      .map_err(|e| FileSystemView::map_error(e));
+      .map_err(FileSystemView::map_error)
   }
 
   /// Opens a file with the specified path and options.
@@ -266,18 +267,18 @@ impl FileSystemView {
     path: impl Into<String>,
     options: OpenOptionsWrapper,
   ) -> Result<File, IoError> {
-    if options.read() && !self.permissions.contains(&UserPermission::READ)
-      || (options.write() && !self.permissions.contains(&UserPermission::WRITE))
-      || (options.create() && !self.permissions.contains(&UserPermission::CREATE))
-      || (options.append()) && !self.permissions.contains(&UserPermission::APPEND)
-      || (options.truncate() && !self.permissions.contains(&UserPermission::WRITE))
+    if options.read() && !self.permissions.contains(&UserPermission::Read)
+      || (options.write() && !self.permissions.contains(&UserPermission::Write))
+      || (options.create() && !self.permissions.contains(&UserPermission::Create))
+      || (options.append()) && !self.permissions.contains(&UserPermission::Append)
+      || (options.truncate() && !self.permissions.contains(&UserPermission::Write))
     {
       return Err(IoError::PermissionError);
     }
 
     let path = path.into();
-    let path = if path.starts_with("/") {
-      self.root.join(PathBuf::from(&path[1..]))
+    let path = if let Some(stripped) = path.strip_prefix('/') {
+      self.root.join(PathBuf::from(stripped))
     } else {
       self.current_path.join(PathBuf::from(path))
     };
@@ -313,7 +314,7 @@ impl FileSystemView {
   ///
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
     let path = path.into();
-    if !self.permissions.contains(&UserPermission::LIST) {
+    if !self.permissions.contains(&UserPermission::List) {
       return Err(IoError::PermissionError);
     }
 
@@ -326,14 +327,14 @@ impl FileSystemView {
       }
 
       let read_dir = current.read_dir();
-      if read_dir.is_err() {
+      if let Err(e) = read_dir {
         // IO Error
-        return Err(IoError::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(e));
       }
 
       let name = self
         .display_path
-        .rsplit_once("/")
+        .rsplit_once('/')
         .unwrap_or(("", &self.label))
         .1;
 
@@ -358,9 +359,9 @@ impl FileSystemView {
       let parent = parent.unwrap();
 
       let read_dir = parent.read_dir();
-      if read_dir.is_err() {
+      if let Err(e) = read_dir {
         // IO Error
-        return Err(IoError::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(e));
       }
 
       let parent_name = parent
@@ -382,19 +383,19 @@ impl FileSystemView {
       }
 
       let read_dir = self.root.read_dir();
-      if read_dir.is_err() {
+      if let Err(e) = read_dir {
         // IO Error
-        return Err(IoError::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(e));
       }
 
       Ok(Self::create_listing(
-        format!("{}", &self.label),
+        &self.label,
         self.root.clone(),
         read_dir.unwrap(),
         &self.permissions,
       ))
-    } else if path.starts_with("/") {
-      let absolute = match self.root.join(&path[1..]).canonicalize() {
+    } else if let Some(stripped) = path.strip_prefix('/') {
+      let absolute = match self.root.join(stripped).canonicalize() {
         Ok(absolute) => absolute,
         // Path doesn't exist! Nothing to list
         Err(e) => {
@@ -409,13 +410,13 @@ impl FileSystemView {
       };
 
       let read_dir = absolute.read_dir();
-      if read_dir.is_err() {
+      if let Err(e) = read_dir {
         // IO Error
-        return Err(IoError::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(e));
       }
 
       Ok(Self::create_listing(
-        path.rsplit_once("/").unwrap().1,
+        path.rsplit_once('/').unwrap().1,
         absolute,
         read_dir.unwrap(),
         &self.permissions,
@@ -433,13 +434,13 @@ impl FileSystemView {
       }
 
       let read_dir = relative.read_dir();
-      if read_dir.is_err() {
+      if let Err(e) = read_dir {
         // IO Error
-        return Err(IoError::OsError(read_dir.unwrap_err()));
+        return Err(IoError::OsError(e));
       }
 
       Ok(Self::create_listing(
-        path.rsplit_once("/").unwrap_or(("", &path)).1,
+        path.rsplit_once('/').unwrap_or(("", &path)).1,
         relative,
         read_dir.unwrap(),
         &self.permissions,
@@ -472,9 +473,8 @@ impl FileSystemView {
   ) -> Vec<EntryData> {
     let mut listing = Vec::with_capacity(read_dir.size_hint().0 + 1);
     let cdir = EntryData::create_from_metadata(path.as_ref().metadata(), name, permissions);
-    if cdir.is_ok() {
-      let mut cdir = cdir.unwrap();
-      cdir.change_entry_type(EntryType::CDIR);
+    if let Ok(mut cdir) = cdir {
+      cdir.change_entry_type(EntryType::Cdir);
       listing.push(cdir);
     }
 
@@ -508,10 +508,10 @@ pub(crate) mod tests {
 
   #[test]
   fn derives_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let view = FileSystemView::new(root.clone(), label, permissions);
 
     assert_eq!(view.clone(), view);
     assert_eq!(view, view);
@@ -519,10 +519,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_sub_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view.change_working_directory("test_files").unwrap());
     assert_eq!(format!("/{label}/test_files"), view.display_path);
@@ -535,10 +535,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_sub_nonexistent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     let change = view.change_working_directory("NONEXISTENT");
     let Err(IoError::NotFoundError(_)) = change else {
@@ -551,10 +551,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_absolute_nonexistent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     let change = view.change_working_directory("/NONEXISTENT");
     let Err(IoError::NotFoundError(_)) = change else {
@@ -567,10 +567,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_absolute_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view.change_working_directory("/test_files").unwrap());
     assert_eq!(format!("/{label}/test_files"), view.display_path);
@@ -583,10 +583,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_absolute_multi_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view
       .change_working_directory("/test_files/subfolder")
@@ -601,10 +601,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_dot_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(!view.change_working_directory(".").unwrap());
     assert_eq!(format!("/{label}"), view.display_path);
@@ -614,10 +614,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_parent_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view.change_working_directory("test_files").unwrap());
     assert!(view.change_working_directory("..").unwrap());
@@ -628,10 +628,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_parent_from_root_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap().join("test_files");
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     let change = view.change_working_directory("..");
     let Err(IoError::InvalidPathError(_)) = change else {
@@ -644,10 +644,10 @@ pub(crate) mod tests {
 
   #[test]
   fn cwd_to_home_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view.change_working_directory("test_files").unwrap());
     assert!(view.change_working_directory("subfolder").unwrap());
@@ -659,10 +659,10 @@ pub(crate) mod tests {
 
   #[tokio::test]
   async fn open_file_relative_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view.change_working_directory("test_files").unwrap());
     let options = OpenOptionsWrapperBuilder::default()
@@ -675,10 +675,10 @@ pub(crate) mod tests {
 
   #[tokio::test]
   async fn open_file_relative_multi_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let view = FileSystemView::new(root.clone(), label, permissions);
 
     let options = OpenOptionsWrapperBuilder::default()
       .read(true)
@@ -690,10 +690,10 @@ pub(crate) mod tests {
 
   #[tokio::test]
   async fn open_file_absolute_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let view = FileSystemView::new(root.clone(), label, permissions);
 
     let options = OpenOptionsWrapperBuilder::default()
       .read(true)
@@ -707,7 +707,7 @@ pub(crate) mod tests {
   async fn open_file_no_permissions_test() {
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), HashSet::new());
+    let view = FileSystemView::new(root.clone(), label, HashSet::new());
 
     let options = OpenOptionsWrapperBuilder::default()
       .read(true)
@@ -721,10 +721,10 @@ pub(crate) mod tests {
 
   #[tokio::test]
   async fn open_file_directory_test() {
-    let permissions = HashSet::from([UserPermission::READ]);
+    let permissions = HashSet::from([UserPermission::Read]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let options = OpenOptionsWrapperBuilder::default()
       .read(true)
@@ -738,10 +738,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_current_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let mut view = FileSystemView::new(root.clone(), label, permissions.clone());
     view.change_working_directory("test_files").unwrap();
 
     let listing = view.list_dir(".").unwrap();
@@ -751,10 +751,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_relative_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("test_files").unwrap();
 
@@ -763,10 +763,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_relative_multi_empty_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("test_files/subfolder").unwrap();
 
@@ -775,10 +775,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_absolute_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("/test_files").unwrap();
 
@@ -787,10 +787,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_absolute_multi_empty_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("/test_files/subfolder").unwrap();
 
@@ -799,10 +799,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_relative_nonexistent_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("NONEXISTENT");
     assert!(listing.is_err());
@@ -813,10 +813,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_absolute_nonexistent_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("/NONEXISTENT");
     assert!(listing.is_err());
@@ -827,7 +827,7 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_fs_root_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir()
       .unwrap()
       .ancestors()
@@ -835,7 +835,7 @@ pub(crate) mod tests {
       .unwrap()
       .to_path_buf();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("").unwrap();
     validate_listing(label, &listing, 1, permissions.len(), 0, 0);
@@ -843,10 +843,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_parent_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let mut view = FileSystemView::new(root.clone(), label, permissions.clone());
     view
       .change_working_directory("test_files/subfolder")
       .unwrap();
@@ -858,10 +858,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_parent_from_root_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let listing = view.list_dir("..");
     let Err(IoError::InvalidPathError(_)) = listing else {
@@ -871,10 +871,10 @@ pub(crate) mod tests {
 
   #[test]
   fn list_dir_root_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::LIST]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let mut view = FileSystemView::new(root.clone(), label, permissions.clone());
     view
       .change_working_directory("test_files/subfolder")
       .unwrap();
@@ -886,10 +886,10 @@ pub(crate) mod tests {
 
   #[test]
   fn create_dir_relative_test() {
-    let permissions = HashSet::from([UserPermission::CREATE]);
+    let permissions = HashSet::from([UserPermission::Create]);
     let root = temp_dir();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let path = Uuid::new_v4().to_string();
     let dir_path = temp_dir().join(&path);
@@ -903,10 +903,10 @@ pub(crate) mod tests {
 
   #[test]
   fn create_dir_relative_invalid_test() {
-    let permissions = HashSet::from([UserPermission::CREATE]);
+    let permissions = HashSet::from([UserPermission::Create]);
     let root = temp_dir();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let path = "..";
 
@@ -918,10 +918,10 @@ pub(crate) mod tests {
 
   #[test]
   fn create_dir_relative_multi_test() {
-    let permissions = HashSet::from([UserPermission::CREATE]);
+    let permissions = HashSet::from([UserPermission::Create]);
     let root = temp_dir();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let path_root = Uuid::new_v4().to_string();
     let path = format!("{}/{}", &path_root, Uuid::new_v4());
@@ -936,10 +936,10 @@ pub(crate) mod tests {
 
   #[test]
   fn create_dir_absolute_test() {
-    let permissions = HashSet::from([UserPermission::CREATE]);
+    let permissions = HashSet::from([UserPermission::Create]);
     let root = temp_dir();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let path = format!("/{}", Uuid::new_v4());
     let dir_path = temp_dir().join(&path[1..]);
@@ -953,10 +953,10 @@ pub(crate) mod tests {
 
   #[test]
   fn create_dir_absolute_multi_test() {
-    let permissions = HashSet::from([UserPermission::CREATE]);
+    let permissions = HashSet::from([UserPermission::Create]);
     let root = temp_dir();
     let label = "test";
-    let view = FileSystemView::new(root.clone(), label.clone(), permissions.clone());
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
     let path_root = Uuid::new_v4().to_string();
     let path = format!("/{}/{}", path_root, Uuid::new_v4());
@@ -971,14 +971,14 @@ pub(crate) mod tests {
 
   #[test]
   fn create_dir_then_cwd_unicode_absolute_multi_test() {
-    let permissions = HashSet::from([UserPermission::READ, UserPermission::CREATE]);
+    let permissions = HashSet::from([UserPermission::Read, UserPermission::Create]);
     let root = temp_dir();
     let label = "test";
-    let mut view = FileSystemView::new(root.clone(), label.clone(), permissions);
+    let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     let path_root = "测试目录";
     let path = format!("/{}/测试子目录", path_root);
-    let dir_path = temp_dir().join(&path_root);
+    let dir_path = temp_dir().join(path_root);
     let d = DirCleanup::new(&dir_path);
 
     let result = view.create_directory(&path);
@@ -1006,12 +1006,12 @@ pub(crate) mod tests {
     let mut file_count = 0;
     let mut dir_count = 0;
     for entry in listing {
-      if entry.entry_type() == EntryType::CDIR {
+      if entry.entry_type() == EntryType::Cdir {
         assert_eq!(listed_dir_name, entry.name());
         cdir_count += 1;
-      } else if entry.entry_type() == EntryType::DIR {
+      } else if entry.entry_type() == EntryType::Dir {
         dir_count += 1;
-      } else if entry.entry_type() == EntryType::FILE {
+      } else if entry.entry_type() == EntryType::File {
         file_count += 1;
       }
       assert!(!entry.name().is_empty());

@@ -16,7 +16,7 @@ pub(crate) struct Feat;
 
 static LINES: Lazy<Vec<String>> = Lazy::new(|| {
   let mut lines: Vec<String> = vec!["Supported features:".to_string()];
-  let features = vec!["MLSD", "REST STREAM", "UTF8"];
+  let features = ["MLSD", "REST STREAM", "UTF8"];
   lines.extend(features.iter().map(|f| format!(" {}", f)));
   lines.push("END".to_string());
   lines
@@ -29,7 +29,7 @@ impl Executable for Feat {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::FEAT);
+    debug_assert_eq!(command.command, Commands::Feat);
 
     Feat::reply(
       Reply::new_multiline(ReplyCode::SystemStatus, LINES.clone()),
@@ -74,7 +74,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     Feat::execute(
       &mut session,
-      &Command::new(Commands::FEAT, ""),
+      &Command::new(Commands::Feat, ""),
       &mut reply_sender,
     )
     .await;

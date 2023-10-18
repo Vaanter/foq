@@ -20,7 +20,7 @@ impl Executable for Pass {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::PASS);
+    debug_assert_eq!(command.command, Commands::Pass);
 
     let password = command.argument.as_str();
     if password.is_empty() {
@@ -132,7 +132,7 @@ mod tests {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
-    let command = Command::new(Commands::PASS, "test");
+    let command = Command::new(Commands::Pass, "test");
 
     let users = vec![UserData::new("test", "test")];
     AUTH_PROVIDER
@@ -163,7 +163,7 @@ mod tests {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
-    let command = Command::new(Commands::PASS, "INVALID");
+    let command = Command::new(Commands::Pass, "INVALID");
 
     let users = vec![UserData::new("test", "test")];
     AUTH_PROVIDER
@@ -188,7 +188,7 @@ mod tests {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
-    let command = Command::new(Commands::PASS, "test");
+    let command = Command::new(Commands::Pass, "test");
 
     let users = vec![UserData::new("test", "test")];
     AUTH_PROVIDER
@@ -219,7 +219,7 @@ mod tests {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
-    let command = Command::new(Commands::PASS, "");
+    let command = Command::new(Commands::Pass, "");
 
     let users = vec![UserData::new("test", "test")];
     AUTH_PROVIDER
@@ -257,7 +257,7 @@ mod tests {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
-    let command = Command::new(Commands::PASS, "test");
+    let command = Command::new(Commands::Pass, "test");
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);

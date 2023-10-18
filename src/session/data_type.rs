@@ -5,13 +5,13 @@
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum DataType {
-  ASCII { sub_type: SubType },
-  BINARY,
+  Ascii { sub_type: SubType },
+  Binary,
 }
 
 impl Default for DataType {
   fn default() -> Self {
-    DataType::ASCII {
+    DataType::Ascii {
       sub_type: SubType::default(),
     }
   }

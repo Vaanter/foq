@@ -91,7 +91,7 @@ impl StandardDataChannelWrapper {
       };
     });
 
-    let mut addr = self.addr.clone();
+    let mut addr = self.addr;
     addr.set_port(port);
     Ok(addr)
   }

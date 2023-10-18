@@ -47,10 +47,10 @@ impl QuicOnlyDataChannelWrapper {
 
   /// Creates a new stream for the data channel.
   ///
-  /// Creates a new [`tokio::task`] that creates a new stream and waits 20 seconds for the stream
-  /// to be accepted. If the client accepts the stream, then the `data_channel` property is set
-  /// and the data channel can be used. If the connection is closed, the client does not accept
-  /// the stream in time or some other error occurs it will logged.
+  /// Creates a new [`tokio::task`] that waits 20 seconds for the client to create new
+  /// bidirectional stream. If the client creates the stream, then the `data_channel` property is
+  /// set and the data channel can be used. If the connection is closed, the client does not accept
+  /// the stream in time or some other error occurs it will be logged.
   ///
   #[tracing::instrument(skip(self))]
   async fn create_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
@@ -78,7 +78,7 @@ impl QuicOnlyDataChannelWrapper {
       };
     });
 
-    Ok(self.addr.clone())
+    Ok(self.addr)
   }
 }
 
@@ -94,9 +94,9 @@ impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
   }
 
   async fn close_data_stream(&mut self) {
-    let dc = self.data_channel.clone();
-    if dc.lock().await.is_some() {
-      let _ = dc.lock().await.as_mut().unwrap().shutdown().await;
+    let mut dc = self.data_channel.lock().await;
+    if dc.is_some() {
+      let _ = dc.as_mut().unwrap().shutdown().await;
     };
   }
 

@@ -98,7 +98,7 @@ impl DataSource for SqliteDataSource {
         view
           .permissions
           .trim()
-          .split(";")
+          .split(';')
           .filter(|&p| !p.is_empty())
           .map(|p| UserPermission::from_str(p).map_err(|_| AuthError::PermissionParsingError)),
       )?;

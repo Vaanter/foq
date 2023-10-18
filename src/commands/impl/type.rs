@@ -18,7 +18,7 @@ impl Executable for Type {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::TYPE);
+    debug_assert_eq!(command.command, Commands::Type);
 
     let mut session_properties = command_processor.session_properties.write().await;
 
@@ -45,26 +45,26 @@ impl Executable for Type {
 
     let (new_type, sub_type) = command
       .argument
-      .split_once(" ")
+      .split_once(' ')
       .unwrap_or((&command.argument, ""));
 
     match (new_type, sub_type) {
       ("A", "N") | ("A", "") => {
-        session_properties.data_type = DataType::ASCII {
+        session_properties.data_type = DataType::Ascii {
           sub_type: SubType::NonPrint,
         }
       }
       ("A", "T") => {
-        session_properties.data_type = DataType::ASCII {
+        session_properties.data_type = DataType::Ascii {
           sub_type: SubType::TelnetFormatEffectors,
         }
       }
       ("A", "C") => {
-        session_properties.data_type = DataType::ASCII {
+        session_properties.data_type = DataType::Ascii {
           sub_type: SubType::CarriageControl,
         }
       }
-      ("I", _) => session_properties.data_type = DataType::BINARY,
+      ("I", _) => session_properties.data_type = DataType::Binary,
       (_, _) => {
         Self::reply(
           Reply::new(
@@ -119,15 +119,16 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "A N");
+    let command = Command::new(Commands::Type, "A N");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    if timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
+    .is_err()
     {
       panic!("Command timeout!");
     };
@@ -135,7 +136,7 @@ mod tests {
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
       command_processor.session_properties.read().await.data_type,
-      DataType::ASCII {
+      DataType::Ascii {
         sub_type: SubType::NonPrint
       }
     );
@@ -155,15 +156,16 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "A");
+    let command = Command::new(Commands::Type, "A");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    if timeout(
       Duration::from_secs(3),
       Type::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
+    .is_err()
     {
       panic!("Command timeout!");
     };
@@ -171,7 +173,7 @@ mod tests {
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
       command_processor.session_properties.read().await.data_type,
-      DataType::ASCII {
+      DataType::Ascii {
         sub_type: SubType::NonPrint
       }
     );
@@ -191,7 +193,7 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "I");
+    let command = Command::new(Commands::Type, "I");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -205,7 +207,7 @@ mod tests {
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
       command_processor.session_properties.read().await.data_type,
-      DataType::BINARY
+      DataType::Binary
     );
   }
 
@@ -223,7 +225,7 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "A T");
+    let command = Command::new(Commands::Type, "A T");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -237,7 +239,7 @@ mod tests {
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
       command_processor.session_properties.read().await.data_type,
-      DataType::ASCII {
+      DataType::Ascii {
         sub_type: SubType::TelnetFormatEffectors
       }
     );
@@ -257,7 +259,7 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "A C");
+    let command = Command::new(Commands::Type, "A C");
 
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
@@ -271,7 +273,7 @@ mod tests {
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
     assert_eq!(
       command_processor.session_properties.read().await.data_type,
-      DataType::ASCII {
+      DataType::Ascii {
         sub_type: SubType::CarriageControl
       }
     );
@@ -291,7 +293,7 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "");
+    let command = Command::new(Commands::Type, "");
 
     let original_type = command_processor.session_properties.read().await.data_type;
 
@@ -331,7 +333,7 @@ mod tests {
 
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
-    let command = Command::new(Commands::TYPE, "E");
+    let command = Command::new(Commands::Type, "E");
 
     let original_type = command_processor.session_properties.read().await.data_type;
 

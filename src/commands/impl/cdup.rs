@@ -19,7 +19,7 @@ impl Executable for Cdup {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::CDUP);
+    debug_assert_eq!(command.command, Commands::Cdup);
 
     let mut session_properties = command_processor.session_properties.write().await;
 
@@ -119,7 +119,7 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let command = Command::new(Commands::CDUP, "path");
+    let command = Command::new(Commands::Cdup, "path");
 
     common(
       &settings,
@@ -143,7 +143,7 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let command = Command::new(Commands::CDUP, "");
+    let command = Command::new(Commands::Cdup, "");
 
     common(
       &settings,
@@ -168,7 +168,7 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let command = Command::new(Commands::CDUP, "");
+    let command = Command::new(Commands::Cdup, "");
 
     common(
       &settings,
@@ -188,7 +188,7 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let command = Command::new(Commands::CDUP, "");
+    let command = Command::new(Commands::Cdup, "");
 
     common(
       &settings,

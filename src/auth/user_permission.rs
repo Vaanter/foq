@@ -10,41 +10,41 @@ use crate::io::entry_data::EntryType;
 #[strum(ascii_case_insensitive)]
 pub(crate) enum UserPermission {
   #[strum(serialize = "r")]
-  READ,
+  Read,
   #[strum(serialize = "w")]
-  WRITE,
+  Write,
   #[strum(serialize = "a")]
-  APPEND,
+  Append,
   #[strum(serialize = "c")]
-  CREATE,
+  Create,
   #[strum(serialize = "e")]
-  EXECUTE,
+  Execute,
   #[strum(serialize = "f")]
-  RENAME,
+  Rename,
   #[strum(serialize = "l")]
-  LIST,
+  List,
   #[strum(serialize = "d")]
-  DELETE,
+  Delete,
 }
 
 impl UserPermission {
   pub(crate) fn get_applicable_permissions(entry_type: &EntryType) -> Vec<UserPermission> {
     match entry_type {
-      EntryType::FILE => Vec::from([
-        UserPermission::READ,
-        UserPermission::WRITE,
-        UserPermission::APPEND,
-        UserPermission::RENAME,
-        UserPermission::DELETE,
+      EntryType::File => Vec::from([
+        UserPermission::Read,
+        UserPermission::Write,
+        UserPermission::Append,
+        UserPermission::Rename,
+        UserPermission::Delete,
       ]),
-      EntryType::DIR | EntryType::CDIR | EntryType::PDIR => Vec::from([
-        UserPermission::CREATE,
-        UserPermission::EXECUTE,
-        UserPermission::RENAME,
-        UserPermission::LIST,
-        UserPermission::DELETE,
+      EntryType::Dir | EntryType::Cdir | EntryType::Pdir => Vec::from([
+        UserPermission::Create,
+        UserPermission::Execute,
+        UserPermission::Rename,
+        UserPermission::List,
+        UserPermission::Delete,
       ]),
-      EntryType::LINK => Vec::from([UserPermission::DELETE, UserPermission::RENAME]),
+      EntryType::Link => Vec::from([UserPermission::Delete, UserPermission::Rename]),
     }
   }
 }
@@ -62,28 +62,28 @@ mod test {
 
   #[test]
   fn pvals_test() {
-    let perm = UserPermission::READ;
+    let perm = UserPermission::Read;
     assert_eq!("r", perm.get_serializations()[0]);
 
-    let perm = UserPermission::APPEND;
+    let perm = UserPermission::Append;
     assert_eq!("a", perm.get_serializations()[0]);
 
-    let perm = UserPermission::WRITE;
+    let perm = UserPermission::Write;
     assert_eq!("w", perm.get_serializations()[0]);
 
-    let perm = UserPermission::CREATE;
+    let perm = UserPermission::Create;
     assert_eq!("c", perm.get_serializations()[0]);
 
-    let perm = UserPermission::DELETE;
+    let perm = UserPermission::Delete;
     assert_eq!("d", perm.get_serializations()[0]);
 
-    let perm = UserPermission::RENAME;
+    let perm = UserPermission::Rename;
     assert_eq!("f", perm.get_serializations()[0]);
 
-    let perm = UserPermission::LIST;
+    let perm = UserPermission::List;
     assert_eq!("l", perm.get_serializations()[0]);
 
-    let perm = UserPermission::EXECUTE;
+    let perm = UserPermission::Execute;
     assert_eq!("e", perm.get_serializations()[0]);
   }
 }

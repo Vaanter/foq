@@ -7,8 +7,8 @@
 #[derive(Copy, Clone, Debug, Default)]
 pub(crate) enum ConnectionMode {
   /// In active mode the server initiates a connection to address specified by client.
-  ACTIVE,
+  Active,
   #[default]
   /// In passive mode the server only listens on a port of it's choosing.
-  PASSIVE,
+  Passive,
 }

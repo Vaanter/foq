@@ -23,7 +23,7 @@ impl Executable for Pasv {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::PASV);
+    debug_assert_eq!(command.command, Commands::Pasv);
 
     match timeout(
       Duration::from_secs(5),
@@ -35,7 +35,7 @@ impl Executable for Pasv {
         let reply = match wrapper.open_data_stream().await.unwrap() {
           SocketAddr::V4(addr) => Reply::new(
             ReplyCode::EnteringPassiveMode,
-            &Pasv::create_pasv_response(&addr),
+            Pasv::create_pasv_response(&addr),
           ),
           SocketAddr::V6(_) => {
             error!("PASV: IPv6 is not supported!");
@@ -98,7 +98,7 @@ mod tests {
 
   #[tokio::test]
   async fn simple_open_dc() {
-    let command = Command::new(Commands::PASV, String::new());
+    let command = Command::new(Commands::Pasv, String::new());
 
     let label = "test_files".to_string();
 
@@ -114,11 +114,12 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    if timeout(
       Duration::from_secs(2),
       Pasv::execute(&mut command_processor, &command, &mut reply_sender),
     )
     .await
+    .is_err()
     {
       panic!("Command timeout!");
     };
@@ -157,12 +158,12 @@ mod tests {
   fn parse_socketaddr(reply: Reply) -> SocketAddr {
     let message = reply.to_string();
     let start = message
-      .find("(")
+      .find('(')
       .expect("Address should start with '(' (non-standard)");
     let end = message
-      .find(")")
+      .find(')')
       .expect("Address should end with ')' (non-standard)");
-    let addr = message[start + 1..end].split(",").collect::<Vec<&str>>();
+    let addr = message[start + 1..end].split(',').collect::<Vec<&str>>();
 
     let mut ip = addr
       .iter()

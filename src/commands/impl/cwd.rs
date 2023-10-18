@@ -19,7 +19,7 @@ impl Executable for Cwd {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::CWD);
+    debug_assert_eq!(command.command, Commands::Cwd);
 
     let mut session_properties = command_processor.session_properties.write().await;
 
@@ -73,7 +73,7 @@ mod tests {
 
   #[tokio::test]
   async fn cwd_absolute_test() {
-    let command = Command::new(Commands::CWD, "/test");
+    let command = Command::new(Commands::Cwd, "/test");
 
     let (_, mut command_processor) = setup_test_command_processor();
 
@@ -100,7 +100,7 @@ mod tests {
 
   #[tokio::test]
   async fn to_current_test() {
-    let command = Command::new(Commands::CWD, "/");
+    let command = Command::new(Commands::Cwd, "/");
 
     let (_, mut command_processor) = setup_test_command_processor();
 
@@ -127,7 +127,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::CWD, "/test");
+    let command = Command::new(Commands::Cwd, "/test");
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
@@ -158,7 +158,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_argument_test() {
-    let command = Command::new(Commands::CWD, "");
+    let command = Command::new(Commands::Cwd, "");
 
     let (_, mut command_processor) = setup_test_command_processor();
 

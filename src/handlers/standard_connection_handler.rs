@@ -12,6 +12,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::reply_sender::{ReplySend, ReplySender};
@@ -39,7 +40,7 @@ impl StandardConnectionHandler {
   ///
   pub(crate) fn new(stream: TcpStream) -> Self {
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(
-      stream.local_addr().unwrap().clone(),
+      stream.local_addr().unwrap(),
     )));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
@@ -116,13 +117,18 @@ impl ConnectionHandler for StandardConnectionHandler {
         biased;
         _ = token.cancelled() => {
           info!("[TCP] Shutdown received!");
-          let _ = timeout(Duration::from_secs(2), self.reply_sender.close()).await;
+          if timeout(Duration::from_secs(2), self.reply_sender.close()).await.is_err() {
+            warn!("[TCP] Failed to close command channel in time!");
+          };
+          if timeout(Duration::from_secs(2), self.data_channel_wrapper.lock().await.close_data_stream()).await.is_err() {
+            warn!("[TCP] Failed to close data channel in time!")
+          };
           break;
         }
         result = self.await_command() => {
           if let Err(e) = result {
-            warn!("[TCP] Error awaiting command! {e}.");
-            if let Err(_) = timeout(Duration::from_secs(2), self.reply_sender.close()).await {
+            warn!("[TCP] Error awaiting command! {e}");
+            if timeout(Duration::from_secs(2), self.reply_sender.close()).await.is_err() {
               warn!("[TCP] Failed to clean up after connection shutdown!");
             };
             break;

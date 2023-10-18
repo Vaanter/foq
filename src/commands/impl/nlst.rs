@@ -22,7 +22,7 @@ impl Executable for Nlst {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(Commands::NLST, command.command);
+    debug_assert_eq!(Commands::Nlst, command.command);
 
     let session_properties = command_processor.session_properties.read().await;
 
@@ -64,9 +64,11 @@ impl Executable for Nlst {
         .await;
         let mem = listing
           .iter()
-          .filter(|l| l.entry_type() != EntryType::CDIR)
-          .map(|l| format!(" {}\r\n", l.name()))
-          .collect::<String>();
+          .filter(|l| l.entry_type() != EntryType::Cdir)
+          .fold(String::with_capacity(listing.len() * 32), |mut acc, e| {
+            acc.push_str(&format!(" {}\r\n", e.name()));
+            acc
+          });
         trace!("Sending listing to client:\n{}", mem);
         let len = s.write_all(mem.as_ref()).await;
         debug!("Sending listing result: {:?}", len);
@@ -123,7 +125,7 @@ mod tests {
 
   #[tokio::test]
   async fn list_directory_test() {
-    let command = Command::new(Commands::NLST, String::new());
+    let command = Command::new(Commands::Nlst, String::new());
     let (_, mut command_processor) = setup_test_command_processor();
 
     let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
@@ -163,7 +165,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::NLST, String::new());
+    let command = Command::new(Commands::Nlst, String::new());
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
       .expect("Settings should be valid");
@@ -183,7 +185,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_connection_not_open_test() {
-    let command = Command::new(Commands::NLST, String::new());
+    let command = Command::new(Commands::Nlst, String::new());
     let (_, mut command_processor) = setup_test_command_processor();
 
     let (tx, mut rx) = channel(1024);

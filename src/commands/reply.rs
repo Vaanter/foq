@@ -57,8 +57,8 @@ impl FromStr for Reply {
   type Err = anyhow::Error;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
-    let mut lines = s.split_inclusive("\n").collect::<VecDeque<&str>>();
-    if lines.len() == 0 || s.len() < 5 {
+    let mut lines = s.split_inclusive('\n').collect::<VecDeque<&str>>();
+    if lines.is_empty() || s.len() < 5 {
       anyhow::bail!("Reply too short!");
     }
     let start = lines.pop_front().unwrap();
@@ -77,7 +77,7 @@ impl FromStr for Reply {
       Err(e) => anyhow::bail!("Invalid reply code! {}", e),
     };
     if lines.is_empty() {
-      return Ok(Reply::new(code, &start[4..].trim_end().to_string()));
+      return Ok(Reply::new(code, start[4..].trim_end().to_string()));
     }
     let last = match lines.pop_back() {
       Some(l) => l,
@@ -98,9 +98,9 @@ impl FromStr for Reply {
     };
 
     let mut parts: Vec<&str> = Vec::with_capacity(lines.len());
-    parts.push(&start[4..].trim_end());
+    parts.push(start[4..].trim_end());
     lines.iter().for_each(|l| parts.push(l.trim_end()));
-    parts.push(&last[4..].trim_end());
+    parts.push(last[4..].trim_end());
 
     Ok(Reply::new_multiline(code, parts))
   }

@@ -23,7 +23,7 @@ impl Executable for List {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::LIST);
+    debug_assert_eq!(command.command, Commands::List);
 
     let session_properties = command_processor.session_properties.read().await;
 
@@ -56,7 +56,7 @@ impl Executable for List {
       Some(s) => {
         let mem = listing
           .iter()
-          .filter(|l| l.entry_type() != EntryType::CDIR)
+          .filter(|l| l.entry_type() != EntryType::Cdir)
           .map(|l| l.to_list_string())
           .collect::<String>();
         trace!(
@@ -178,7 +178,7 @@ mod tests {
 
   #[tokio::test]
   async fn simple_listing_tcp() {
-    let command = Command::new(Commands::LIST, String::new());
+    let command = Command::new(Commands::List, String::new());
 
     let label = "test_files".to_string();
 
@@ -195,7 +195,7 @@ mod tests {
 
   #[tokio::test]
   async fn listing_with_argument_tcp() {
-    let command = Command::new(Commands::LIST, "-a".to_string());
+    let command = Command::new(Commands::List, "-a".to_string());
 
     let label = "test_files".to_string();
 
@@ -212,7 +212,7 @@ mod tests {
 
   #[tokio::test]
   async fn listing_with_path_parameter_tcp() {
-    let command = Command::new(Commands::LIST, ".".to_string());
+    let command = Command::new(Commands::List, ".".to_string());
 
     let label = "test_files".to_string();
 
@@ -229,7 +229,7 @@ mod tests {
 
   #[tokio::test]
   async fn listing_with_argument_with_path_parameter_tcp() {
-    let command = Command::new(Commands::LIST, "-l .".to_string());
+    let command = Command::new(Commands::List, "-l .".to_string());
 
     let label = "test_files".to_string();
 
@@ -246,7 +246,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::LIST, String::new());
+    let command = Command::new(Commands::List, String::new());
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
@@ -266,7 +266,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_directory_test() {
-    let command = Command::new(Commands::LIST, String::from("1MiB.txt"));
+    let command = Command::new(Commands::List, String::from("1MiB.txt"));
 
     let label = "test_files".to_string();
 
@@ -300,7 +300,7 @@ mod tests {
 
   #[tokio::test]
   async fn nonexistent_test() {
-    let command = Command::new(Commands::LIST, String::from("NONEXISTENT"));
+    let command = Command::new(Commands::List, String::from("NONEXISTENT"));
 
     let label = "test_files".to_string();
 
@@ -328,7 +328,7 @@ mod tests {
 
   #[tokio::test]
   async fn insufficient_permissions_test() {
-    let command = Command::new(Commands::LIST, String::new());
+    let command = Command::new(Commands::List, String::new());
 
     let label = "test_files".to_string();
 
@@ -365,7 +365,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_tcp() {
-    let command = Command::new(Commands::LIST, String::new());
+    let command = Command::new(Commands::List, String::new());
 
     let label = "test_files".to_string();
 

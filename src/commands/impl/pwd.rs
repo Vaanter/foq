@@ -17,7 +17,7 @@ impl Executable for Pwd {
     command: &Command,
     reply_sender: &mut impl ReplySend,
   ) {
-    debug_assert_eq!(command.command, Commands::PWD);
+    debug_assert_eq!(command.command, Commands::Pwd);
 
     let session_properties = command_processor.session_properties.read().await;
 
@@ -76,7 +76,7 @@ mod tests {
 
   #[tokio::test]
   async fn with_argument_test() {
-    let command = Command::new(Commands::PWD, "/test_files");
+    let command = Command::new(Commands::Pwd, "/test_files");
 
     let label = "test_files".to_string();
 
@@ -109,7 +109,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let command = Command::new(Commands::PWD, "");
+    let command = Command::new(Commands::Pwd, "");
 
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
@@ -130,7 +130,7 @@ mod tests {
 
   #[tokio::test]
   async fn format_test() {
-    let command = Command::new(Commands::PWD, "");
+    let command = Command::new(Commands::Pwd, "");
 
     let label = "test_files".to_string();
 
