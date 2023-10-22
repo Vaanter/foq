@@ -367,7 +367,6 @@ mod tests {
         Ok(len) => len,
         Err(e) => panic!("Failed to read local file! {e}"),
       };
-      println!("Read {local_len} from local file");
 
       if local_len == 0 {
         break;
@@ -402,8 +401,6 @@ mod tests {
         Ok(len) => len,
         Err(e) => panic!("Failed to read remote file! {e}"),
       };
-
-      println!("Read {remote_len} from remote file");
 
       reads += remote_len;
       if remote_len == 0 {
