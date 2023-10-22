@@ -111,15 +111,9 @@ where
     match result {
       Ok(n) => {
         trace!("Read {n} bytes from source");
-        let mut sent = 0;
-        while sent < n {
-          match to.write(&buffer[sent..n]).await {
-            Ok(current_sent) => sent += current_sent,
-            Err(e) => {
-              error!("Write to target failed! {e}");
-              break 'send_loop false;
-            }
-          }
+        if let Err(e) = to.write_all(&buffer[..n]).await {
+          error!("Write to target failed! {e}");
+          break 'send_loop false;
         }
         if n == 0 {
           break true;
