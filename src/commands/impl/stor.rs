@@ -355,8 +355,8 @@ mod tests {
       .await
       .expect("Local test file must exist!");
 
-    const REMOTE_BUFFER_SIZE: usize = 8192;
-    const LOCAL_BUFFER_SIZE: usize = 8192;
+    const REMOTE_BUFFER_SIZE: usize = 16384;
+    const LOCAL_BUFFER_SIZE: usize = 16384;
     let mut remote_buffer = [0; REMOTE_BUFFER_SIZE];
     let mut local_buffer = [0; LOCAL_BUFFER_SIZE];
 
