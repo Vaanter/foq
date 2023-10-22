@@ -92,10 +92,7 @@ impl Executable for Retr {
 
     if session_properties.offset != 0 {
       debug!("Setting cursor to offset: {}", session_properties.offset);
-      if let Err(e) = file
-        .seek(SeekFrom::Start(session_properties.offset))
-        .await
-      {
+      if let Err(e) = file.seek(SeekFrom::Start(session_properties.offset)).await {
         warn!(
           "Failed to seek file {} to offset {}. Error: {}",
           &command.argument, session_properties.offset, e
@@ -104,7 +101,7 @@ impl Executable for Retr {
     }
 
     debug!("Sending file data!");
-    let mut buffer = vec![0; 4096];
+    let mut buffer = vec![0; 16384];
     let success = transfer_data(&mut file, data_channel.as_mut().unwrap(), &mut buffer).await;
 
     Self::reply(get_transfer_reply(success), reply_sender).await;
@@ -132,9 +129,6 @@ mod tests {
   use quinn::TransportConfig;
   use rustls::KeyLogFile;
   use s2n_quic::client::Connect;
-  use s2n_quic::provider::io::tokio::Builder as IoBuilder;
-  use s2n_quic::provider::tls::default::Client as TlsClient;
-  use s2n_quic::Client;
   use tokio::fs::OpenOptions;
   use tokio::io::{AsyncRead, AsyncReadExt};
   use tokio::sync::mpsc::channel;
@@ -148,15 +142,15 @@ mod tests {
   use crate::commands::executable::Executable;
   use crate::commands::r#impl::retr::Retr;
   use crate::commands::reply_code::ReplyCode;
-  use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
   use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
   use crate::session::command_processor::CommandProcessor;
   use crate::utils::test_utils::{
     create_tls_client_config, generate_test_file, open_tcp_data_channel, receive_and_verify_reply,
-    setup_test_command_processor, setup_test_command_processor_custom,
-    CommandProcessorSettingsBuilder, TempFileCleanup, TestReplySender, LOCALHOST,
+    setup_s2n_client, setup_test_command_processor, setup_test_command_processor_custom,
+    setup_transfer_command_processor, CommandProcessorSettingsBuilder, TempFileCleanup,
+    TestReplySender, LOCALHOST,
   };
 
   async fn common_tcp(file_name: &str) {
@@ -167,7 +161,7 @@ mod tests {
     let command = Command::new(Commands::Retr, file_name);
 
     let wrapper = StandardDataChannelWrapper::new(LOCALHOST);
-    let mut command_processor = setup(wrapper);
+    let mut command_processor = setup_transfer_command_processor(wrapper, current_dir().unwrap());
     let client_dc = open_tcp_data_channel(&mut command_processor).await;
     transfer(file_name, command, command_processor, client_dc).await;
   }
@@ -184,30 +178,10 @@ mod tests {
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
       let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
-      setup(wrapper)
+      setup_transfer_command_processor(wrapper, current_dir().unwrap())
     });
 
-    let mut tls_config = create_tls_client_config("ftpoq-1");
-    tls_config.key_log = Arc::new(KeyLogFile::new());
-    let tls_client = TlsClient::new(tls_config);
-
-    let io = IoBuilder::default()
-      .with_recv_buffer_size(50 * 2usize.pow(20))
-      .unwrap()
-      .with_receive_address(LOCALHOST)
-      .unwrap()
-      .with_internal_recv_buffer_size(50 * 2usize.pow(20))
-      .unwrap()
-      .build()
-      .unwrap();
-
-    let client = Client::builder()
-      .with_tls(tls_client)
-      .expect("Client requires valid TLS settings!")
-      .with_io(io)
-      .expect("Client requires valid I/O settings!")
-      .start()
-      .expect("Client must be able to start");
+    let client = setup_s2n_client();
 
     let connect = Connect::new(addr).with_server_name("localhost");
     let mut client_connection = match timeout(Duration::from_secs(2), client.connect(connect)).await
@@ -253,7 +227,7 @@ mod tests {
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
       let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
-      setup(wrapper)
+      setup_transfer_command_processor(wrapper, current_dir().unwrap())
     });
 
     let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
@@ -294,26 +268,6 @@ mod tests {
 
     transfer(file_name, command, command_processor, cliend_dc_recv).await;
     //println!("stats: {:#?}", connection);
-  }
-
-  fn setup<T: DataChannelWrapper + 'static>(data_channel_wrapper: T) -> CommandProcessor {
-    eprintln!("Running setup.");
-
-    let label = "test_files".to_string();
-
-    let settings = CommandProcessorSettingsBuilder::default()
-      .label(label.clone())
-      .change_path(Some(label.clone()))
-      .username(Some("testuser".to_string()))
-      .view_root(current_dir().unwrap())
-      .change_path(Some(label.clone()))
-      .build()
-      .expect("Settings should be valid");
-
-    let mut command_processor = setup_test_command_processor_custom(&settings);
-    command_processor.data_wrapper = Arc::new(Mutex::new(data_channel_wrapper));
-    println!("Setup completed.");
-    command_processor
   }
 
   async fn transfer<T: AsyncRead + Unpin>(

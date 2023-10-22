@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use derive_builder::Builder;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
-use rustls::{Certificate, ClientConfig, ServerConfig, ServerName};
+use rustls::{Certificate, ClientConfig, KeyLogFile, ServerConfig, ServerName};
 use std::cmp::min;
 use std::collections::HashSet;
-use std::env::temp_dir;
+use std::env::{current_dir, temp_dir};
 use std::fs::{remove_dir_all, remove_file};
 use std::io::Error;
 use std::iter::Iterator;
@@ -12,7 +12,10 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use s2n_quic::Client;
 use strum::IntoEnumIterator;
+use s2n_quic::provider::io::tokio::Builder as IoBuilder;
+use s2n_quic::provider::tls::default::Client as TlsClient;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
@@ -22,6 +25,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+use tracing::Level;
 
 use crate::auth::auth_error::AuthError;
 use crate::auth::auth_provider::AuthProvider;
@@ -31,6 +35,7 @@ use crate::auth::user_data::UserData;
 use crate::auth::user_permission::UserPermission;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
+use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
 use crate::global_context::{CERTS, KEY};
 use crate::handlers::connection_handler::ConnectionHandler;
@@ -112,7 +117,7 @@ impl<'a> DirCleanup<'a> {
 
 impl<'a> Drop for DirCleanup<'a> {
   fn drop(&mut self) {
-    if let Err(remove_result) = remove_dir_all(&self.directory_path) {
+    if let Err(remove_result) = remove_dir_all(self.directory_path) {
       eprintln!("Failed to remove directory: {}", remove_result);
     }
   }
@@ -123,7 +128,7 @@ pub(crate) struct TempFileCleanup<'a>(&'a str);
 
 impl<'a> TempFileCleanup<'a> {
   pub(crate) fn new(path: &'a str) -> Self {
-    TempFileCleanup { 0: path }
+    TempFileCleanup(path)
   }
 }
 
@@ -296,8 +301,7 @@ pub(crate) fn setup_test_command_processor_custom(
 
   let session_properties = Arc::new(RwLock::new(session_properties));
   let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-  let command_processor = CommandProcessor::new(session_properties, wrapper);
-  command_processor
+  CommandProcessor::new(session_properties, wrapper)
 }
 
 #[derive(Builder, Default, Clone)]
@@ -364,10 +368,65 @@ pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
     let chunk_size = min(remaining, MAX_CHUNK_SIZE);
     let chunk = vec![0u8; chunk_size];
     output_writer
-      .write(&chunk)
+      .write_all(&chunk)
       .await
       .expect("Writing chunk to test file should succeed");
     output_writer.flush().await.unwrap();
     remaining -= chunk_size;
   }
+}
+
+pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(data_channel_wrapper: T, root: PathBuf) -> CommandProcessor {
+  println!("Running setup.");
+
+  let label = "test_files".to_string();
+
+  let settings = CommandProcessorSettingsBuilder::default()
+    .label(label.clone())
+    .change_path(Some(label.clone()))
+    .username(Some("testuser".to_string()))
+    .view_root(root)
+    .change_path(Some(label.clone()))
+    .build()
+    .expect("Settings should be valid");
+
+  let mut command_processor = setup_test_command_processor_custom(&settings);
+  command_processor.data_wrapper = Arc::new(Mutex::new(data_channel_wrapper));
+  println!("Setup completed.");
+  command_processor
+}
+
+pub(crate) fn setup_s2n_client() -> Client {
+  let mut tls_config = create_tls_client_config("ftpoq-1");
+  tls_config.key_log = Arc::new(KeyLogFile::new());
+  let tls_client = TlsClient::new(tls_config);
+
+  let io = IoBuilder::default()
+    .with_recv_buffer_size(50 * 2usize.pow(20))
+    .unwrap()
+    .with_receive_address(LOCALHOST)
+    .unwrap()
+    .with_internal_recv_buffer_size(50 * 2usize.pow(20))
+    .unwrap()
+    .build()
+    .unwrap();
+
+  Client::builder()
+    .with_tls(tls_client)
+    .expect("Client requires valid TLS settings!")
+    .with_io(io)
+    .expect("Client requires valid I/O settings!")
+    .start()
+    .expect("Client must be able to start")
+}
+
+pub(crate) fn setup_tracing() {
+  let subscriber = tracing_subscriber::fmt()
+    .with_env_filter(format!("foq={}", Level::DEBUG))
+    .with_file(true)
+    .with_line_number(true)
+    .with_thread_ids(true)
+    .with_target(false)
+    .finish();
+  let _ = tracing::subscriber::set_global_default(subscriber);
 }
