@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use s2n_quic::stream::BidirectionalStream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 
 /// Handles clients connection.
@@ -17,7 +15,5 @@ pub(crate) trait ConnectionHandler {
 /// Types that implement this trait allow for asynchronous thread-safe reading and writing.
 pub(crate) trait AsyncReadWrite: AsyncRead + AsyncWrite + Sync + Send + Unpin {}
 
-/// Needed for reply sender
-impl AsyncReadWrite for TcpStream {}
-/// Needed for reply sender
-impl AsyncReadWrite for BidirectionalStream {}
+/// Blanket implementation needed for data channel
+impl<T> AsyncReadWrite for T where T: AsyncRead + AsyncWrite + Sync + Send + Unpin {}
