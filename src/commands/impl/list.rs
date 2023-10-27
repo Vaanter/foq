@@ -1,11 +1,9 @@
-use async_trait::async_trait;
 use regex::Regex;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::get_listing_or_error_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -13,98 +11,87 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::io::entry_data::EntryType;
 use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct List;
+#[tracing::instrument(skip(command_processor, reply_sender))]
+pub(crate) async fn list(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::List);
 
-#[async_trait]
-impl Executable for List {
-  #[tracing::instrument(skip(command_processor, reply_sender))]
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::List);
+  let session_properties = command_processor.session_properties.read().await;
 
-    let session_properties = command_processor.session_properties.read().await;
+  let arguments_re = Regex::new("^(-[al])? ?(.*)?$").expect("Regex should be valid!");
 
-    let arguments_re = Regex::new("^(-[al])? ?(.*)?$").expect("Regex should be valid!");
-
-    let path = match arguments_re.captures(&command.argument) {
-      Some(caps) => match caps.get(2) {
-        Some(p) => p.as_str(),
-        None => ".",
-      },
+  let path = match arguments_re.captures(&command.argument) {
+    Some(caps) => match caps.get(2) {
+      Some(p) => p.as_str(),
       None => ".",
-    };
+    },
+    None => ".",
+  };
 
-    let listing = session_properties.file_system_view_root.list_dir(path);
+  let listing = session_properties.file_system_view_root.list_dir(path);
 
-    let listing = match get_listing_or_error_reply(listing) {
-      Ok(l) => l,
-      Err(r) => return Self::reply(r, reply_sender).await,
-    };
+  let listing = match get_listing_or_error_reply(listing) {
+    Ok(l) => l,
+    Err(r) => return reply_sender.send_control_message(r).await,
+  };
 
-    debug!("Locking data stream!");
-    let stream = command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .get_data_stream()
-      .await;
+  debug!("Locking data stream!");
+  let stream = command_processor
+    .data_wrapper
+    .lock()
+    .await
+    .get_data_stream()
+    .await;
 
-    match stream.lock().await.as_mut() {
-      Some(s) => {
-        let mem = listing
-          .iter()
-          .filter(|l| l.entry_type() != EntryType::Cdir)
-          .map(|l| l.to_list_string())
-          .collect::<String>();
-        trace!(
-          "Sending listing to client:\n{}",
-          mem.replace("\r\n", "\\r\\n")
-        );
-        let len = s.write_all(mem.as_ref()).await;
-        debug!("Sending listing result: {:?}", len);
-      }
-      None => {
-        info!("Data stream is not open!");
-        Self::reply(
-          Reply::new(
-            ReplyCode::BadSequenceOfCommands,
-            "Data connection is not open!",
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
+  match stream.lock().await.as_mut() {
+    Some(s) => {
+      let mem = listing
+        .iter()
+        .filter(|l| l.entry_type() != EntryType::Cdir)
+        .map(|l| l.to_list_string())
+        .collect::<String>();
+      trace!(
+        "Sending listing to client:\n{}",
+        mem.replace("\r\n", "\\r\\n")
+      );
+      let len = s.write_all(mem.as_ref()).await;
+      debug!("Sending listing result: {:?}", len);
     }
-
-    Self::reply(
-      Reply::new(
-        ReplyCode::FileStatusOkay,
-        "Transferring directory information!",
-      ),
-      reply_sender,
-    )
-    .await;
-
-    debug!("Listing sent to client!");
-    Self::reply(
-      Reply::new(
-        ReplyCode::ClosingDataConnection,
-        "Directory information sent!",
-      ),
-      reply_sender,
-    )
-    .await;
-    command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .close_data_stream()
-      .await;
+    None => {
+      info!("Data stream is not open!");
+      reply_sender
+        .send_control_message(Reply::new(
+          ReplyCode::BadSequenceOfCommands,
+          "Data connection is not open!",
+        ))
+        .await;
+      return;
+    }
   }
+
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::FileStatusOkay,
+      "Transferring directory information!",
+    ))
+    .await;
+
+  debug!("Listing sent to client!");
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::ClosingDataConnection,
+      "Directory information sent!",
+    ))
+    .await;
+  command_processor
+    .data_wrapper
+    .lock()
+    .await
+    .close_data_stream()
+    .await;
 }
 
 #[cfg(test)]
@@ -120,8 +107,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::list::List;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
@@ -137,7 +122,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      List::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -257,7 +242,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      List::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command should finish before timeout");
@@ -284,7 +269,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      List::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command should finish before timeout");
@@ -318,7 +303,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      List::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -347,7 +332,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(3),
-      List::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     {
@@ -383,7 +368,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      List::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

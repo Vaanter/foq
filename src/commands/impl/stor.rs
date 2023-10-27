@@ -1,9 +1,7 @@
-use async_trait::async_trait;
 use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::{
   get_data_channel_lock, get_open_file_result, get_transfer_reply, transfer_data,
 };
@@ -13,97 +11,91 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct Stor;
+pub(crate) async fn stor(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Stor);
 
-#[async_trait]
-impl Executable for Stor {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Stor);
-
-    if command.argument.is_empty() {
-      Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "No file specified!",
-        ),
-        reply_sender,
-      )
+  if command.argument.is_empty() {
+    reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "No file specified!",
+      ))
       .await;
+    return;
+  }
+
+  let session_properties = command_processor.session_properties.read().await;
+
+  if !session_properties.is_logged_in() {
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
+      .await;
+    return;
+  }
+
+  let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
+  let mut data_channel = match data_channel_lock {
+    Ok(dc) => dc,
+    Err(e) => {
+      reply_sender.send_control_message(e).await;
       return;
     }
+  };
 
-    let session_properties = command_processor.session_properties.read().await;
-
-    if !session_properties.is_logged_in() {
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
-
-    let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
-    let mut data_channel = match data_channel_lock {
-      Ok(dc) => dc,
-      Err(e) => {
-        Self::reply(e, reply_sender).await;
-        return;
-      }
-    };
-
-    let options = OpenOptionsWrapperBuilder::default()
-      .write(true)
-      .truncate(true)
-      .create(true)
-      .build()
-      .unwrap();
-    info!(
-      "User '{}' opening file '{}'.",
-      session_properties.username.as_ref().unwrap(),
-      &command.argument
-    );
-    let file = session_properties
-      .file_system_view_root
-      .open_file(&command.argument, options)
-      .await;
-
-    let mut file = match get_open_file_result(file) {
-      Ok(f) => f,
-      Err(reply) => {
-        Self::reply(reply, reply_sender).await;
-        return;
-      }
-    };
-
-    Self::reply(
-      Reply::new(ReplyCode::FileStatusOkay, "Starting file transfer!"),
-      reply_sender,
-    )
+  let options = OpenOptionsWrapperBuilder::default()
+    .write(true)
+    .truncate(true)
+    .create(true)
+    .build()
+    .unwrap();
+  info!(
+    "User '{}' opening file '{}'.",
+    session_properties.username.as_ref().unwrap(),
+    &command.argument
+  );
+  let file = session_properties
+    .file_system_view_root
+    .open_file(&command.argument, options)
     .await;
 
-    debug!("Receiving file data!");
-    let mut buffer = vec![0; 16384];
-    let success = transfer_data(&mut data_channel.as_mut().unwrap(), &mut file, &mut buffer).await;
-    if let Err(e) = file.sync_data().await {
-      warn!("Failed to sync file data! {e}");
-    };
+  let mut file = match get_open_file_result(file) {
+    Ok(f) => f,
+    Err(reply) => {
+      reply_sender.send_control_message(reply).await;
+      return;
+    }
+  };
 
-    Self::reply(get_transfer_reply(success), reply_sender).await;
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::FileStatusOkay,
+      "Starting file transfer!",
+    ))
+    .await;
 
-    // Needed to release the lock. Maybe find a better way to do this?
-    drop(data_channel);
-    command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .close_data_stream()
-      .await;
-  }
+  debug!("Receiving file data!");
+  let mut buffer = vec![0; 16384];
+  let success = transfer_data(&mut data_channel.as_mut().unwrap(), &mut file, &mut buffer).await;
+  if let Err(e) = file.sync_data().await {
+    warn!("Failed to sync file data! {e}");
+  };
+
+  reply_sender
+    .send_control_message(get_transfer_reply(success))
+    .await;
+
+  // Needed to release the lock. Maybe find a better way to do this?
+  drop(data_channel);
+  command_processor
+    .data_wrapper
+    .lock()
+    .await
+    .close_data_stream()
+    .await;
 }
 
 #[cfg(test)]
@@ -129,8 +121,6 @@ mod tests {
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::stor::Stor;
   use crate::commands::reply_code::ReplyCode;
   use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
@@ -327,7 +317,7 @@ mod tests {
     let command_fut = tokio::spawn(async move {
       timeout(
         Duration::from_secs(TIMEOUT_SECS),
-        Stor::execute(&mut command_processor, &command, &mut reply_sender),
+        command.execute(&mut command_processor, &mut reply_sender),
       )
       .await
       .expect("Command timeout!");
@@ -562,7 +552,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Stor::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");
@@ -603,7 +593,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Stor::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");
@@ -646,7 +636,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Stor::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");

@@ -1,65 +1,53 @@
-use async_trait::async_trait;
 use tracing::{info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::get_create_directory_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
-pub(crate) struct Mkd;
+pub(crate) async fn mkd(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  trace!("Executing MKD command");
+  debug_assert_eq!(command.command, Commands::Mkd);
+  let session_properties = command_processor.session_properties.read().await;
 
-#[async_trait]
-impl Executable for Mkd {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    trace!("Executing MKD command");
-    debug_assert_eq!(command.command, Commands::Mkd);
-    let session_properties = command_processor.session_properties.read().await;
-
-    if !session_properties.is_logged_in() {
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
+  if !session_properties.is_logged_in() {
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
       .await;
-      return;
-    }
-
-    if command.argument.is_empty() {
-      Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "MKD must have an argument!",
-        ),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
-
-    info!("Creating directory");
-    let result = session_properties
-      .file_system_view_root
-      .create_directory(&command.argument);
-
-    Self::reply(get_create_directory_reply(result), reply_sender).await;
+    return;
   }
+
+  if command.argument.is_empty() {
+    reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "MKD must have an argument!",
+      ))
+      .await;
+    return;
+  }
+
+  info!("Creating directory");
+  let result = session_properties
+    .file_system_view_root
+    .create_directory(&command.argument);
+
+  reply_sender
+    .send_control_message(get_create_directory_reply(result))
+    .await;
 }
 
 #[cfg(test)]
 mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::mkd::Mkd;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
@@ -84,7 +72,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Mkd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -116,7 +104,7 @@ mod tests {
     let _d = DirCleanup::new(&dir_path);
     timeout(
       Duration::from_secs(3),
-      Mkd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

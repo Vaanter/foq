@@ -1,27 +1,14 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct Noop;
-
-#[async_trait]
-impl Executable for Noop {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(Commands::Noop, command.command);
-    reply_sender
-      .send_control_message(Reply::new(ReplyCode::CommandOkay, "OK"))
-      .await;
-  }
+pub(crate) async fn noop(command: &Command, reply_sender: &mut impl ReplySend) {
+  debug_assert_eq!(Commands::Noop, command.command);
+  reply_sender
+    .send_control_message(Reply::new(ReplyCode::CommandOkay, "OK"))
+    .await;
 }
 
 #[cfg(test)]
@@ -35,8 +22,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::noop::Noop;
   use crate::commands::reply_code::ReplyCode;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::session::command_processor::CommandProcessor;
@@ -54,11 +39,12 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    if timeout(
       Duration::from_secs(3),
-      Noop::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
+    .is_err()
     {
       panic!("Command timeout!");
     };

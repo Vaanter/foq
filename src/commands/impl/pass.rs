@@ -1,100 +1,78 @@
-use async_trait::async_trait;
 use tracing::{error, info};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::global_context::AUTH_PROVIDER;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct Pass;
+#[tracing::instrument(skip_all)]
+pub(crate) async fn pass(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Pass);
 
-#[async_trait]
-impl Executable for Pass {
-  #[tracing::instrument(skip_all)]
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Pass);
-
-    let password = command.argument.as_str();
-    if password.is_empty() {
-      Pass::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "No password supplied",
-        ),
-        reply_sender,
-      )
+  let password = command.argument.as_str();
+  if password.is_empty() {
+    return reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "No password supplied",
+      ))
       .await;
-      return;
-    }
-
-    let session_properties = command_processor.session_properties.clone();
-
-    if session_properties
-      .read()
-      .await
-      .login_form
-      .username
-      .is_none()
-    {
-      Self::reply(
-        Reply::new(
-          ReplyCode::BadSequenceOfCommands,
-          "Supply the username first!",
-        ),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
-
-    let provider = match AUTH_PROVIDER.get() {
-      Some(provider) => provider,
-      None => {
-        error!("Database connection not setup!");
-        Self::reply(
-          Reply::new(
-            ReplyCode::ServiceNotAvailableClosingControlConnection,
-            "Unknown error occurred!",
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-    };
-
-    let mut form = session_properties.read().await.login_form.clone();
-    let _ = form.password.insert(password.to_string());
-    let username = form.username.as_ref().unwrap().clone();
-    info!("User '{}' attempting login.", &username);
-    let result = session_properties.write().await.login(provider, form).await;
-
-    if result {
-      info!("User '{}' logged in successfully", &username);
-      Self::reply(
-        Reply::new(ReplyCode::UserLoggedIn, "Log in successful"),
-        reply_sender,
-      )
-      .await;
-      return;
-    } else {
-      info!("User '{}' failed to login!", &username);
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "Incorrect credentials!"),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
   }
+
+  let session_properties = command_processor.session_properties.clone();
+
+  if session_properties
+    .read()
+    .await
+    .login_form
+    .username
+    .is_none()
+  {
+    return reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::BadSequenceOfCommands,
+        "Supply the username first!",
+      ))
+      .await;
+  }
+
+  let provider = match AUTH_PROVIDER.get() {
+    Some(provider) => provider,
+    None => {
+      error!("Database connection not setup!");
+      return reply_sender
+        .send_control_message(Reply::new(
+          ReplyCode::ServiceNotAvailableClosingControlConnection,
+          "Unknown error occurred!",
+        ))
+        .await;
+    }
+  };
+
+  let mut form = session_properties.read().await.login_form.clone();
+  let _ = form.password.insert(password.to_string());
+  let username = form.username.as_ref().unwrap().clone();
+  info!("User '{}' attempting login.", &username);
+  let result = session_properties.write().await.login(provider, form).await;
+
+  return if result {
+    info!("User '{}' logged in successfully", &username);
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::UserLoggedIn, "Log in successful"))
+      .await
+  } else {
+    info!("User '{}' failed to login!", &username);
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "Incorrect credentials!"))
+      .await
+  };
 }
 
 #[cfg(test)]
@@ -109,8 +87,6 @@ mod tests {
   use crate::auth::user_data::UserData;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::pass::Pass;
   use crate::commands::reply_code::ReplyCode;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::global_context::AUTH_PROVIDER;
@@ -143,7 +119,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Pass::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");
@@ -174,7 +150,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Pass::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");
@@ -199,7 +175,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Pass::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");
@@ -230,7 +206,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Pass::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");
@@ -263,7 +239,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      Pass::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timed out!");

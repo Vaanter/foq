@@ -1,29 +1,14 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
-use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct Syst;
-
-#[async_trait]
-impl Executable for Syst {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Syst);
-    Syst::reply(
-      Reply::new(ReplyCode::NameSystemType, "UNIX Type: L8"),
-      reply_sender,
-    )
+pub(crate) async fn syst(command: &Command, reply_sender: &mut impl ReplySend) {
+  debug_assert_eq!(command.command, Commands::Syst);
+  reply_sender
+    .send_control_message(Reply::new(ReplyCode::NameSystemType, "UNIX Type: L8"))
     .await;
-  }
 }
 
 #[cfg(test)]
@@ -36,8 +21,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::syst::Syst;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
@@ -63,7 +46,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(2),
-      Syst::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     {

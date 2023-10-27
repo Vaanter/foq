@@ -1,57 +1,42 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::get_change_directory_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
-pub(crate) struct Cwd;
+pub(crate) async fn cwd(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Cwd);
 
-#[async_trait]
-impl Executable for Cwd {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Cwd);
+  let mut session_properties = command_processor.session_properties.write().await;
 
-    let mut session_properties = command_processor.session_properties.write().await;
-
-    if !session_properties.is_logged_in() {
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
+  if !session_properties.is_logged_in() {
+    return reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
       .await;
-      return;
-    }
-
-    let new_path = &command.argument;
-    if new_path.is_empty() {
-      Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "No path specified!",
-        ),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
-
-    let result = session_properties
-      .file_system_view_root
-      .change_working_directory(new_path);
-    let reply = get_change_directory_reply(result);
-
-    Self::reply(reply, reply_sender).await;
   }
+
+  let new_path = &command.argument;
+  if new_path.is_empty() {
+    return reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "No path specified!",
+      ))
+      .await;
+  }
+
+  let result = session_properties
+    .file_system_view_root
+    .change_working_directory(new_path);
+  let reply = get_change_directory_reply(result);
+
+  reply_sender.send_control_message(reply).await;
 }
 
 #[cfg(test)]
@@ -63,8 +48,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::cwd::Cwd;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
@@ -81,7 +64,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Cwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -108,7 +91,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Cwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -139,7 +122,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Cwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -166,7 +149,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Cwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

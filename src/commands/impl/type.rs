@@ -1,89 +1,76 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::data_type::{DataType, SubType};
 
-pub(crate) struct Type;
+pub(crate) async fn r#type(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Type);
 
-#[async_trait]
-impl Executable for Type {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Type);
+  let mut session_properties = command_processor.session_properties.write().await;
 
-    let mut session_properties = command_processor.session_properties.write().await;
-
-    if !session_properties.is_logged_in() {
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
+  if !session_properties.is_logged_in() {
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
       .await;
-      return;
-    }
-
-    if command.argument.is_empty() {
-      Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "Mode not specified!",
-        ),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
-
-    let (new_type, sub_type) = command
-      .argument
-      .split_once(' ')
-      .unwrap_or((&command.argument, ""));
-
-    match (new_type, sub_type) {
-      ("A", "N") | ("A", "") => {
-        session_properties.data_type = DataType::Ascii {
-          sub_type: SubType::NonPrint,
-        }
-      }
-      ("A", "T") => {
-        session_properties.data_type = DataType::Ascii {
-          sub_type: SubType::TelnetFormatEffectors,
-        }
-      }
-      ("A", "C") => {
-        session_properties.data_type = DataType::Ascii {
-          sub_type: SubType::CarriageControl,
-        }
-      }
-      ("I", _) => session_properties.data_type = DataType::Binary,
-      (_, _) => {
-        Self::reply(
-          Reply::new(
-            ReplyCode::CommandNotImplementedForThatParameter,
-            "Invalid or not supported mode!",
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
-    };
-
-    Self::reply(
-      Reply::new(ReplyCode::CommandOkay, format!("TYPE set to {}.", new_type)),
-      reply_sender,
-    )
-    .await;
+    return;
   }
+
+  if command.argument.is_empty() {
+    reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "Mode not specified!",
+      ))
+      .await;
+    return;
+  }
+
+  let (new_type, sub_type) = command
+    .argument
+    .split_once(' ')
+    .unwrap_or((&command.argument, ""));
+
+  match (new_type, sub_type) {
+    ("A", "N") | ("A", "") => {
+      session_properties.data_type = DataType::Ascii {
+        sub_type: SubType::NonPrint,
+      }
+    }
+    ("A", "T") => {
+      session_properties.data_type = DataType::Ascii {
+        sub_type: SubType::TelnetFormatEffectors,
+      }
+    }
+    ("A", "C") => {
+      session_properties.data_type = DataType::Ascii {
+        sub_type: SubType::CarriageControl,
+      }
+    }
+    ("I", _) => session_properties.data_type = DataType::Binary,
+    (_, _) => {
+      reply_sender
+        .send_control_message(Reply::new(
+          ReplyCode::CommandNotImplementedForThatParameter,
+          "Invalid or not supported mode!",
+        ))
+        .await;
+      return;
+    }
+  };
+
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::CommandOkay,
+      format!("TYPE set to {}.", new_type),
+    ))
+    .await;
 }
 
 #[cfg(test)]
@@ -96,8 +83,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::r#type::Type;
   use crate::commands::reply_code::ReplyCode;
   use crate::session::data_type::{DataType, SubType};
   use crate::utils::test_utils::{
@@ -125,7 +110,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .is_err()
@@ -162,7 +147,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .is_err()
@@ -199,7 +184,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -231,7 +216,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -265,7 +250,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -301,7 +286,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -341,7 +326,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Type::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

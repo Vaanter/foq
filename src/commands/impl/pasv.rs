@@ -1,69 +1,59 @@
 use std::net::{SocketAddr, SocketAddrV4};
 use std::time::Duration;
 
-use async_trait::async_trait;
 use tokio::time::timeout;
 use tracing::error;
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct Pasv;
+#[tracing::instrument(skip(command_processor, reply_sender))]
+pub(crate) async fn pasv(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Pasv);
 
-#[async_trait]
-impl Executable for Pasv {
-  #[tracing::instrument(skip(command_processor, reply_sender))]
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Pasv);
-
-    match timeout(
-      Duration::from_secs(5),
-      command_processor.data_wrapper.clone().lock(),
-    )
-    .await
-    {
-      Ok(mut wrapper) => {
-        let reply = match wrapper.open_data_stream().await.unwrap() {
-          SocketAddr::V4(addr) => Reply::new(
-            ReplyCode::EnteringPassiveMode,
-            Pasv::create_pasv_response(&addr),
-          ),
-          SocketAddr::V6(_) => {
-            error!("PASV: IPv6 is not supported!");
-            Reply::new(
-              ReplyCode::CommandNotImplementedForThatParameter,
-              "Server only supports IPv6!",
-            )
-          }
-        };
-        Pasv::reply(reply, reply_sender).await;
-      }
-      Err(_) => {
-        panic!("Wrapper is not available!");
-      }
+  match timeout(
+    Duration::from_secs(5),
+    command_processor.data_wrapper.clone().lock(),
+  )
+  .await
+  {
+    Ok(mut wrapper) => {
+      let reply = match wrapper.open_data_stream().await.unwrap() {
+        SocketAddr::V4(addr) => {
+          Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr))
+        }
+        SocketAddr::V6(_) => {
+          error!("PASV: IPv6 is not supported!");
+          Reply::new(
+            ReplyCode::CommandNotImplementedForThatParameter,
+            "Server only supports IPv6!",
+          )
+        }
+      };
+      reply_sender.send_control_message(reply).await;
+    }
+    Err(_) => {
+      panic!("Wrapper is not available!");
     }
   }
 }
 
-impl Pasv {
-  pub(crate) fn create_pasv_response(ip: &SocketAddrV4) -> String {
-    let octets = ip.ip().octets();
-    let p1 = ip.port() / 256;
-    let p2 = ip.port() - p1 * 256;
-    format!(
-      "Entering Passive Mode ({},{},{},{},{},{})",
-      octets[0], octets[1], octets[2], octets[3], p1, p2
-    )
-  }
+fn create_pasv_response(ip: &SocketAddrV4) -> String {
+  let octets = ip.ip().octets();
+  let p1 = ip.port() / 256;
+  let p2 = ip.port() - p1 * 256;
+  format!(
+    "Entering Passive Mode ({},{},{},{},{},{})",
+    octets[0], octets[1], octets[2], octets[3], p1, p2
+  )
 }
 
 #[cfg(test)]
@@ -79,8 +69,7 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::pasv::Pasv;
+  use crate::commands::r#impl::pasv::create_pasv_response;
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
@@ -91,7 +80,7 @@ mod tests {
   fn response_test() {
     let ip = SocketAddrV4::new(Ipv4Addr::from([127, 0, 0, 1]), 55692);
     assert_eq!(
-      Pasv::create_pasv_response(&ip),
+      create_pasv_response(&ip),
       "Entering Passive Mode (127,0,0,1,217,140)"
     );
   }
@@ -116,7 +105,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if timeout(
       Duration::from_secs(2),
-      Pasv::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .is_err()

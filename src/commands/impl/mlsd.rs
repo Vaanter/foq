@@ -1,96 +1,81 @@
-use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::get_listing_or_error_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
-pub(crate) struct Mlsd;
+#[tracing::instrument(skip(command_processor, reply_sender))]
+pub(crate) async fn mlsd(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Mlsd);
 
-#[async_trait]
-impl Executable for Mlsd {
-  #[tracing::instrument(skip(command_processor, reply_sender))]
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Mlsd);
+  let session_properties = command_processor.session_properties.read().await;
+  let listing = session_properties
+    .file_system_view_root
+    .list_dir(&command.argument);
 
-    let session_properties = command_processor.session_properties.read().await;
-    let listing = session_properties
-      .file_system_view_root
-      .list_dir(&command.argument);
+  let listing = match get_listing_or_error_reply(listing) {
+    Ok(l) => l,
+    Err(r) => return reply_sender.send_control_message(r).await,
+  };
 
-    let listing = match get_listing_or_error_reply(listing) {
-      Ok(l) => l,
-      Err(r) => return Self::reply(r, reply_sender).await,
-    };
+  debug!("Locking data stream!");
+  let stream = command_processor
+    .data_wrapper
+    .lock()
+    .await
+    .get_data_stream()
+    .await;
 
-    debug!("Locking data stream!");
-    let stream = command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .get_data_stream()
-      .await;
-
-    match stream.lock().await.as_mut() {
-      Some(s) => {
-        let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
-        trace!(
-          "Sending listing to client:\n{}",
-          mem.replace("\r\n", "\\r\\n")
-        );
-        let len = s.write_all(mem.as_ref()).await;
-        debug!("Sending listing result: {:?}", len);
-      }
-      None => {
-        info!("Data stream is not open!");
-        Self::reply(
-          Reply::new(
-            ReplyCode::BadSequenceOfCommands,
-            "Data connection is not open!",
-          ),
-          reply_sender,
-        )
-        .await;
-        return;
-      }
+  match stream.lock().await.as_mut() {
+    Some(s) => {
+      let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
+      trace!(
+        "Sending listing to client:\n{}",
+        mem.replace("\r\n", "\\r\\n")
+      );
+      let len = s.write_all(mem.as_ref()).await;
+      debug!("Sending listing result: {:?}", len);
     }
-
-    Self::reply(
-      Reply::new(
-        ReplyCode::FileStatusOkay,
-        "Transferring directory information!",
-      ),
-      reply_sender,
-    )
-    .await;
-
-    debug!("Listing sent to client!");
-    Self::reply(
-      Reply::new(
-        ReplyCode::ClosingDataConnection,
-        "Directory information sent!",
-      ),
-      reply_sender,
-    )
-    .await;
-    command_processor
-      .data_wrapper
-      .lock()
-      .await
-      .close_data_stream()
-      .await;
+    None => {
+      info!("Data stream is not open!");
+      return reply_sender
+        .send_control_message(Reply::new(
+          ReplyCode::BadSequenceOfCommands,
+          "Data connection is not open!",
+        ))
+        .await;
+    }
   }
+
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::FileStatusOkay,
+      "Transferring directory information!",
+    ))
+    .await;
+
+  debug!("Listing sent to client!");
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::ClosingDataConnection,
+      "Directory information sent!",
+    ))
+    .await;
+  command_processor
+    .data_wrapper
+    .lock()
+    .await
+    .close_data_stream()
+    .await;
 }
 
 #[cfg(test)]
@@ -105,8 +90,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::mlsd::Mlsd;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
@@ -133,7 +116,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -180,7 +163,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(3),
-      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     {
@@ -208,7 +191,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(3),
-      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     {
@@ -243,7 +226,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -271,7 +254,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     if let Err(_) = timeout(
       Duration::from_secs(3),
-      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     {
@@ -306,7 +289,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Mlsd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

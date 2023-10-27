@@ -6,25 +6,6 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info};
 
 use crate::commands::command::Command;
-use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
-use crate::commands::r#impl::cdup::Cdup;
-use crate::commands::r#impl::cwd::Cwd;
-use crate::commands::r#impl::feat::Feat;
-use crate::commands::r#impl::list::List;
-use crate::commands::r#impl::mkd::Mkd;
-use crate::commands::r#impl::mlsd::Mlsd;
-use crate::commands::r#impl::nlst::Nlst;
-use crate::commands::r#impl::noop::Noop;
-use crate::commands::r#impl::pass::Pass;
-use crate::commands::r#impl::pasv::Pasv;
-use crate::commands::r#impl::pwd::Pwd;
-use crate::commands::r#impl::r#type::Type;
-use crate::commands::r#impl::rest::Rest;
-use crate::commands::r#impl::retr::Retr;
-use crate::commands::r#impl::stor::Stor;
-use crate::commands::r#impl::syst::Syst;
-use crate::commands::r#impl::user::User;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
@@ -76,33 +57,6 @@ impl CommandProcessor {
       }
     };
 
-    match command.command {
-      Commands::Cdup => Cdup::execute(self, &command, reply_sender).await,
-      Commands::Cwd => Cwd::execute(self, &command, reply_sender).await,
-      Commands::Feat => Feat::execute(self, &command, reply_sender).await,
-      Commands::List => List::execute(self, &command, reply_sender).await,
-      Commands::Mkd => Mkd::execute(self, &command, reply_sender).await,
-      Commands::Nlst => Nlst::execute(self, &command, reply_sender).await,
-      Commands::Mlsd => Mlsd::execute(self, &command, reply_sender).await,
-      Commands::Noop => Noop::execute(self, &command, reply_sender).await,
-      Commands::Pass => Pass::execute(self, &command, reply_sender).await,
-      Commands::Pasv => Pasv::execute(self, &command, reply_sender).await,
-      Commands::Pwd => Pwd::execute(self, &command, reply_sender).await,
-      Commands::Rest => Rest::execute(self, &command, reply_sender).await,
-      Commands::Retr => Retr::execute(self, &command, reply_sender).await,
-      Commands::Stor => Stor::execute(self, &command, reply_sender).await,
-      Commands::Syst => Syst::execute(self, &command, reply_sender).await,
-      Commands::Type => Type::execute(self, &command, reply_sender).await,
-      Commands::User => User::execute(self, &command, reply_sender).await,
-      _ => {
-        info!("Couldn't execute command, not implemented! Command: {command:?}");
-        reply_sender
-          .send_control_message(Reply::new(
-            ReplyCode::CommandNotImplemented,
-            "Command not implemented!",
-          ))
-          .await
-      }
-    };
+    command.execute(self, reply_sender).await;
   }
 }

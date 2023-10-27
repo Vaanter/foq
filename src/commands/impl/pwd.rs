@@ -1,59 +1,43 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-pub(crate) struct Pwd;
+pub(crate) async fn pwd(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Pwd);
 
-#[async_trait]
-impl Executable for Pwd {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Pwd);
+  let session_properties = command_processor.session_properties.read().await;
 
-    let session_properties = command_processor.session_properties.read().await;
-
-    if !command.argument.is_empty() {
-      Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "PWD must not have an argument!",
-        ),
-        reply_sender,
-      )
+  if !command.argument.is_empty() {
+    return reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "PWD must not have an argument!",
+      ))
       .await;
-      return;
-    }
-
-    if !session_properties.is_logged_in() {
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
-      .await;
-      return;
-    }
-
-    let reply_message = format!(
-      "\"{}\"",
-      session_properties
-        .file_system_view_root
-        .get_current_working_directory()
-    );
-    Self::reply(
-      Reply::new(ReplyCode::PathnameCreated, reply_message),
-      reply_sender,
-    )
-    .await;
   }
+
+  if !session_properties.is_logged_in() {
+    return reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
+      .await;
+  }
+
+  let reply_message = format!(
+    "\"{}\"",
+    session_properties
+      .file_system_view_root
+      .get_current_working_directory()
+  );
+  reply_sender
+    .send_control_message(Reply::new(ReplyCode::PathnameCreated, reply_message))
+    .await;
 }
 
 #[cfg(test)]
@@ -66,8 +50,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::pwd::Pwd;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
@@ -93,7 +75,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Pwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -120,7 +102,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Pwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -147,7 +129,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Pwd::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

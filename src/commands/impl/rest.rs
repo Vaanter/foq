@@ -1,73 +1,56 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
-pub(crate) struct Rest;
+#[tracing::instrument(skip(command_processor, reply_sender))]
+pub(crate) async fn rest(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Rest);
 
-#[async_trait]
-impl Executable for Rest {
-  #[tracing::instrument(skip(command_processor, reply_sender))]
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Rest);
-
-    if command.argument.is_empty() {
-      Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "Offset not specified!",
-        ),
-        reply_sender,
-      )
+  if command.argument.is_empty() {
+    reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "Offset not specified!",
+      ))
       .await;
-      return;
-    }
-
-    let mut session_properties = command_processor.session_properties.write().await;
-
-    if !session_properties.is_logged_in() {
-      return Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
-      .await;
-    }
-
-    let offset = match command.argument.parse::<u64>() {
-      Ok(off) => off,
-      Err(_) => {
-        return Self::reply(
-          Reply::new(
-            ReplyCode::SyntaxErrorInParametersOrArguments,
-            "Unable to parse offset!",
-          ),
-          reply_sender,
-        )
-        .await;
-      }
-    };
-
-    session_properties.offset = offset;
-
-    Self::reply(
-      Reply::new(
-        ReplyCode::RequestedFileActionPendingFurtherInformation,
-        "Offset set",
-      ),
-      reply_sender,
-    )
-    .await;
+    return;
   }
+
+  let mut session_properties = command_processor.session_properties.write().await;
+
+  if !session_properties.is_logged_in() {
+    return reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
+      .await;
+  }
+
+  let offset = match command.argument.parse::<u64>() {
+    Ok(off) => off,
+    Err(_) => {
+      return reply_sender
+        .send_control_message(Reply::new(
+          ReplyCode::SyntaxErrorInParametersOrArguments,
+          "Unable to parse offset!",
+        ))
+        .await;
+    }
+  };
+
+  session_properties.offset = offset;
+
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::RequestedFileActionPendingFurtherInformation,
+      "Offset set",
+    ))
+    .await;
 }
 
 #[cfg(test)]
@@ -79,8 +62,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::rest::Rest;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     receive_and_verify_reply, setup_test_command_processor, TestReplySender,
@@ -96,7 +77,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Rest::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -125,7 +106,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Rest::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -144,7 +125,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Rest::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");
@@ -169,7 +150,7 @@ mod tests {
     let mut reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      Rest::execute(&mut command_processor, &command, &mut reply_sender),
+      command.execute(&mut command_processor, &mut reply_sender),
     )
     .await
     .expect("Command timeout!");

@@ -1,55 +1,42 @@
-use async_trait::async_trait;
-
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::executable::Executable;
 use crate::commands::r#impl::shared::get_change_directory_reply;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
-pub struct Cdup;
+pub(crate) async fn cdup(
+  command: &Command,
+  command_processor: &mut CommandProcessor,
+  reply_sender: &mut impl ReplySend,
+) {
+  debug_assert_eq!(command.command, Commands::Cdup);
 
-#[async_trait]
-impl Executable for Cdup {
-  async fn execute(
-    command_processor: &mut CommandProcessor,
-    command: &Command,
-    reply_sender: &mut impl ReplySend,
-  ) {
-    debug_assert_eq!(command.command, Commands::Cdup);
+  let mut session_properties = command_processor.session_properties.write().await;
 
-    let mut session_properties = command_processor.session_properties.write().await;
-
-    if !session_properties.is_logged_in() {
-      Self::reply(
-        Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"),
-        reply_sender,
-      )
+  if !session_properties.is_logged_in() {
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
       .await;
-      return;
-    }
-
-    if !command.argument.is_empty() {
-      return Self::reply(
-        Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "CDUP must not have an argument!",
-        ),
-        reply_sender,
-      )
-      .await;
-    }
-
-    let result = session_properties
-      .file_system_view_root
-      .change_working_directory_up();
-    let reply = get_change_directory_reply(result);
-
-    Self::reply(reply, reply_sender).await;
+    return;
   }
+
+  if !command.argument.is_empty() {
+    return reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "CDUP must not have an argument!",
+      ))
+      .await;
+  }
+
+  let result = session_properties
+    .file_system_view_root
+    .change_working_directory_up();
+  let reply = get_change_directory_reply(result);
+
+  reply_sender.send_control_message(reply).await;
 }
 
 #[cfg(test)]
@@ -63,8 +50,6 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::executable::Executable;
-  use crate::commands::r#impl::cdup::Cdup;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     setup_test_command_processor_custom, CommandProcessorSettings, CommandProcessorSettingsBuilder,
@@ -78,10 +63,12 @@ mod tests {
     expected_path: PathBuf,
     expected_display_path: &str,
   ) {
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let mut command_processor = setup_test_command_processor_custom(settings);
     let (tx, mut rx) = mpsc::channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
-    Cdup::execute(&mut command_processor, &command, &mut reply_sender).await;
+    command
+      .execute(&mut command_processor, &mut reply_sender)
+      .await;
     match timeout(Duration::from_secs(2), rx.recv()).await {
       Ok(Some(result)) => {
         assert_eq!(result.code, reply_code);

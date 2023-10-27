@@ -1,10 +1,31 @@
 //! The command and its argument.
 
 use std::str::FromStr;
-use tracing::trace;
+use tracing::{info, trace};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::commands::commands::Commands;
+use crate::commands::r#impl::cdup::cdup;
+use crate::commands::r#impl::cwd::cwd;
+use crate::commands::r#impl::feat::feat;
+use crate::commands::r#impl::list::list;
+use crate::commands::r#impl::mkd::mkd;
+use crate::commands::r#impl::mlsd::mlsd;
+use crate::commands::r#impl::nlst::nlst;
+use crate::commands::r#impl::noop::noop;
+use crate::commands::r#impl::pass::pass;
+use crate::commands::r#impl::pasv::pasv;
+use crate::commands::r#impl::pwd::pwd;
+use crate::commands::r#impl::r#type::r#type;
+use crate::commands::r#impl::rest::rest;
+use crate::commands::r#impl::retr::retr;
+use crate::commands::r#impl::stor::stor;
+use crate::commands::r#impl::syst::syst;
+use crate::commands::r#impl::user::user;
+use crate::commands::reply::Reply;
+use crate::commands::reply_code::ReplyCode;
+use crate::handlers::reply_sender::ReplySend;
+use crate::session::command_processor::CommandProcessor;
 
 #[derive(Clone, Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct Command {
@@ -18,6 +39,46 @@ impl Command {
     Command {
       command,
       argument: argument.into(),
+    }
+  }
+}
+
+impl Command {
+  pub async fn execute(
+    &self,
+    command_processor: &mut CommandProcessor,
+    reply_sender: &mut impl ReplySend,
+  ) {
+    match self.command {
+      Commands::Cdup => cdup(self, command_processor, reply_sender).await,
+      Commands::Cwd => cwd(self, command_processor, reply_sender).await,
+      Commands::Feat => feat(self, reply_sender).await,
+      Commands::List => list(self, command_processor, reply_sender).await,
+      Commands::Mkd => mkd(self, command_processor, reply_sender).await,
+      Commands::Nlst => nlst(self, command_processor, reply_sender).await,
+      Commands::Mlsd => mlsd(self, command_processor, reply_sender).await,
+      Commands::Noop => noop(self, reply_sender).await,
+      Commands::Pass => pass(self, command_processor, reply_sender).await,
+      Commands::Pasv => pasv(self, command_processor, reply_sender).await,
+      Commands::Pwd => pwd(self, command_processor, reply_sender).await,
+      Commands::Rest => rest(self, command_processor, reply_sender).await,
+      Commands::Retr => retr(self, command_processor, reply_sender).await,
+      Commands::Stor => stor(self, command_processor, reply_sender).await,
+      Commands::Syst => syst(self, reply_sender).await,
+      Commands::Type => r#type(self, command_processor, reply_sender).await,
+      Commands::User => user(self, command_processor, reply_sender).await,
+      _ => {
+        info!(
+          "Couldn't execute command, not implemented! Command: {:?}",
+          self.command
+        );
+        reply_sender
+          .send_control_message(Reply::new(
+            ReplyCode::CommandNotImplemented,
+            "Command not implemented!",
+          ))
+          .await
+      }
     }
   }
 }
