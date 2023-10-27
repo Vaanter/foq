@@ -33,8 +33,7 @@ async fn main() {
   let mut log_file_options = OpenOptions::new();
   log_file_options
     .write(true)
-    .append(true)
-    .truncate(false)
+    .truncate(true)
     .create(true);
   let log_file = log_file_options
     .open("foq.log")
