@@ -7,7 +7,7 @@ use rustls::ServerConfig;
 use s2n_quic::provider::congestion_controller::Bbr;
 use s2n_quic::provider::limits::{Limits, Provider};
 use s2n_quic::{
-  provider::io::tokio::Builder as IoBuilder, provider::tls::default::Server as TlsServer,
+  provider::io::tokio::Builder as IoBuilder, provider::tls::rustls::Server as TlsServer,
   Connection, Server,
 };
 use tokio_util::sync::CancellationToken;
