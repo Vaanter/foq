@@ -100,6 +100,14 @@ pub(crate) fn get_change_directory_reply(cd_result: Result<bool, IoError>) -> Re
   }
 }
 
+pub(crate) fn get_delete_reply(dele_result: Result<(), IoError>, directory: bool) -> Reply {
+  match (dele_result, directory) {
+    (Ok(_), true) => Reply::new(ReplyCode::RequestedFileActionOkay, "File deleted"),
+    (Ok(_), false) => Reply::new(ReplyCode::RequestedFileActionOkay, "Folder deleted"),
+    (Err(e), _) => map_error_to_reply(e),
+  }
+}
+
 #[tracing::instrument(skip_all)]
 pub(crate) async fn transfer_data<F, T>(from: &mut F, to: &mut T, buffer: &mut [u8]) -> bool
 where

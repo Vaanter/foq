@@ -440,3 +440,11 @@ pub(crate) fn setup_tracing() {
     .finish();
   let _ = tracing::subscriber::set_global_default(subscriber);
 }
+
+pub(crate) fn touch(path: &Path) -> io::Result<()> {
+  OpenOptionsStd::new()
+    .create(true)
+    .write(true)
+    .open(path)
+    .map(|_| ())
+}

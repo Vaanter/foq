@@ -297,6 +297,28 @@ impl FileSystemView {
     };
   }
 
+
+  pub(crate) async fn delete_folder(&self, path: impl Into<String>) -> Result<(), IoError> {
+    if !self.permissions.contains(&UserPermission::Delete) {
+      return Err(IoError::PermissionError);
+    }
+
+    let path = self.process_path(&path.into());
+    let path = if !path.exists() {
+      return Err(IoError::NotFoundError("Directory not found".to_string()));
+    } else if !path.is_dir() {
+      return Err(IoError::NotADirectoryError);
+    } else {
+      path.canonicalize().map_err(Self::map_error)?
+    };
+
+    debug!("Deleting: {:?}", &path);
+
+    match tokio::fs::remove_dir(path).await {
+      Ok(()) => Ok(()),
+      Err(e) => Err(Self::map_error(e)),
+    }
+  }
   /// Creates a directory listing.
   ///
   /// This function lists all files and directories at `path` as [`EntryData`]. If the listing
@@ -489,6 +511,17 @@ impl FileSystemView {
 
     listing.append(&mut entries);
     listing
+  }
+
+  fn process_path(&self, path: &str) -> PathBuf {
+    trace!("Processing path: {}", path);
+    if let Some(stripped) = path.strip_prefix(&format!("/{}/", &self.label)) {
+      self.root.join(stripped)
+    } else if let Some(stripped) = path.strip_prefix('/') {
+      self.root.join(stripped)
+    } else {
+      self.current_path.join(path)
+    }
   }
 }
 
@@ -734,6 +767,87 @@ pub(crate) mod tests {
     let Err(IoError::NotAFileError) = file else {
       panic!("Expected NotAFile error, got: {:?}", file);
     };
+  }
+
+
+  #[tokio::test]
+  async fn delete_folder_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_folder(format!("/{dir_name}")).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_relative_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_folder(dir_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_file_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let result = view.delete_folder(file_name).await;
+    let Err(IoError::NotADirectoryError) = result else {
+      panic!("Expected NotADirectory Error, got: {:?}", result);
+    };
+    assert!(file_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_no_permissions_test() {
+    let permissions = HashSet::from([]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_folder(dir_name).await;
+    let Err(IoError::PermissionError) = result else {
+      panic!("Expected Permission Error, got: {:?}", result);
+    };
+    assert!(dir_path.exists());
   }
 
   #[test]

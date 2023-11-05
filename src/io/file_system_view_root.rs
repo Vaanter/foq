@@ -454,6 +454,43 @@ impl FileSystemViewRoot {
         .await
     };
   }
+
+  #[tracing::instrument(skip(self, path))]
+  pub(crate) async fn delete_folder(&self, path: impl Into<String>) -> Result<(), IoError> {
+    let mut path = path.into();
+    if self.file_system_views.is_none() {
+      return Err(IoError::UserError);
+    }
+
+    if path.is_empty() || path == "/" {
+      return Err(IoError::InvalidPathError(String::from(
+        "Cannot delete root directory!",
+      )));
+    }
+
+    let view = self.find_view(&mut path);
+
+    if let Some(v) = view {
+      v.delete_folder(&path).await
+    } else {
+      return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
+    }
+  }
+
+  fn find_view(&self, path: &mut String) -> Option<&FileSystemView> {
+    let p = path.clone();
+    let mut parts = p.split('/');
+    if path.starts_with('/') {
+      let label = parts.nth(1).expect("Path cannot be empty here!");
+      self.file_system_views.as_ref().unwrap().get(label)
+    } else if let Some(ref label) = self.current_view {
+      self.file_system_views.as_ref().unwrap().get(label)
+    } else {
+      let label = parts.next().expect("Path cannot be empty here!");
+      path.insert(0, '/');
+      self.file_system_views.as_ref().unwrap().get(label)
+    }
+  }
 }
 
 #[cfg(test)]
@@ -1137,6 +1174,140 @@ mod tests {
     let listing = root.list_dir("..").unwrap();
 
     validate_listing(label1, &listing, 4, permissions.len(), 3, 1);
+  }
+
+  #[tokio::test]
+  async fn delete_folder_relative_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    root
+      .change_working_directory(format!("/{}", label1))
+      .unwrap();
+
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root1.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = root.delete_folder(dir_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_relative_with_label_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root1.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = root.delete_folder(format!("{}/{}", label1, dir_name)).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root1.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = root
+      .delete_folder(format!("/{}/{}", label1, dir_name))
+      .await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_no_permission_test() {
+    let permissions = HashSet::from([]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root1.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = root
+      .delete_folder(format!("/{}/{}", label1, dir_name))
+      .await;
+    let Err(IoError::PermissionError) = result else {
+      panic!("Expected Permission error, got: {:?}", result);
+    };
+    assert!(dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_file_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let file_name = Uuid::new_v4().as_hyphenated().to_string();
+    let file_path = root1.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let result = root
+      .delete_folder(format!("/{}/{}", label1, file_name))
+      .await;
+    let Err(IoError::NotADirectoryError) = result else {
+      panic!("Expected NotADirectory Error, got: {:?}", result);
+    };
+    assert!(file_path.exists());
   }
 
   pub(crate) fn create_root(views: Vec<FileSystemView>) -> BTreeMap<String, FileSystemView> {
