@@ -196,6 +196,7 @@ impl FileSystemView {
   }
 
   fn map_error(error: Error) -> IoError {
+    debug!("Mapping error: {:#?}", error);
     match error.kind() {
       ErrorKind::NotFound => IoError::NotFoundError(error.to_string()),
       ErrorKind::PermissionDenied => IoError::PermissionError,
@@ -211,22 +212,25 @@ impl FileSystemView {
   }
 
   pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
-    let path = path.into().replace('\\', "/");
+    let mut path = path.into().replace('\\', "/");
 
     if !self.permissions.contains(&UserPermission::Create) {
       return Err(IoError::PermissionError);
     }
     let mut virtual_path = self.display_path.clone();
 
-    let new_directory_path = if let Some(stripped) = path.strip_prefix('/') {
-      self.root.join(stripped)
-    } else {
-      virtual_path.push('/');
-      self.current_path.join(&path)
-    };
+    let new_directory_path = self.process_path(&path).clean();
 
     if !new_directory_path.starts_with(&self.root) {
       return Err(IoError::InvalidPathError(String::from("Invalid path!")));
+    }
+
+    if !path.starts_with('/') {
+      virtual_path.push('/');
+    }
+
+    if let Some(stripped) = path.strip_prefix(&format!("/{}", &self.label)) {
+      path = stripped.to_string();
     }
 
     virtual_path.push_str(&path);
@@ -277,12 +281,7 @@ impl FileSystemView {
       return Err(IoError::PermissionError);
     }
 
-    let path = path.into();
-    let path = if let Some(stripped) = path.strip_prefix('/') {
-      self.root.join(PathBuf::from(stripped))
-    } else {
-      self.current_path.join(PathBuf::from(path))
-    };
+    let path = self.process_path(&path.into()).clean();
 
     debug!("Opening: {:?}", &path);
 
@@ -292,12 +291,33 @@ impl FileSystemView {
     });
 
     return if path.is_dir() {
-      return Err(IoError::NotAFileError);
+      Err(IoError::NotAFileError)
     } else {
       file
     };
   }
 
+  pub(crate) async fn delete_file(&self, path: impl Into<String>) -> Result<(), IoError> {
+    if !self.permissions.contains(&UserPermission::Delete) {
+      return Err(IoError::PermissionError);
+    }
+
+    let path = self.process_path(&path.into());
+    let path = if !path.exists() {
+      return Err(IoError::NotFoundError("File not found".to_string()));
+    } else if !path.is_file() {
+      return Err(IoError::NotAFileError);
+    } else {
+      path.canonicalize().map_err(Self::map_error)?
+    };
+
+    debug!("Deleting: {:?}", &path);
+
+    match tokio::fs::remove_file(path).await {
+      Ok(()) => Ok(()),
+      Err(e) => Err(Self::map_error(e)),
+    }
+  }
 
   pub(crate) async fn delete_folder(&self, path: impl Into<String>) -> Result<(), IoError> {
     if !self.permissions.contains(&UserPermission::Delete) {
@@ -1264,6 +1284,60 @@ pub(crate) mod tests {
     assert_eq!(format!("/{label}"), view.display_path);
     assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
     assert_eq!(root.canonicalize().unwrap(), view.root);
+  }
+
+  #[test]
+  fn create_dir_no_permission_test() {
+    let permissions = HashSet::from([]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
+
+    let path = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = temp_dir().join(&path);
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(&path);
+    let Err(IoError::PermissionError) = result else {
+      panic!("Expected Permission Error, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[test]
+  fn create_dir_absolute_with_label_test() {
+    let permissions = HashSet::from([UserPermission::Create]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
+
+    let path = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = temp_dir().join(&path);
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    let new_path = format!("/{}/{}", &label, &path);
+    let result = view.create_directory(&new_path);
+    assert!(result.is_ok());
+    assert_eq!(new_path, result.unwrap());
+    assert!(dir_path.exists());
+  }
+
+  #[test]
+  fn create_dir_absolute_multi_with_label_test() {
+    let permissions = HashSet::from([UserPermission::Create]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
+
+    let path_root = Uuid::new_v4().as_hyphenated().to_string();
+    let path = format!("/{}/{}", path_root, Uuid::new_v4().as_hyphenated());
+    let dir_path = temp_dir().join(&path_root);
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    let result = view.create_directory(format!("/{}{}", &label, &path));
+    assert!(result.is_ok());
+    assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
+    assert!(dir_path.exists());
   }
 
   pub(crate) fn validate_listing(
