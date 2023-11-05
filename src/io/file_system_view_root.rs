@@ -893,11 +893,16 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let root = FileSystemViewRoot::new(Some(views));
-    let mut invalid_characters = vec![":", "|", "?", "<", ">", "*", "\0"];
+    let mut invalid_characters = vec!["\0"];
 
     let mut additional: Vec<String> = Vec::new();
     if cfg!(windows) {
       additional.extend(('\0'..='\u{001F}').map(|c| c.to_string()));
+      additional.extend(
+        [":", "|", "?", "<", ">", "*"]
+          .iter()
+          .map(|&a| a.to_string()),
+      )
     }
     invalid_characters.extend(additional.iter().map(|c| c.as_str()));
     for path_start in invalid_characters {
