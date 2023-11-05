@@ -136,7 +136,7 @@ mod tests {
   use crate::utils::test_utils::{
     create_tls_client_config, generate_test_file, open_tcp_data_channel, receive_and_verify_reply,
     setup_s2n_client, setup_test_command_processor, setup_test_command_processor_custom,
-    setup_transfer_command_processor, CommandProcessorSettingsBuilder, TempFileCleanup,
+    setup_transfer_command_processor, CommandProcessorSettingsBuilder, FileCleanup,
     TestReplySender, LOCALHOST,
   };
 
@@ -332,19 +332,19 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_two_kib() {
+  async fn two_kib_test() {
     const FILE_NAME: &str = "test_files/2KiB.txt";
     common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
-  async fn test_one_mib() {
+  async fn one_mib_test() {
     const FILE_NAME: &str = "test_files/1MiB.txt";
     common_tcp(FILE_NAME).await;
   }
 
   #[tokio::test]
-  async fn test_ten_paragraphs() {
+  async fn ten_paragraphs_test() {
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_tcp(FILE_NAME).await;
   }
@@ -352,10 +352,10 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
     common_tcp(file_path_str).await;
   }
 
@@ -382,30 +382,30 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((100 * 2u64.pow(20)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((100 * 2u64.pow(20)) as usize, &file_path).await;
     common_quic(file_path_str).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
     common_quic(file_path_str).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((5 * 2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
     common_quic(file_path_str).await;
   }
 
@@ -432,30 +432,30 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_quinn_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((200 * 2u64.pow(20)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((200 * 2u64.pow(20)) as usize, &file_path).await;
     common_quic_quinn(file_path_str).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_quinn_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
     common_quic_quinn(file_path_str).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_quinn_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4()));
+    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let file_path_str = file_path.to_str().unwrap();
-    let _cleanup = TempFileCleanup::new(file_path_str);
-    generate_test_file((5 * 2u64.pow(30)) as usize, Path::new(file_path_str)).await;
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
     common_quic_quinn(file_path_str).await;
   }
 

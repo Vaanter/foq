@@ -2,20 +2,21 @@ use async_trait::async_trait;
 use derive_builder::Builder;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::{Certificate, ClientConfig, KeyLogFile, ServerConfig, ServerName};
+use s2n_quic::provider::io::tokio::Builder as IoBuilder;
+use s2n_quic::provider::tls::rustls::Client as TlsClient;
+use s2n_quic::Client;
 use std::cmp::min;
 use std::collections::HashSet;
-use std::env::{current_dir, temp_dir};
-use std::fs::{remove_dir_all, remove_file};
+use std::env::temp_dir;
+use std::fs::{remove_dir_all, remove_file, OpenOptions as OpenOptionsStd};
+use std::io;
 use std::io::Error;
 use std::iter::Iterator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use s2n_quic::Client;
 use strum::IntoEnumIterator;
-use s2n_quic::provider::io::tokio::Builder as IoBuilder;
-use s2n_quic::provider::tls::default::Client as TlsClient;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
@@ -124,18 +125,18 @@ impl<'a> Drop for DirCleanup<'a> {
 }
 
 // Removes the temp file used in tests when dropped
-pub(crate) struct TempFileCleanup<'a>(&'a str);
+pub(crate) struct FileCleanup<'a>(&'a Path);
 
-impl<'a> TempFileCleanup<'a> {
-  pub(crate) fn new(path: &'a str) -> Self {
-    TempFileCleanup(path)
+impl<'a> FileCleanup<'a> {
+  pub(crate) fn new(path: &'a Path) -> Self {
+    FileCleanup(path)
   }
 }
 
-impl<'a> Drop for TempFileCleanup<'a> {
+impl<'a> Drop for FileCleanup<'a> {
   fn drop(&mut self) {
-    if let Err(e) = remove_file(temp_dir().join(self.0)) {
-      eprintln!("Failed to remove: {}, {}", self.0, e);
+    if let Err(e) = remove_file(self.0) {
+      eprintln!("Failed to remove: {:?}, {}", self.0, e);
     };
   }
 }
@@ -364,19 +365,28 @@ pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
   let mut output_writer = BufWriter::with_capacity(MAX_CHUNK_SIZE, file);
 
   let mut remaining = amount;
-  while remaining > 0 {
-    let chunk_size = min(remaining, MAX_CHUNK_SIZE);
-    let chunk = vec![0u8; chunk_size];
+  let chunk = vec![0u8; MAX_CHUNK_SIZE];
+  while remaining > MAX_CHUNK_SIZE {
     output_writer
       .write_all(&chunk)
       .await
       .expect("Writing chunk to test file should succeed");
-    output_writer.flush().await.unwrap();
-    remaining -= chunk_size;
+    remaining -= MAX_CHUNK_SIZE;
   }
+
+  let chunk_size = min(remaining, MAX_CHUNK_SIZE);
+  let chunk = vec![0u8; chunk_size];
+  output_writer
+    .write_all(&chunk)
+    .await
+    .expect("Writing chunk to test file should succeed");
+  output_writer.flush().await.unwrap();
 }
 
-pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(data_channel_wrapper: T, root: PathBuf) -> CommandProcessor {
+pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(
+  data_channel_wrapper: T,
+  root: PathBuf,
+) -> CommandProcessor {
   println!("Running setup.");
 
   let label = "test_files".to_string();
@@ -402,9 +412,9 @@ pub(crate) fn setup_s2n_client() -> Client {
   let tls_client = TlsClient::new(tls_config);
 
   let io = IoBuilder::default()
-    .with_recv_buffer_size(50 * 2usize.pow(20))
-    .unwrap()
     .with_receive_address(LOCALHOST)
+    .unwrap()
+    .with_recv_buffer_size(50 * 2usize.pow(20))
     .unwrap()
     .with_internal_recv_buffer_size(50 * 2usize.pow(20))
     .unwrap()

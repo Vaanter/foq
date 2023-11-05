@@ -182,16 +182,14 @@ mod tests {
   use std::time::Duration;
 
   use s2n_quic::client::Connect;
-  use s2n_quic::provider::tls::default::Client as TlsClient;
+  use s2n_quic::provider::tls::rustls::Client as TlsClient;
   use s2n_quic::Client;
   use tokio::io::BufReader;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
 
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    create_tls_client_config, receive_and_verify_reply_from_buf, run_quic_listener, LOCALHOST,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn server_hello_test() {

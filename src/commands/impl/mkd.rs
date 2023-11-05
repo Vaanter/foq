@@ -82,7 +82,7 @@ mod tests {
 
   #[tokio::test]
   async fn mkd_successful_test() {
-    let new_dir_name = Uuid::new_v4();
+    let new_dir_name = Uuid::new_v4().as_hyphenated().to_string();
     println!("Dir name: {}", new_dir_name);
 
     let label = "test".to_string();

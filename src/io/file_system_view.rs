@@ -504,7 +504,7 @@ pub(crate) mod tests {
   use crate::io::error::IoError;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
-  use crate::utils::test_utils::DirCleanup;
+  use crate::utils::test_utils::*;
 
   #[test]
   fn derives_test() {
@@ -891,14 +891,13 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
-    let path = Uuid::new_v4().to_string();
+    let path = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
 
     let result = view.create_directory(&path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}/{}", &label, &path), result.unwrap());
-    drop(d);
   }
 
   #[test]
@@ -923,15 +922,15 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
-    let path_root = Uuid::new_v4().to_string();
-    let path = format!("{}/{}", &path_root, Uuid::new_v4());
+    let path_root = Uuid::new_v4().as_hyphenated().to_string();
+    let path = format!("{}/{}", &path_root, Uuid::new_v4().as_hyphenated());
     let dir_path = temp_dir().join(&path_root);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
 
     let result = view.create_directory(&path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}/{}", label, &path), result.unwrap());
-    drop(d);
+    assert!(dir_path.exists());
   }
 
   #[test]
@@ -941,14 +940,14 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
-    let path = format!("/{}", Uuid::new_v4());
+    let path = format!("/{}", Uuid::new_v4().as_hyphenated());
     let dir_path = temp_dir().join(&path[1..]);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
 
     let result = view.create_directory(&path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
-    drop(d);
+    assert!(dir_path.exists());
   }
 
   #[test]
@@ -958,15 +957,15 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
-    let path_root = Uuid::new_v4().to_string();
-    let path = format!("/{}/{}", path_root, Uuid::new_v4());
+    let path_root = Uuid::new_v4().as_hyphenated().to_string();
+    let path = format!("/{}/{}", path_root, Uuid::new_v4().as_hyphenated());
     let dir_path = temp_dir().join(&path_root);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
 
     let result = view.create_directory(&path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
-    drop(d);
+    assert!(dir_path.exists());
   }
 
   #[test]
@@ -979,18 +978,18 @@ pub(crate) mod tests {
     let path_root = "测试目录";
     let path = format!("/{}/测试子目录", path_root);
     let dir_path = temp_dir().join(path_root);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
 
     let result = view.create_directory(&path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
+    assert!(dir_path.exists());
 
     assert!(view.change_working_directory(path_root).unwrap());
     assert!(view.change_working_directory("..").unwrap());
     assert_eq!(format!("/{label}"), view.display_path);
     assert_eq!(root.clone().canonicalize().unwrap(), view.current_path);
     assert_eq!(root.canonicalize().unwrap(), view.root);
-    drop(d);
   }
 
   pub(crate) fn validate_listing(

@@ -469,7 +469,7 @@ mod tests {
   use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view_root::FileSystemViewRoot;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
-  use crate::utils::test_utils::DirCleanup;
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn open_file_not_logged_in_test() {
@@ -788,15 +788,14 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let root = FileSystemViewRoot::new(Some(views));
-    let path_start = Uuid::new_v4().to_string();
+    let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
     let test_path = format!("{}/{}", &label, &path_start);
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}", &test_path), result.unwrap());
-    drop(d);
   }
 
   #[test]
@@ -808,15 +807,19 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let root = FileSystemViewRoot::new(Some(views));
-    let path_start = Uuid::new_v4().to_string();
+    let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
-    let d = DirCleanup::new(&dir_path);
-    let test_path = format!("{}/{}/{}", &label, &path_start, Uuid::new_v4());
+    let _cleanup = DirCleanup::new(&dir_path);
+    let test_path = format!(
+      "{}/{}/{}",
+      &label,
+      &path_start,
+      Uuid::new_v4().as_hyphenated()
+    );
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
     assert_eq!(format!("/{}", &test_path), result.unwrap());
-    drop(d);
   }
 
   #[test]
@@ -837,7 +840,7 @@ mod tests {
     invalid_characters.extend(additional.iter().map(|c| c.as_str()));
     for path_start in invalid_characters {
       let dir_path = temp_dir().join(path_start);
-      let d = DirCleanup::new(&dir_path);
+      let _cleanup = DirCleanup::new(&dir_path);
       let test_path = format!("{}/{}", &label, &path_start);
 
       let result = root.create_directory(&test_path);
@@ -847,7 +850,6 @@ mod tests {
           path_start, result
         );
       };
-      drop(d);
     }
   }
 
@@ -860,15 +862,14 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let root = FileSystemViewRoot::new(Some(views));
-    let path_start = Uuid::new_v4().to_string();
+    let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
     let test_path = format!("/{}/{}", &label, &path_start);
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
     assert_eq!(format!("{}", &test_path), result.unwrap());
-    drop(d);
   }
 
   #[test]
@@ -880,15 +881,19 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let root = FileSystemViewRoot::new(Some(views));
-    let path_start = Uuid::new_v4().to_string();
+    let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
-    let d = DirCleanup::new(&dir_path);
-    let test_path = format!("/{}/{}/{}", &label, &path_start, Uuid::new_v4());
+    let _cleanup = DirCleanup::new(&dir_path);
+    let test_path = format!(
+      "/{}/{}/{}",
+      &label,
+      &path_start,
+      Uuid::new_v4().as_hyphenated()
+    );
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
     assert_eq!(format!("{}", &test_path), result.unwrap());
-    drop(d);
   }
 
   #[test]
@@ -902,7 +907,7 @@ mod tests {
     let mut root = FileSystemViewRoot::new(Some(views));
     let path_start = "测试目录";
     let dir_path = temp_dir().join(path_start);
-    let d = DirCleanup::new(&dir_path);
+    let _cleanup = DirCleanup::new(&dir_path);
     let test_path = format!("/{}/{}", &label, &path_start);
     let test_sub_path = "测试子目录";
     let full_test_path = format!("{}/{}", &test_path, &test_sub_path);
@@ -916,7 +921,6 @@ mod tests {
     assert_eq!(format!("/{label}"), view1.display_path);
     assert_eq!(root1.clone().canonicalize().unwrap(), view1.current_path);
     assert_eq!(root1.clone().canonicalize().unwrap(), view1.root);
-    drop(d);
   }
 
   #[test]
