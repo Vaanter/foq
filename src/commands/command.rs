@@ -20,6 +20,7 @@ use crate::commands::r#impl::r#type::r#type;
 use crate::commands::r#impl::rest::rest;
 use crate::commands::r#impl::retr::retr;
 use crate::commands::r#impl::rmd::rmd;
+use crate::commands::r#impl::rmda::rmda;
 use crate::commands::r#impl::stor::stor;
 use crate::commands::r#impl::syst::syst;
 use crate::commands::r#impl::user::user;
@@ -65,6 +66,7 @@ impl Command {
       Commands::Rest => rest(self, command_processor, reply_sender).await,
       Commands::Retr => retr(self, command_processor, reply_sender).await,
       Commands::Rmd => rmd(self, command_processor, reply_sender).await,
+      Commands::Rmda => rmda(self, command_processor, reply_sender).await,
       Commands::Stor => stor(self, command_processor, reply_sender).await,
       Commands::Syst => syst(self, reply_sender).await,
       Commands::Type => r#type(self, command_processor, reply_sender).await,

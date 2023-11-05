@@ -2,13 +2,14 @@
 //! single location a user can access. This can be a disk partition or a specific directory.
 //! The user has a set of permissions which specify which operations are permitted.
 
+use path_clean::PathClean;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, ReadDir};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 
 use tokio::fs::{File, OpenOptions};
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::auth::user_permission::UserPermission;
@@ -319,6 +320,32 @@ impl FileSystemView {
       Err(e) => Err(Self::map_error(e)),
     }
   }
+
+  pub(crate) async fn delete_folder_recursive(
+    &self,
+    path: impl Into<String>,
+  ) -> Result<(), IoError> {
+    if !self.permissions.contains(&UserPermission::Delete) {
+      return Err(IoError::PermissionError);
+    }
+
+    let path = self.process_path(&path.into());
+    let path = if !path.exists() {
+      return Err(IoError::NotFoundError("Directory not found".to_string()));
+    } else if !path.is_dir() {
+      return Err(IoError::NotADirectoryError);
+    } else {
+      path.canonicalize().map_err(Self::map_error)?
+    };
+
+    debug!("Deleting: {:?}", &path);
+
+    match tokio::fs::remove_dir_all(path).await {
+      Ok(()) => Ok(()),
+      Err(e) => Err(Self::map_error(e)),
+    }
+  }
+
   /// Creates a directory listing.
   ///
   /// This function lists all files and directories at `path` as [`EntryData`]. If the listing
@@ -844,6 +871,139 @@ pub(crate) mod tests {
 
     assert!(dir_path.exists());
     let result = view.delete_folder(dir_name).await;
+    let Err(IoError::PermissionError) = result else {
+      panic!("Expected Permission Error, got: {:?}", result);
+    };
+    assert!(dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_recursive_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_folder_recursive(format!("/{dir_name}")).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_recursive_multi_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_sub_path = dir_path.join(&dir_sub_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    assert!(dir_sub_path.exists());
+    let result = view.delete_folder_recursive(format!("/{dir_name}")).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+    assert!(!dir_sub_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_recursive_relative_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_folder_recursive(dir_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_recursive_multi_relative_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_sub_path = dir_path.join(&dir_sub_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    assert!(dir_sub_path.exists());
+    let result = view.delete_folder_recursive(dir_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!dir_path.exists());
+    assert!(!dir_sub_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_recursive_file_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = Uuid::new_v4().as_hyphenated().to_string();
+    let file_path = root.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let result = view.delete_folder_recursive(file_name).await;
+    let Err(IoError::NotADirectoryError) = result else {
+      panic!("Expected NotADirectory Error, got: {:?}", result);
+    };
+    assert!(file_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_folder_recursive_no_permissions_test() {
+    let permissions = HashSet::from([]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_sub_path = dir_path.join(&dir_sub_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_folder_recursive(dir_name).await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission Error, got: {:?}", result);
     };

@@ -9,7 +9,7 @@ use crate::handlers::reply_sender::ReplySend;
 
 static LINES: Lazy<Vec<String>> = Lazy::new(|| {
   let mut lines: Vec<String> = vec!["Supported features:".to_string()];
-  let features = ["MLSD", "REST STREAM", "UTF8"];
+  let features = ["MLSD", "REST STREAM", "UTF8", "RMDA <path>"];
   lines.extend(features.iter().map(|f| format!(" {}", f)));
   lines.push("END".to_string());
   lines
@@ -40,7 +40,7 @@ mod tests {
   #[tokio::test]
   async fn full_reply_test() {
     const EXPECTED: &str =
-      "211-Supported features:\r\n MLSD\r\n REST STREAM\r\n UTF8\r\n211 END\r\n";
+      "211-Supported features:\r\n MLSD\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
     let (tx, mut rx) = channel(1024);
     let mut reply_sender = TestReplySender::new(tx);
     let command = Command::new(Commands::Feat, "");

@@ -39,6 +39,7 @@ pub enum Commands {
   Rest,
   Retr,
   Rmd,
+  Rmda,
   Rnfr,
   Rnto,
   Site,
