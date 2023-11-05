@@ -7,6 +7,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::commands::commands::Commands;
 use crate::commands::r#impl::cdup::cdup;
 use crate::commands::r#impl::cwd::cwd;
+use crate::commands::r#impl::dele::dele;
 use crate::commands::r#impl::feat::feat;
 use crate::commands::r#impl::list::list;
 use crate::commands::r#impl::mkd::mkd;
@@ -54,6 +55,7 @@ impl Command {
     match self.command {
       Commands::Cdup => cdup(self, command_processor, reply_sender).await,
       Commands::Cwd => cwd(self, command_processor, reply_sender).await,
+      Commands::Dele => dele(self, command_processor, reply_sender).await,
       Commands::Feat => feat(self, reply_sender).await,
       Commands::List => list(self, command_processor, reply_sender).await,
       Commands::Mkd => mkd(self, command_processor, reply_sender).await,

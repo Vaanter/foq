@@ -816,6 +816,87 @@ pub(crate) mod tests {
     };
   }
 
+  #[tokio::test]
+  async fn delete_file_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root.join(&file_name);
+    println!("Test file path: {file_path:?}");
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let result = view.delete_file(format!("/{label}/{file_name}")).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!file_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_file_relative_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let result = view.delete_file(file_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    assert!(!file_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_file_directory_test() {
+    let permissions = HashSet::from([UserPermission::Delete]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let result = view.delete_file(dir_name).await;
+
+    let Err(IoError::NotAFileError) = result else {
+      panic!("Expected NotAFile Error, got: {:?}", result);
+    };
+    assert!(dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn delete_file_no_permissions_test() {
+    let permissions = HashSet::from([]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let result = view.delete_file(file_name).await;
+    let Err(IoError::PermissionError) = result else {
+      panic!("Expected Permission Error, got: {:?}", result);
+    };
+    assert!(file_path.exists());
+  }
 
   #[tokio::test]
   async fn delete_folder_absolute_test() {
