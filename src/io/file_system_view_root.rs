@@ -570,6 +570,32 @@ mod tests {
     };
   }
 
+  #[cfg(windows)]
+  #[tokio::test]
+  async fn open_file_windows_like_path_test() {
+    setup_tracing();
+    let permissions = HashSet::from([UserPermission::Read]);
+
+    let mut root1 = std::env::current_dir().unwrap();
+    root1.push("test_files");
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let options = OpenOptionsWrapperBuilder::default()
+      .read(true)
+      .build()
+      .unwrap();
+    let mut root = FileSystemViewRoot::new(Some(views));
+    root.change_working_directory(label1).unwrap();
+    let file = root
+      .open_file(format!("{}/2KiB.txt", root1.to_str().unwrap()), options)
+      .await;
+    let Err(IoError::InvalidPathError(_)) = file else {
+      panic!("Expected InvalidPath Error, got: {:?}", file);
+    };
+  }
+
   #[tokio::test]
   async fn open_file_absolute_test() {
     let permissions = HashSet::from([UserPermission::Read]);

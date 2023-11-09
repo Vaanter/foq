@@ -283,6 +283,10 @@ impl FileSystemView {
 
     let path = self.process_path(&path.into()).clean();
 
+    if !path.starts_with(&self.root) {
+      return Err(IoError::InvalidPathError(String::from("Invalid path!")));
+    }
+
     debug!("Opening: {:?}", &path);
 
     let file = OpenOptions::from(options).open(&path).await.map_err(|e| {
@@ -311,6 +315,10 @@ impl FileSystemView {
       path.canonicalize().map_err(Self::map_error)?
     };
 
+    if !path.starts_with(&self.root) {
+      return Err(IoError::InvalidPathError(String::from("Invalid path!")));
+    }
+
     debug!("Deleting: {:?}", &path);
 
     match tokio::fs::remove_file(path).await {
@@ -332,6 +340,10 @@ impl FileSystemView {
     } else {
       path.canonicalize().map_err(Self::map_error)?
     };
+
+    if !path.starts_with(&self.root) {
+      return Err(IoError::InvalidPathError(String::from("Invalid path!")));
+    }
 
     debug!("Deleting: {:?}", &path);
 
@@ -357,6 +369,10 @@ impl FileSystemView {
     } else {
       path.canonicalize().map_err(Self::map_error)?
     };
+
+    if !path.starts_with(&self.root) {
+      return Err(IoError::InvalidPathError(String::from("Invalid path!")));
+    }
 
     debug!("Deleting: {:?}", &path);
 

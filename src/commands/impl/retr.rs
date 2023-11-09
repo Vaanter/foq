@@ -110,7 +110,7 @@ pub(crate) async fn retr(
 mod tests {
   use std::collections::HashSet;
   use std::env::{current_dir, temp_dir};
-  use std::path::Path;
+  use std::path::PathBuf;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -133,39 +133,32 @@ mod tests {
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
   use crate::session::command_processor::CommandProcessor;
-  use crate::utils::test_utils::{
-    create_tls_client_config, generate_test_file, open_tcp_data_channel, receive_and_verify_reply,
-    setup_s2n_client, setup_test_command_processor, setup_test_command_processor_custom,
-    setup_transfer_command_processor, CommandProcessorSettingsBuilder, FileCleanup,
-    TestReplySender, LOCALHOST,
-  };
+  use crate::utils::test_utils::*;
 
-  async fn common_tcp(file_name: &str) {
-    if !Path::new(&file_name).exists() {
-      panic!("Test file does not exist! Cannot proceed!");
-    }
+  async fn common_tcp(root: PathBuf, argument: &str) {
+    let file_path = root.join(argument);
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
-    let command = Command::new(Commands::Retr, file_name);
+    let command = Command::new(Commands::Retr, argument);
 
     let wrapper = StandardDataChannelWrapper::new(LOCALHOST);
-    let mut command_processor = setup_transfer_command_processor(wrapper, current_dir().unwrap());
+    let mut command_processor = setup_transfer_command_processor(wrapper, root);
     let client_dc = open_tcp_data_channel(&mut command_processor).await;
-    transfer(file_name, command, command_processor, client_dc).await;
+    transfer(file_path, command, command_processor, client_dc).await;
   }
 
-  async fn common_quic(file_name: &str) {
-    if !Path::new(&file_name).exists() {
-      panic!("Test file does not exist! Cannot proceed!");
-    }
+  async fn common_quic(root: PathBuf, argument: &str) {
+    let file_path = root.join(argument);
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
     let token = CancellationToken::new();
-    let command = Command::new(Commands::Retr, file_name);
+    let command = Command::new(Commands::Retr, argument);
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
       let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
-      setup_transfer_command_processor(wrapper, current_dir().unwrap())
+      setup_transfer_command_processor(wrapper, root)
     });
 
     let client = setup_s2n_client();
@@ -199,22 +192,21 @@ mod tests {
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
 
-    transfer(file_name, command, command_processor, client_dc).await;
+    transfer(file_path, command, command_processor, client_dc).await;
   }
 
-  async fn common_quic_quinn(file_name: &str) {
-    if !Path::new(&file_name).exists() {
-      panic!("Test file does not exist! Cannot proceed!");
-    }
+  async fn common_quic_quinn(root: PathBuf, argument: &str) {
+    let file_path = root.join(argument);
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
-    let command = Command::new(Commands::Retr, file_name);
+    let command = Command::new(Commands::Retr, argument);
     let token = CancellationToken::new();
     let test_handle = tokio::spawn(async move {
       let connection = listener.accept(token.clone()).await.unwrap();
       let wrapper = QuicOnlyDataChannelWrapper::new(LOCALHOST, Arc::new(Mutex::new(connection)));
-      setup_transfer_command_processor(wrapper, current_dir().unwrap())
+      setup_transfer_command_processor(wrapper, root)
     });
 
     let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
@@ -253,12 +245,12 @@ mod tests {
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
 
-    transfer(file_name, command, command_processor, cliend_dc_recv).await;
+    transfer(file_path, command, command_processor, cliend_dc_recv).await;
     //println!("stats: {:#?}", connection);
   }
 
   async fn transfer<T: AsyncRead + Unpin>(
-    file_name: &str,
+    file_path: PathBuf,
     command: Command,
     mut command_processor: CommandProcessor,
     mut client_dc: T,
@@ -280,7 +272,7 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
-    let transfer = verify_transfer(file_name, &mut client_dc);
+    let transfer = verify_transfer(file_path, &mut client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
       Ok(()) => println!("Transfer complete!"),
@@ -292,13 +284,13 @@ mod tests {
     command_fut.await.expect("Command should complete!");
   }
 
-  async fn verify_transfer<T: AsyncRead + Unpin>(file_name: &str, client_dc: &mut T) {
+  async fn verify_transfer<T: AsyncRead + Unpin>(file_path: PathBuf, client_dc: &mut T) {
     let mut local_file_hasher = Hasher::new();
     let mut sent_file_hasher = Hasher::new();
 
     let mut local_file = OpenOptions::new()
       .read(true)
-      .open(&file_name)
+      .open(file_path)
       .await
       .expect("Test file must exist!");
 
@@ -334,129 +326,135 @@ mod tests {
   #[tokio::test]
   async fn two_kib_test() {
     const FILE_NAME: &str = "test_files/2KiB.txt";
-    common_tcp(FILE_NAME).await;
+    common_tcp(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_test() {
     const FILE_NAME: &str = "test_files/1MiB.txt";
-    common_tcp(FILE_NAME).await;
+    common_tcp(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_test() {
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
-    common_tcp(FILE_NAME).await;
+    common_tcp(current_dir().unwrap(), FILE_NAME).await;
+  }
+
+  #[tokio::test]
+  #[ignore]
+  async fn hundred_mib_test() {
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
+    let _cleanup = FileCleanup::new(&file_path);
+    generate_test_file((100 * 2u64.pow(20)) as usize, &file_path).await;
+    common_tcp(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((2u64.pow(30)) as usize, &file_path).await;
-    common_tcp(file_path_str).await;
+    common_tcp(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   async fn two_kib_quic_test() {
     const FILE_NAME: &str = "test_files/2KiB.txt";
-    timeout(Duration::from_secs(2), common_quic(FILE_NAME))
-      .await
-      .unwrap();
+    common_quic(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_quic_test() {
     const FILE_NAME: &str = "test_files/1MiB.txt";
-    common_quic(FILE_NAME).await;
+    common_quic(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_quic_test() {
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
-    common_quic(FILE_NAME).await;
+    common_quic(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((100 * 2u64.pow(20)) as usize, &file_path).await;
-    common_quic(file_path_str).await;
+    common_quic(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((2u64.pow(30)) as usize, &file_path).await;
-    common_quic(file_path_str).await;
+    common_quic(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
-    common_quic(file_path_str).await;
+    common_quic(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   async fn two_kib_quic_quinn_test() {
     const FILE_NAME: &str = "test_files/2KiB.txt";
-    timeout(Duration::from_secs(2), common_quic_quinn(FILE_NAME))
-      .await
-      .unwrap();
+    common_quic_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_quic_quinn_test() {
     const FILE_NAME: &str = "test_files/1MiB.txt";
-    common_quic_quinn(FILE_NAME).await;
+    common_quic_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_quic_quinn_test() {
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
-    common_quic_quinn(FILE_NAME).await;
+    common_quic_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_quinn_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((200 * 2u64.pow(20)) as usize, &file_path).await;
-    common_quic_quinn(file_path_str).await;
+    common_quic_quinn(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_quinn_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((2u64.pow(30)) as usize, &file_path).await;
-    common_quic_quinn(file_path_str).await;
+    common_quic_quinn(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_quinn_test() {
-    let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
-    let file_path_str = file_path.to_str().unwrap();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
-    common_quic_quinn(file_path_str).await;
+    common_quic_quinn(temp_dir(), &file_name).await;
   }
 
   #[tokio::test]
