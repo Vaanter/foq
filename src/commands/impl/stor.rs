@@ -78,7 +78,7 @@ pub(crate) async fn stor(
     .await;
 
   debug!("Receiving file data!");
-  let mut buffer = vec![0; 16384];
+  let mut buffer = vec![0; 65536];
   let success = transfer_data(&mut data_channel.as_mut().unwrap(), &mut file, &mut buffer).await;
   if let Err(e) = file.sync_data().await {
     warn!("Failed to sync file data! {e}");

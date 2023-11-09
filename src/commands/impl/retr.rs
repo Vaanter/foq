@@ -89,7 +89,7 @@ pub(crate) async fn retr(
   }
 
   debug!("Sending file data!");
-  let mut buffer = vec![0; 16384];
+  let mut buffer = vec![0; 65536];
   let success = transfer_data(&mut file, data_channel.as_mut().unwrap(), &mut buffer).await;
 
   reply_sender
