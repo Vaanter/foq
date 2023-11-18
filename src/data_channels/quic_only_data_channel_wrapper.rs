@@ -7,15 +7,16 @@ use async_trait::async_trait;
 use s2n_quic::Connection;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
-use crate::handlers::connection_handler::AsyncReadWrite;
+use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 
 pub(crate) struct QuicOnlyDataChannelWrapper {
   addr: SocketAddr,
-  data_channel: Arc<Mutex<Option<Box<dyn AsyncReadWrite>>>>,
+  data_channel: DataChannel,
   connection: Arc<Mutex<Connection>>,
+  abort_token: CancellationToken,
 }
 
 impl QuicOnlyDataChannelWrapper {
@@ -42,6 +43,7 @@ impl QuicOnlyDataChannelWrapper {
       addr,
       data_channel: Arc::new(Mutex::new(None)),
       connection,
+      abort_token: CancellationToken::new(),
     }
   }
 
@@ -57,6 +59,7 @@ impl QuicOnlyDataChannelWrapper {
     debug!("Creating passive listener");
     let conn = self.connection.clone();
     let mut data_channel = self.data_channel.clone().lock_owned().await;
+    self.abort_token = CancellationToken::new();
     tokio::spawn(async move {
       debug!("Awaiting passive connection");
       let conn = tokio::time::timeout(Duration::from_secs(20), {
@@ -89,8 +92,8 @@ impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
     self.create_stream().await
   }
 
-  async fn get_data_stream(&self) -> Arc<Mutex<Option<Box<dyn AsyncReadWrite>>>> {
-    self.data_channel.clone()
+  fn get_data_stream(&self) -> (DataChannel, CancellationToken) {
+    (self.data_channel.clone(), self.abort_token.clone())
   }
 
   async fn close_data_stream(&mut self) {
@@ -102,5 +105,9 @@ impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
 
   fn get_addr(&self) -> &SocketAddr {
     &self.addr
+  }
+
+  fn abort(&self) {
+    self.abort_token.cancel();
   }
 }

@@ -6,6 +6,7 @@ use tracing::{info, trace};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::commands::commands::Commands;
+use crate::commands::r#impl::abor::abor;
 use crate::commands::r#impl::cdup::cdup;
 use crate::commands::r#impl::cwd::cwd;
 use crate::commands::r#impl::dele::dele;
@@ -54,6 +55,7 @@ impl Command {
     reply_sender: Arc<impl ReplySend>,
   ) {
     match self.command {
+      Commands::Abor => abor(self, command_processor, reply_sender).await,
       Commands::Cdup => cdup(self, command_processor, reply_sender).await,
       Commands::Cwd => cwd(self, command_processor, reply_sender).await,
       Commands::Dele => dele(self, command_processor, reply_sender).await,

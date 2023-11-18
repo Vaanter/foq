@@ -1,5 +1,6 @@
 //! Contains actual implementations of commands.
 
+pub(crate) mod abor;
 pub(crate) mod cdup;
 pub(crate) mod cwd;
 pub(crate) mod dele;

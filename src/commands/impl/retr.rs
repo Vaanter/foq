@@ -2,6 +2,7 @@ use std::io::SeekFrom;
 use std::sync::Arc;
 
 use tokio::io::AsyncSeekExt;
+use tokio::select;
 use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
@@ -73,7 +74,6 @@ pub(crate) async fn retr(
     };
     debug!("File opened successfully.");
 
-  let success = transfer_data(&mut file, data_channel.as_mut().unwrap(), &mut buffer).await;
     reply_sender
       .send_control_message(Reply::new(
         ReplyCode::FileStatusOkay,
@@ -93,6 +93,15 @@ pub(crate) async fn retr(
 
     debug!("Sending file data, offset: {}!", session_properties.offset);
     let mut buffer = vec![0; 65536];
+    let transfer = transfer_data(&mut file, data_channel.as_mut().unwrap(), &mut buffer);
+
+    let success = select! {
+      result = transfer => result,
+      _ = token.cancelled() => {
+        debug!("Received transfer abort");
+        false
+      }
+    };
 
     reply_sender
       .send_control_message(get_transfer_reply(success))

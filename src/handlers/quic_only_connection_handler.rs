@@ -195,6 +195,7 @@ impl QuicOnlyConnectionHandler {
       timeout(Duration::from_secs(2), self.data_channel_wrapper.lock()).await
     {
       let data_channel_cleanup = async {
+        data_channel_lock.abort();
         data_channel_lock.close_data_stream().await;
       };
       if timeout(Duration::from_secs(2), data_channel_cleanup)

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
+use tokio::select;
 use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
@@ -79,11 +80,17 @@ pub(crate) async fn stor(
       ))
       .await;
 
-  let success = transfer_data(&mut data_channel.as_mut().unwrap(), &mut file, &mut buffer).await;
     debug!("Receiving file data!");
     let mut buffer = vec![0; 65536];
     let transfer = transfer_data(data_channel.as_mut().unwrap(), &mut file, &mut buffer);
 
+    let success = select! {
+      result = transfer => result,
+      _ = token.cancelled() => {
+        debug!("Received transfer abort");
+        false
+      }
+    };
     if let Err(e) = file.sync_data().await {
       warn!("Failed to sync file data! {e}");
     };

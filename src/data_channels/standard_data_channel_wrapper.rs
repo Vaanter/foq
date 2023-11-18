@@ -8,14 +8,15 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
 
-use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
-use crate::handlers::connection_handler::AsyncReadWrite;
+use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 
 pub(crate) struct StandardDataChannelWrapper {
   addr: SocketAddr,
-  data_channel: Arc<Mutex<Option<Box<dyn AsyncReadWrite>>>>,
+  data_channel: DataChannel,
+  abort_token: CancellationToken,
 }
 
 impl StandardDataChannelWrapper {
@@ -40,6 +41,7 @@ impl StandardDataChannelWrapper {
     StandardDataChannelWrapper {
       addr,
       data_channel: Arc::new(Mutex::new(None)),
+      abort_token: CancellationToken::new(),
     }
   }
 
@@ -66,6 +68,7 @@ impl StandardDataChannelWrapper {
       .expect("Implement passive port search!");
     let port = listener.local_addr()?.port();
     let mut data_lock = self.data_channel.clone().lock_owned().await;
+    self.abort_token = CancellationToken::new();
     tokio::spawn(async move {
       let conn = timeout(Duration::from_secs(20), {
         debug!("Awaiting passive connection");
@@ -105,12 +108,12 @@ impl StandardDataChannelWrapper {
 impl DataChannelWrapper for StandardDataChannelWrapper {
   /// Opens a data channel using [`StandardDataChannelWrapper::create_stream`].
   async fn open_data_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
-    self.close_data_stream().await;
+    //self.close_data_stream().await;
     self.create_stream().await
   }
 
-  async fn get_data_stream(&self) -> Arc<Mutex<Option<Box<dyn AsyncReadWrite>>>> {
-    self.data_channel.clone()
+  fn get_data_stream(&self) -> (DataChannel, CancellationToken) {
+    (self.data_channel.clone(), self.abort_token.clone())
   }
 
   #[tracing_attributes::instrument(skip(self))]
@@ -129,5 +132,9 @@ impl DataChannelWrapper for StandardDataChannelWrapper {
 
   fn get_addr(&self) -> &SocketAddr {
     &self.addr
+  }
+
+  fn abort(&self) {
+    self.abort_token.cancel();
   }
 }
