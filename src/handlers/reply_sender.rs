@@ -38,7 +38,7 @@ impl<T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
   async fn send_control_message(&self, reply: Reply) {
     info!("Sending reply: {}", reply.to_string().trim());
     let mut writer = self.writer.lock().await;
-    if let Err(e) = writer.write(reply.to_string().as_bytes()).await {
+    if let Err(e) = writer.write_all(reply.to_string().as_bytes()).await {
       error!("Failed to send reply! Error: {}", e);
     };
     if let Err(e) = writer.flush().await {
@@ -47,7 +47,7 @@ impl<T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
   }
 
   /// Closes the writer which closes the whole control channel.
-  async fn close(&mut self) -> Result<(), Error> {
+  async fn close(&self) -> Result<(), Error> {
     debug!("Closing sender half.");
     self.writer.lock().await.shutdown().await
   }
@@ -59,5 +59,5 @@ impl<T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
 #[async_trait]
 pub(crate) trait ReplySend: Sync + Send {
   async fn send_control_message(&self, reply: Reply);
-  async fn close(&mut self) -> Result<(), Error>;
+  async fn close(&self) -> Result<(), Error>;
 }

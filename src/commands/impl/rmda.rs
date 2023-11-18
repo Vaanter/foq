@@ -5,12 +5,13 @@ use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
+use std::sync::Arc;
 use tracing::info;
 
 pub(crate) async fn rmda(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   assert_eq!(Commands::Rmda, command.command);
 
@@ -45,6 +46,7 @@ mod tests {
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::*;
   use std::env::temp_dir;
+  use std::sync::Arc;
   use std::time::Duration;
   use tokio::sync::mpsc;
   use tokio::time::timeout;
@@ -66,14 +68,14 @@ mod tests {
       .username(Some("test_user".to_string()))
       .build()
       .unwrap();
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     assert!(dir_path.exists());
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -98,14 +100,14 @@ mod tests {
       .username(Some("test_user".to_string()))
       .build()
       .unwrap();
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     assert!(dir_path.exists());
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -131,14 +133,14 @@ mod tests {
       .change_path(Some(label.to_string()))
       .build()
       .unwrap();
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     assert!(dir_path.exists());
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -162,14 +164,14 @@ mod tests {
       .view_root(root)
       .build()
       .unwrap();
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     assert!(dir_path.exists());
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -196,19 +198,25 @@ mod tests {
       .change_path(Some(label.to_string()))
       .build()
       .unwrap();
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     assert!(file_path.exists());
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    receive_and_verify_reply(
+      2,
+      &mut rx,
+      ReplyCode::SyntaxErrorInParametersOrArguments,
+      None,
+    )
+    .await;
     assert!(file_path.exists());
   }
 }

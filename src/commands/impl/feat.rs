@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 use std::iter::Iterator;
+use std::sync::Arc;
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
@@ -15,7 +16,7 @@ static LINES: Lazy<Vec<String>> = Lazy::new(|| {
   lines
 });
 
-pub(crate) async fn feat(command: &Command, reply_sender: &mut impl ReplySend) {
+pub(crate) async fn feat(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(command.command, Commands::Feat);
   reply_sender
     .send_control_message(Reply::new_multiline(ReplyCode::SystemStatus, LINES.clone()))
@@ -24,12 +25,13 @@ pub(crate) async fn feat(command: &Command, reply_sender: &mut impl ReplySend) {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Arc;
   use tokio::sync::mpsc::channel;
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::r#impl::feat::{feat, LINES};
-  use crate::utils::test_utils::{TestReplySender};
+  use crate::utils::test_utils::TestReplySender;
 
   #[tokio::test]
   async fn format_test() {
@@ -42,9 +44,9 @@ mod tests {
     const EXPECTED: &str =
       "211-Supported features:\r\n MLSD\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     let command = Command::new(Commands::Feat, "");
-    feat(&command, &mut reply_sender).await;
+    feat(&command, Arc::new(reply_sender)).await;
     match rx.recv().await {
       Some(reply) => assert_eq!(EXPECTED, reply.to_string()),
       None => panic!("Rx closed without reading reply!"),

@@ -8,7 +8,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
 use crate::handlers::connection_handler::AsyncReadWrite;
@@ -80,7 +80,11 @@ impl StandardDataChannelWrapper {
               .peer_addr()
               .expect("Passive data connection should have peer!")
           );
-          let _ = data_lock.insert(Box::new(stream));
+          if let Some(mut old) = data_lock.replace(Box::new(stream)) {
+            if let Err(e) = old.shutdown().await {
+              warn!("Failed to shutdown old data channel, {e}")
+            };
+          };
         }
         Ok(Err(e)) => {
           warn!("Passive listener connection failed! {e}");
@@ -109,14 +113,21 @@ impl DataChannelWrapper for StandardDataChannelWrapper {
     self.data_channel.clone()
   }
 
+  #[tracing_attributes::instrument(skip(self))]
   async fn close_data_stream(&mut self) {
     let dc = self.data_channel.clone();
-    if dc.lock().await.is_some() {
-      let _ = dc.lock().await.as_mut().unwrap().shutdown().await;
+    trace!("Acquiring lock for data channel shutdown");
+    let mut lock = dc.lock().await;
+    if let Some(mut old) = lock.take() {
+      trace!("Shutting down data channel");
+      match old.shutdown().await {
+        Ok(_) => trace!("Data channel shut down"),
+        Err(_) => warn!("Failed to shutdown data channel"),
+      };
     };
   }
 
-  async fn get_addr(&self) -> &SocketAddr {
+  fn get_addr(&self) -> &SocketAddr {
     &self.addr
   }
 }

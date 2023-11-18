@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tracing::{info, trace};
 
 use crate::commands::command::Command;
@@ -10,8 +11,8 @@ use crate::session::command_processor::CommandProcessor;
 
 pub(crate) async fn mkd(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   trace!("Executing MKD command");
   debug_assert_eq!(command.command, Commands::Mkd);
@@ -54,6 +55,7 @@ mod tests {
     DirCleanup, TestReplySender,
   };
   use std::env::temp_dir;
+  use std::sync::Arc;
   use std::time::Duration;
   use tokio::sync::mpsc::channel;
   use tokio::time::timeout;
@@ -66,13 +68,13 @@ mod tests {
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
       .expect("Settings should be valid");
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -96,15 +98,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
-    let dir_path = temp_dir().join(new_dir_name.to_string());
+    let reply_sender = TestReplySender::new(tx);
+    let dir_path = temp_dir().join(&new_dir_name);
     let _d = DirCleanup::new(&dir_path);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");

@@ -3,8 +3,9 @@ use crate::commands::commands::Commands;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
+use std::sync::Arc;
 
-pub(crate) async fn syst(command: &Command, reply_sender: &mut impl ReplySend) {
+pub(crate) async fn syst(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(command.command, Commands::Syst);
   reply_sender
     .send_control_message(Reply::new(ReplyCode::NameSystemType, "UNIX Type: L8"))
@@ -14,6 +15,7 @@ pub(crate) async fn syst(command: &Command, reply_sender: &mut impl ReplySend) {
 #[cfg(test)]
 mod tests {
   use std::env::current_dir;
+  use std::sync::Arc;
   use std::time::Duration;
 
   use tokio::sync::mpsc;
@@ -41,14 +43,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    let reply_sender = TestReplySender::new(tx);
+    if (timeout(
       Duration::from_secs(2),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
-    .await
+    .await)
+      .is_err()
     {
       panic!("Command timeout!");
     };

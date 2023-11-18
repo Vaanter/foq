@@ -5,9 +5,7 @@ use rustls::{Certificate, ClientConfig, KeyLogFile, ServerConfig, ServerName};
 use s2n_quic::provider::io::tokio::Builder as IoBuilder;
 use s2n_quic::provider::tls::rustls::Client as TlsClient;
 use s2n_quic::Client;
-use std::cmp::min;
 use std::collections::HashSet;
-use std::env::temp_dir;
 use std::fs::{remove_dir_all, remove_file, OpenOptions as OpenOptionsStd};
 use std::io;
 use std::io::Error;
@@ -67,7 +65,7 @@ impl ReplySend for TestReplySender {
     self.tx.send(reply).await.unwrap();
   }
 
-  async fn close(&mut self) -> Result<(), Error> {
+  async fn close(&self) -> Result<(), Error> {
     Ok(())
   }
 }
@@ -238,7 +236,6 @@ pub(crate) const LOCALHOST: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LO
 pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcessor) -> TcpStream {
   let addr = match command_processor
     .data_wrapper
-    .clone()
     .lock()
     .await
     .open_data_stream()
@@ -262,7 +259,7 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
     .lock()
     .await
     .get_data_stream()
-    .await
+    .0
     .lock()
     .await;
   client_dc
@@ -374,10 +371,8 @@ pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
     remaining -= MAX_CHUNK_SIZE;
   }
 
-  let chunk_size = min(remaining, MAX_CHUNK_SIZE);
-  let chunk = vec![0u8; chunk_size];
   output_writer
-    .write_all(&chunk)
+    .write_all(&chunk[..remaining])
     .await
     .expect("Writing chunk to test file should succeed");
   output_writer.flush().await.unwrap();

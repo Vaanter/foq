@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::reply::Reply;
@@ -39,7 +39,11 @@ impl CommandProcessor {
   /// a reply is sent stating such.
   ///
   #[tracing::instrument(skip_all)]
-  pub(crate) async fn evaluate(&mut self, message: String, reply_sender: &mut impl ReplySend) {
+  pub(crate) async fn evaluate<T: ReplySend + Send>(
+    self: Arc<Self>,
+    message: String,
+    reply_sender: Arc<T>,
+  ) {
     debug!("Evaluating command");
     let command: Command = match message.trim().parse() {
       Ok(c) => c,
@@ -57,6 +61,7 @@ impl CommandProcessor {
       }
     };
 
+    trace!("Parsed command: {:#?}", command);
     command.execute(self, reply_sender).await;
   }
 }

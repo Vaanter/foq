@@ -1,8 +1,10 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{Mutex, OwnedMutexGuard};
+use tokio::time::timeout;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::commands::reply::Reply;
@@ -19,11 +21,8 @@ pub(crate) async fn get_data_channel_lock(
     ReplyCode::BadSequenceOfCommands,
     "Data channel must be open first!",
   );
-  match data_wrapper.try_lock() {
+  match timeout(Duration::from_secs(20), data_wrapper.lock()).await {
     Ok(dcw) => {
-      let dc = dcw.get_data_stream().await.lock_owned().await;
-      if dc.is_some() {
-        Ok(dc)
       } else {
         Err(error_reply)
       }

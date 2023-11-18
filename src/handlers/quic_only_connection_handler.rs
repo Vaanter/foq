@@ -3,10 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use futures::future::join_all;
 use s2n_quic::stream::BidirectionalStream;
 use s2n_quic::Connection;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::sync::{Mutex, RwLock};
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -26,10 +28,11 @@ use crate::session::session_properties::SessionProperties;
 pub(crate) struct QuicOnlyConnectionHandler {
   connection: Arc<Mutex<Connection>>,
   data_channel_wrapper: Arc<Mutex<QuicOnlyDataChannelWrapper>>,
-  command_processor: Arc<Mutex<CommandProcessor>>,
+  command_processor: Arc<CommandProcessor>,
   control_channel: Option<BufReader<ReadHalf<BidirectionalStream>>>,
-  reply_sender: Option<ReplySender<BidirectionalStream>>,
+  reply_sender: Option<Arc<ReplySender<BidirectionalStream>>>,
   session_properties: Arc<RwLock<SessionProperties>>,
+  running_commands: Vec<JoinHandle<()>>,
 }
 
 impl QuicOnlyConnectionHandler {
@@ -47,11 +50,11 @@ impl QuicOnlyConnectionHandler {
     )));
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let command_processor = Arc::new(Mutex::new(CommandProcessor::new(
+    let command_processor = Arc::new(CommandProcessor::new(
       session_properties.clone(),
       wrapper.clone(),
-    )));
-
+    ));
+    let running_commands = Vec::with_capacity(10);
     QuicOnlyConnectionHandler {
       connection,
       data_channel_wrapper: wrapper,
@@ -59,6 +62,7 @@ impl QuicOnlyConnectionHandler {
       control_channel: None,
       reply_sender: None,
       session_properties,
+      running_commands,
     }
   }
 
@@ -81,10 +85,7 @@ impl QuicOnlyConnectionHandler {
     debug!("Reading message from client.");
     let bytes = match cc.read_line(&mut buf).await {
       Ok(len) => {
-        debug!(
-          "[QUIC] Received message from client, length: {len}, content: {}",
-          buf.trim()
-        );
+        debug!("[QUIC] Received message from client, length: {len}");
         len
       }
       Err(e) => {
@@ -98,12 +99,13 @@ impl QuicOnlyConnectionHandler {
       anyhow::bail!("Connection closed!");
     }
 
-    let session = self.command_processor.clone();
-    session
-      .lock()
-      .await
-      .evaluate(buf, self.reply_sender.as_mut().unwrap())
-      .await;
+    let command_processor = self.command_processor.clone();
+    let task = command_processor.evaluate(buf, self.reply_sender.clone().unwrap());
+    self.running_commands.push(tokio::spawn(task));
+    if self.running_commands.len() > 10 {
+      self.running_commands.retain(|c| !c.is_finished());
+    }
+    debug!("Running commands: {}", self.running_commands.len());
     Ok(())
   }
 
@@ -122,9 +124,9 @@ impl QuicOnlyConnectionHandler {
       Ok(control_channel) => {
         let (reader, writer) = tokio::io::split(control_channel);
         let control_channel = BufReader::new(reader);
-        let reply_sender = ReplySender::new(writer);
+        let reply_sender = Arc::new(ReplySender::new(writer));
         let _ = self.control_channel.insert(control_channel);
-        let _ = self.reply_sender.insert(reply_sender);
+        self.reply_sender.replace(reply_sender);
         Ok(())
       }
       Err(e) => Err(e.into()),
@@ -155,12 +157,6 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
         biased;
         _ = token.cancelled() => {
           info!("[QUIC] Shutdown received!");
-          if timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close()).await.is_err() {
-            warn!("[QUIC] Failed to close command channel in time!");
-          };
-          if timeout(Duration::from_secs(2), self.data_channel_wrapper.lock().await.close_data_stream()).await.is_err() {
-            warn!("[QUIC] Failed to close data channel in time!")
-          };
           break;
         }
         result = self.await_command() => {
@@ -171,8 +167,50 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
         }
       }
     }
-
+    self.cleanup().await;
     Ok(())
+  }
+}
+
+impl QuicOnlyConnectionHandler {
+  async fn cleanup(&mut self) {
+    info!("[QUIC] Shutdown received!");
+    let commands_to_finish = join_all(std::mem::take(&mut self.running_commands));
+    if timeout(Duration::from_secs(5), commands_to_finish)
+      .await
+      .is_err()
+    {
+      warn!("[QUIC] Failed to finish processing running commands in time!");
+    }
+    if timeout(
+      Duration::from_secs(2),
+      self.reply_sender.as_mut().unwrap().close(),
+    )
+    .await
+    .is_err()
+    {
+      warn!("[QUIC] Failed to close command channel in time!");
+    };
+    if let Ok(mut data_channel_lock) =
+      timeout(Duration::from_secs(2), self.data_channel_wrapper.lock()).await
+    {
+      let data_channel_cleanup = async {
+        data_channel_lock.close_data_stream().await;
+      };
+      if timeout(Duration::from_secs(2), data_channel_cleanup)
+        .await
+        .is_err()
+      {
+        warn!("[QUIC] Failed to close data channel in time!")
+      };
+    };
+  }
+}
+
+impl Drop for QuicOnlyConnectionHandler {
+  fn drop(&mut self) {
+    debug!("[QUIC] aborting {} commands", self.running_commands.len());
+    self.running_commands.iter().for_each(|c| c.abort());
   }
 }
 

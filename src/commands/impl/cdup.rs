@@ -5,21 +5,21 @@ use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
+use std::sync::Arc;
 
 pub(crate) async fn cdup(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   debug_assert_eq!(command.command, Commands::Cdup);
 
   let mut session_properties = command_processor.session_properties.write().await;
 
   if !session_properties.is_logged_in() {
-    reply_sender
+    return reply_sender
       .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
       .await;
-    return;
   }
 
   if !command.argument.is_empty() {
@@ -43,6 +43,7 @@ pub(crate) async fn cdup(
 mod tests {
   use std::env::current_dir;
   use std::path::PathBuf;
+  use std::sync::Arc;
   use std::time::Duration;
 
   use tokio::sync::mpsc;
@@ -63,11 +64,11 @@ mod tests {
     expected_path: PathBuf,
     expected_display_path: &str,
   ) {
-    let mut command_processor = setup_test_command_processor_custom(settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(settings));
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     command
-      .execute(&mut command_processor, &mut reply_sender)
+      .execute(command_processor.clone(), Arc::new(reply_sender))
       .await;
     match timeout(Duration::from_secs(2), rx.recv()).await {
       Ok(Some(result)) => {

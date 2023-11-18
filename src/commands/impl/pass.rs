@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tracing::{error, info};
 
 use crate::commands::command::Command;
@@ -11,8 +12,8 @@ use crate::session::command_processor::CommandProcessor;
 #[tracing::instrument(skip_all)]
 pub(crate) async fn pass(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   debug_assert_eq!(command.command, Commands::Pass);
 
@@ -106,7 +107,7 @@ mod tests {
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "test");
 
@@ -116,10 +117,10 @@ mod tests {
       .await;
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
@@ -137,7 +138,7 @@ mod tests {
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "INVALID");
 
@@ -147,10 +148,10 @@ mod tests {
       .await;
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
@@ -162,7 +163,7 @@ mod tests {
   async fn no_username_test() {
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "test");
 
@@ -172,10 +173,10 @@ mod tests {
       .await;
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
@@ -193,7 +194,7 @@ mod tests {
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "");
 
@@ -203,10 +204,10 @@ mod tests {
       .await;
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
@@ -231,15 +232,15 @@ mod tests {
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "test");
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");

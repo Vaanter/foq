@@ -3,9 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use futures::future::join_all;
+
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -24,10 +27,11 @@ use crate::session::session_properties::SessionProperties;
 #[allow(unused)]
 pub(crate) struct StandardConnectionHandler {
   data_channel_wrapper: Arc<Mutex<StandardDataChannelWrapper>>,
-  command_processor: Arc<Mutex<CommandProcessor>>,
+  command_processor: Arc<CommandProcessor>,
   control_channel: BufReader<ReadHalf<TcpStream>>,
-  reply_sender: ReplySender<TcpStream>,
+  reply_sender: Arc<ReplySender<TcpStream>>,
   session_properties: Arc<RwLock<SessionProperties>>,
+  running_commands: Vec<JoinHandle<()>>,
 }
 
 impl StandardConnectionHandler {
@@ -44,18 +48,20 @@ impl StandardConnectionHandler {
     )));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
-    let reply_sender = ReplySender::new(stream_halves.1);
+    let reply_sender = Arc::new(ReplySender::new(stream_halves.1));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let command_processor = Arc::new(Mutex::new(CommandProcessor::new(
+    let command_processor = Arc::new(CommandProcessor::new(
       session_properties.clone(),
       wrapper.clone(),
-    )));
+    ));
+    let running_commands = Vec::with_capacity(10);
     StandardConnectionHandler {
       data_channel_wrapper: wrapper,
       command_processor,
       control_channel,
       reply_sender,
       session_properties,
+      running_commands,
     }
   }
 
@@ -75,10 +81,7 @@ impl StandardConnectionHandler {
     debug!("[TCP] Reading message from client.");
     let bytes = match reader.read_line(&mut buf).await {
       Ok(len) => {
-        debug!(
-          "[TCP] Received message from client, length: {len}, content: {}",
-          buf.trim()
-        );
+        debug!("[TCP] Received message from client, length: {len}");
         len
       }
       Err(e) => {
@@ -91,13 +94,13 @@ impl StandardConnectionHandler {
     if bytes == 0 {
       anyhow::bail!("Connection closed!");
     }
-
-    let session = self.command_processor.clone();
-    session
-      .lock()
-      .await
-      .evaluate(buf, &mut self.reply_sender)
-      .await;
+    let command_processor = self.command_processor.clone();
+    let task = command_processor.evaluate(buf, self.reply_sender.clone());
+    self.running_commands.push(tokio::spawn(task));
+    if self.running_commands.len() > 10 {
+      self.running_commands.retain(|t| !t.is_finished());
+    }
+    debug!("Running commands: {}", self.running_commands.len());
     Ok(())
   }
 }
@@ -110,33 +113,74 @@ impl ConnectionHandler for StandardConnectionHandler {
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
     debug!("[TCP] Sending hello to client.");
-    let _ = &mut self.reply_sender.send_control_message(hello).await;
-
+    self.reply_sender.send_control_message(hello).await;
     loop {
       tokio::select! {
         biased;
         _ = token.cancelled() => {
-          info!("[TCP] Shutdown received!");
-          if timeout(Duration::from_secs(2), self.reply_sender.close()).await.is_err() {
-            warn!("[TCP] Failed to close command channel in time!");
-          };
-          if timeout(Duration::from_secs(2), self.data_channel_wrapper.lock().await.close_data_stream()).await.is_err() {
-            warn!("[TCP] Failed to close data channel in time!")
-          };
           break;
         }
         result = self.await_command() => {
           if let Err(e) = result {
-            warn!("[TCP] Error awaiting command! {e}");
-            if timeout(Duration::from_secs(2), self.reply_sender.close()).await.is_err() {
-              warn!("[TCP] Failed to clean up after connection shutdown!");
-            };
+            info!("[TCP] Error awaiting command! {e}");
             break;
           }
         }
       }
     }
+    self.cleanup().await;
     Ok(())
+  }
+}
+
+impl StandardConnectionHandler {
+  async fn cleanup(&mut self) {
+    info!("[TCP] Shutdown received!");
+    let mut commands_to_finish = std::mem::take(&mut self.running_commands);
+    commands_to_finish.retain(|t| !t.is_finished());
+    debug!("[TCP] Commands to finish: {:#?}", commands_to_finish);
+    if timeout(
+      Duration::from_secs(5),
+      join_all(commands_to_finish),
+    )
+    .await
+    .is_err()
+    {
+      warn!("[TCP] Failed to finish processing running commands in time!");
+    } else {
+      debug!("[TCP] Finished processing running tasks");
+    }
+    if timeout(Duration::from_secs(5), self.reply_sender.close())
+      .await
+      .is_err()
+    {
+      warn!("[TCP] Failed to close command channel in time!");
+    } else {
+      debug!("[TCP] Closed command channel")
+    }
+    let data_channel_cleanup = async {
+      debug!("[TCP] Locking data channel for cleanup");
+      let mut data_channel_lock = self.data_channel_wrapper.lock().await;
+      debug!("[TCP] Aborting data channel");
+      data_channel_lock.abort();
+      debug!("[TCP] Closing data channel");
+      data_channel_lock.close_data_stream().await;
+    };
+    if timeout(Duration::from_secs(5), data_channel_cleanup)
+      .await
+      .is_err()
+    {
+      warn!("[TCP] Failed to close data channel in time!")
+    } else {
+      debug!("[TCP] Closed data channel")
+    }
+  }
+}
+
+impl Drop for StandardConnectionHandler {
+  fn drop(&mut self) {
+    debug!("[TCP] aborting {} commands", self.running_commands.len());
+    self.running_commands.iter().for_each(|t| t.abort());
   }
 }
 
@@ -198,7 +242,7 @@ mod tests {
     }
     token.cancel();
 
-    if let Err(_) = timeout(Duration::from_secs(3), handler_fut).await {
+    if (timeout(Duration::from_secs(3), handler_fut).await).is_err() {
       panic!("Handler future failed to finish!");
     };
   }

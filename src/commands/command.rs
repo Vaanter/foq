@@ -1,6 +1,7 @@
 //! The command and its argument.
 
 use std::str::FromStr;
+use std::sync::Arc;
 use tracing::{info, trace};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -49,8 +50,8 @@ impl Command {
 impl Command {
   pub async fn execute(
     &self,
-    command_processor: &mut CommandProcessor,
-    reply_sender: &mut impl ReplySend,
+    command_processor: Arc<CommandProcessor>,
+    reply_sender: Arc<impl ReplySend>,
   ) {
     match self.command {
       Commands::Cdup => cdup(self, command_processor, reply_sender).await,

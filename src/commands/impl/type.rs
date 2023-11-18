@@ -5,11 +5,12 @@ use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::data_type::{DataType, SubType};
+use std::sync::Arc;
 
 pub(crate) async fn r#type(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   debug_assert_eq!(command.command, Commands::Type);
 
@@ -76,6 +77,7 @@ pub(crate) async fn r#type(
 #[cfg(test)]
 mod tests {
   use std::env::current_dir;
+  use std::sync::Arc;
   use std::time::Duration;
 
   use tokio::sync::mpsc;
@@ -102,15 +104,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "A N");
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     if timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .is_err()
@@ -139,15 +141,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "A");
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     if timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .is_err()
@@ -176,15 +178,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "I");
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -208,15 +210,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "A T");
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -242,15 +244,15 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "A C");
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -276,17 +278,17 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "");
 
     let original_type = command_processor.session_properties.read().await.data_type;
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -316,17 +318,17 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let command = Command::new(Commands::Type, "E");
 
     let original_type = command_processor.session_properties.read().await.data_type;
 
     let (tx, mut rx) = mpsc::channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");

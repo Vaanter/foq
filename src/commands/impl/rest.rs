@@ -4,12 +4,13 @@ use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
+use std::sync::Arc;
 
 #[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn rest(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   debug_assert_eq!(command.command, Commands::Rest);
 
@@ -55,6 +56,7 @@ pub(crate) async fn rest(
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Arc;
   use std::time::Duration;
 
   use tokio::sync::mpsc::channel;
@@ -69,15 +71,16 @@ mod tests {
 
   #[tokio::test]
   async fn set_test() {
-    let (_, mut command_processor) = setup_test_command_processor();
+    let (_, command_processor) = setup_test_command_processor();
+    let command_processor = Arc::new(command_processor);
 
     let command = Command::new(Commands::Rest, "123");
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -97,16 +100,18 @@ mod tests {
 
   #[tokio::test]
   async fn set_not_logged_in_test() {
-    let (_, mut command_processor) = setup_test_command_processor();
+    let (_, command_processor) = setup_test_command_processor();
+    let command_processor = Arc::new(command_processor);
+
     command_processor.session_properties.write().await.username = None;
 
     let command = Command::new(Commands::Rest, "123");
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -117,15 +122,16 @@ mod tests {
 
   #[tokio::test]
   async fn set_no_argument_test() {
-    let (_, mut command_processor) = setup_test_command_processor();
+    let (_, command_processor) = setup_test_command_processor();
+    let command_processor = Arc::new(command_processor);
 
     let command = Command::new(Commands::Rest, String::new());
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -142,15 +148,16 @@ mod tests {
 
   #[tokio::test]
   async fn set_not_a_number_test() {
-    let (_, mut command_processor) = setup_test_command_processor();
+    let (_, command_processor) = setup_test_command_processor();
+    let command_processor = Arc::new(command_processor);
 
     let command = Command::new(Commands::Rest, "test");
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");

@@ -70,7 +70,7 @@ impl QuicOnlyDataChannelWrapper {
             "Passive listener connection successful! ID: {}.",
             stream.id()
           );
-          let _ = data_channel.insert(Box::new(stream));
+          data_channel.replace(Box::new(stream));
         }
         Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
         Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
@@ -100,7 +100,7 @@ impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
     };
   }
 
-  async fn get_addr(&self) -> &SocketAddr {
+  fn get_addr(&self) -> &SocketAddr {
     &self.addr
   }
 }

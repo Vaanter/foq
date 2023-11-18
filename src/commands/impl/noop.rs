@@ -3,8 +3,9 @@ use crate::commands::commands::Commands;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
+use std::sync::Arc;
 
-pub(crate) async fn noop(command: &Command, reply_sender: &mut impl ReplySend) {
+pub(crate) async fn noop(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(Commands::Noop, command.command);
   reply_sender
     .send_control_message(Reply::new(ReplyCode::CommandOkay, "OK"))
@@ -35,13 +36,13 @@ mod tests {
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
 
     let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
-    let mut command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
+    let command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     if timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .is_err()

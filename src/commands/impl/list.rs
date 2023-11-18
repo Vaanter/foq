@@ -1,10 +1,13 @@
 use regex::Regex;
+use std::io::ErrorKind;
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
+use tokio::select;
 use tracing::{debug, info, trace};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::r#impl::shared::get_listing_or_error_reply;
+use crate::commands::r#impl::shared::{get_data_channel_lock, get_listing_or_error_reply};
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
@@ -14,8 +17,8 @@ use crate::session::command_processor::CommandProcessor;
 #[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn list(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   debug_assert_eq!(command.command, Commands::List);
 
@@ -39,45 +42,51 @@ pub(crate) async fn list(
   };
 
   debug!("Locking data stream!");
-  let stream = command_processor
-    .data_wrapper
-    .lock()
-    .await
-    .get_data_stream()
-    .await;
+  {
+    let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
+    let (mut data_channel, token) = match data_channel_lock {
+      Ok((dc, token)) => (dc, token),
+      Err(e) => {
+        return reply_sender.send_control_message(e).await;
+      }
+    };
 
-  match stream.lock().await.as_mut() {
-    Some(s) => {
-      let mem = listing
-        .iter()
-        .filter(|l| l.entry_type() != EntryType::Cdir)
-        .map(|l| l.to_list_string())
-        .collect::<String>();
-      trace!(
-        "Sending listing to client:\n{}",
-        mem.replace("\r\n", "\\r\\n")
-      );
-      let len = s.write_all(mem.as_ref()).await;
-      debug!("Sending listing result: {:?}", len);
-    }
-    None => {
-      info!("Data stream is not open!");
-      reply_sender
-        .send_control_message(Reply::new(
-          ReplyCode::BadSequenceOfCommands,
-          "Data connection is not open!",
-        ))
-        .await;
-      return;
+    reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::FileStatusOkay,
+        "Transferring directory information!",
+      ))
+      .await;
+
+    match data_channel.as_mut() {
+      Some(s) => {
+        let mem = listing
+          .iter()
+          .filter(|l| l.entry_type() != EntryType::Cdir)
+          .map(|l| l.to_list_string())
+          .collect::<String>();
+        trace!(
+          "Sending listing to client:\n{}",
+          mem.replace("\r\n", "\\r\\n")
+        );
+        let transfer = s.write_all(mem.as_ref());
+        let result = select! {
+          result = transfer => result,
+          _ = token.cancelled() => Err(std::io::Error::new(ErrorKind::ConnectionAborted, "Connection aborted!"))
+        };
+        debug!("Sending listing result: {:?}", result);
+      }
+      None => {
+        info!("Data stream is not open!");
+        return reply_sender
+          .send_control_message(Reply::new(
+            ReplyCode::BadSequenceOfCommands,
+            "Data connection is not open!",
+          ))
+          .await;
+      }
     }
   }
-
-  reply_sender
-    .send_control_message(Reply::new(
-      ReplyCode::FileStatusOkay,
-      "Transferring directory information!",
-    ))
-    .await;
 
   debug!("Listing sent to client!");
   reply_sender
@@ -98,6 +107,7 @@ pub(crate) async fn list(
 mod tests {
   use std::collections::HashSet;
   use std::env::current_dir;
+  use std::sync::Arc;
   use std::time::Duration;
 
   use regex::Regex;
@@ -108,21 +118,18 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
-    CommandProcessorSettings, CommandProcessorSettingsBuilder, TestReplySender,
-  };
+  use crate::utils::test_utils::*;
 
   async fn listing_common(command: Command, settings: &CommandProcessorSettings) {
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let mut command_processor = setup_test_command_processor_custom(settings);
 
     let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -236,13 +243,13 @@ mod tests {
     let settings = CommandProcessorSettingsBuilder::default()
       .build()
       .expect("Settings should be valid");
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command should finish before timeout");
@@ -263,13 +270,13 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command should finish before timeout");
@@ -297,13 +304,13 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");
@@ -326,15 +333,16 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
-    if let Err(_) = timeout(
+    let reply_sender = TestReplySender::new(tx);
+    if (timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
-    .await
+    .await)
+      .is_err()
     {
       panic!("Command timeout!");
     };
@@ -362,13 +370,13 @@ mod tests {
       .build()
       .expect("Settings should be valid");
 
-    let mut command_processor = setup_test_command_processor_custom(&settings);
+    let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(3),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timeout!");

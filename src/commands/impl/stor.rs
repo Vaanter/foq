@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
@@ -13,8 +15,8 @@ use crate::session::command_processor::CommandProcessor;
 
 pub(crate) async fn stor(
   command: &Command,
-  command_processor: &mut CommandProcessor,
-  reply_sender: &mut impl ReplySend,
+  command_processor: Arc<CommandProcessor>,
+  reply_sender: Arc<impl ReplySend>,
 ) {
   debug_assert_eq!(command.command, Commands::Stor);
 
@@ -37,59 +39,62 @@ pub(crate) async fn stor(
     return;
   }
 
-  let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
-  let mut data_channel = match data_channel_lock {
-    Ok(dc) => dc,
-    Err(e) => {
-      reply_sender.send_control_message(e).await;
-      return;
-    }
-  };
+  {
+    let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
+    let (mut data_channel, token) = match data_channel_lock {
+      Ok((dc, token)) => (dc, token),
+      Err(e) => {
+        return reply_sender.send_control_message(e).await;
+      }
+    };
 
-  let options = OpenOptionsWrapperBuilder::default()
-    .write(true)
-    .truncate(true)
-    .create(true)
-    .build()
-    .unwrap();
-  info!(
-    "User '{}' opening file '{}'.",
-    session_properties.username.as_ref().unwrap(),
-    &command.argument
-  );
-  let file = session_properties
-    .file_system_view_root
-    .open_file(&command.argument, options)
-    .await;
+    let options = OpenOptionsWrapperBuilder::default()
+      .write(true)
+      .truncate(true)
+      .create(true)
+      .build()
+      .unwrap();
+    info!(
+      "User '{}' opening file '{}'.",
+      session_properties.username.as_ref().unwrap(),
+      &command.argument
+    );
+    let file = session_properties
+      .file_system_view_root
+      .open_file(&command.argument, options)
+      .await;
 
-  let mut file = match get_open_file_result(file) {
-    Ok(f) => f,
-    Err(reply) => {
-      reply_sender.send_control_message(reply).await;
-      return;
-    }
-  };
+    let mut file = match get_open_file_result(file) {
+      Ok(f) => f,
+      Err(reply) => {
+        reply_sender.send_control_message(reply).await;
+        return;
+      }
+    };
 
-  reply_sender
-    .send_control_message(Reply::new(
-      ReplyCode::FileStatusOkay,
-      "Starting file transfer!",
-    ))
-    .await;
+    reply_sender
+      .send_control_message(Reply::new(
+        ReplyCode::FileStatusOkay,
+        "Starting file transfer!",
+      ))
+      .await;
 
-  debug!("Receiving file data!");
-  let mut buffer = vec![0; 65536];
   let success = transfer_data(&mut data_channel.as_mut().unwrap(), &mut file, &mut buffer).await;
-  if let Err(e) = file.sync_data().await {
-    warn!("Failed to sync file data! {e}");
-  };
+    debug!("Receiving file data!");
+    let mut buffer = vec![0; 65536];
+    let transfer = transfer_data(data_channel.as_mut().unwrap(), &mut file, &mut buffer);
 
-  reply_sender
-    .send_control_message(get_transfer_reply(success))
-    .await;
+    if let Err(e) = file.sync_data().await {
+      warn!("Failed to sync file data! {e}");
+    };
+    reply_sender
+      .send_control_message(get_transfer_reply(success))
+      .await;
+    if let Err(e) = file.flush().await {
+      warn!("Failed to flush data to file after transfer! {e}");
+    }
+  }
 
-  // Needed to release the lock. Maybe find a better way to do this?
-  drop(data_channel);
   command_processor
     .data_wrapper
     .lock()
@@ -133,7 +138,10 @@ mod tests {
   const TIMEOUT_SECS: u64 = 600;
 
   async fn common(local_file: &Path, remote_file: &str) {
-    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
+    assert!(
+      local_file.exists(),
+      "Test file does not exist! Cannot proceed!"
+    );
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -171,7 +179,10 @@ mod tests {
   }
 
   async fn common_quic(local_file: &Path, remote_file: &str) {
-    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
+    assert!(
+      local_file.exists(),
+      "Test file does not exist! Cannot proceed!"
+    );
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -214,7 +225,7 @@ mod tests {
       .await
       .unwrap();
 
-    let mut client_dc = match client_connection.open_bidirectional_stream().await {
+    let client_dc = match client_connection.open_bidirectional_stream().await {
       Ok(client_dc) => client_dc,
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
@@ -224,7 +235,7 @@ mod tests {
       remote_file,
       command,
       command_processor,
-      &mut client_dc,
+      client_dc,
     );
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
@@ -234,7 +245,10 @@ mod tests {
   }
 
   async fn common_quic_quinn(local_file: &Path, remote_file: &str) {
-    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
+    assert!(
+      local_file.exists(),
+      "Test file does not exist! Cannot proceed!"
+    );
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -302,16 +316,16 @@ mod tests {
     local_file: &Path,
     remote_file: &str,
     command: Command,
-    mut command_processor: CommandProcessor,
+    command_processor: CommandProcessor,
     mut client_dc: T,
   ) {
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
 
     let command_fut = tokio::spawn(async move {
       timeout(
         Duration::from_secs(TIMEOUT_SECS),
-        command.execute(&mut command_processor, &mut reply_sender),
+        command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
       )
       .await
       .expect("Command timeout!");
@@ -319,9 +333,15 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
-    verify_transfer(local_file, remote_file, &mut client_dc).await;
+    let transfer = verify_transfer(local_file, remote_file, &mut client_dc);
+
+    match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
+      Ok(()) => println!("Transfer complete!"),
+      Err(_) => panic!("Transfer timed out!"),
+    }
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::ClosingDataConnection, None).await;
+
     command_fut.await.expect("Command should complete!");
   }
 
@@ -537,10 +557,10 @@ mod tests {
 
     let command = Command::new(Commands::Stor, "NONEXISTENT");
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
@@ -574,14 +594,14 @@ mod tests {
       .await
       .username
       .insert("test".to_string());
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Stor, "NONEXISTENT".to_string());
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
@@ -621,10 +641,10 @@ mod tests {
 
     let command = Command::new(Commands::Stor, "");
     let (tx, mut rx) = channel(1024);
-    let mut reply_sender = TestReplySender::new(tx);
+    let reply_sender = TestReplySender::new(tx);
     timeout(
       Duration::from_secs(5),
-      command.execute(&mut command_processor, &mut reply_sender),
+      command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
     .expect("Command timed out!");
