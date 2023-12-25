@@ -2,7 +2,7 @@
 
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::{info, trace};
+use tracing::{debug, info, trace};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::commands::commands::Commands;
@@ -16,6 +16,7 @@ use crate::commands::r#impl::mkd::mkd;
 use crate::commands::r#impl::mlsd::mlsd;
 use crate::commands::r#impl::nlst::nlst;
 use crate::commands::r#impl::noop::noop;
+use crate::commands::r#impl::opts::opts;
 use crate::commands::r#impl::pass::pass;
 use crate::commands::r#impl::pasv::pasv;
 use crate::commands::r#impl::pwd::pwd;
@@ -54,6 +55,7 @@ impl Command {
     command_processor: Arc<CommandProcessor>,
     reply_sender: Arc<impl ReplySend>,
   ) {
+    debug!("Executing command: {:?}", self.command);
     match self.command {
       Commands::Abor => abor(self, command_processor, reply_sender).await,
       Commands::Cdup => cdup(self, command_processor, reply_sender).await,
@@ -65,6 +67,7 @@ impl Command {
       Commands::Nlst => nlst(self, command_processor, reply_sender).await,
       Commands::Mlsd => mlsd(self, command_processor, reply_sender).await,
       Commands::Noop => noop(self, reply_sender).await,
+      Commands::Opts => opts(self, command_processor, reply_sender).await,
       Commands::Pass => pass(self, command_processor, reply_sender).await,
       Commands::Pasv => pasv(self, command_processor, reply_sender).await,
       Commands::Pwd => pwd(self, command_processor, reply_sender).await,

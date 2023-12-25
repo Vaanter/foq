@@ -1,6 +1,7 @@
 //! Contains properties used throughout a session, such as username, datatype file system views
 //! and other.
 
+use std::default::Default;
 use crate::auth::auth_provider::AuthProvider;
 use crate::auth::login_form::LoginForm;
 use crate::io::file_system_view_root::FileSystemViewRoot;
@@ -9,7 +10,7 @@ use crate::session::transfer_mode::TransferMode;
 
 /// Currently implemented properties.
 #[allow(unused)]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct SessionProperties {
   pub(crate) username: Option<String>,
   pub(crate) file_system_view_root: FileSystemViewRoot,
@@ -17,6 +18,7 @@ pub(crate) struct SessionProperties {
   pub(crate) data_type: DataType,
   pub(crate) login_form: LoginForm,
   pub(crate) offset: u64,
+  pub(crate) utf8: bool,
 }
 
 impl SessionProperties {
@@ -50,5 +52,19 @@ impl SessionProperties {
       .file_system_view_root
       .set_views(user_data.file_system_views);
     true
+  }
+}
+
+impl Default for SessionProperties {
+  fn default() -> Self {
+    SessionProperties {
+      username: None,
+      file_system_view_root: Default::default(),
+      transfer_mode: Default::default(),
+      data_type: Default::default(),
+      login_form: Default::default(),
+      offset: 0,
+      utf8: true,
+    }
   }
 }

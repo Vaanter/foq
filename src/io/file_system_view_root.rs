@@ -573,7 +573,6 @@ mod tests {
   #[cfg(windows)]
   #[tokio::test]
   async fn open_file_windows_like_path_test() {
-    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
 
     let mut root1 = std::env::current_dir().unwrap();
