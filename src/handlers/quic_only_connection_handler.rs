@@ -27,7 +27,7 @@ use crate::session::session_properties::SessionProperties;
 #[allow(unused)]
 pub(crate) struct QuicOnlyConnectionHandler {
   connection: Arc<Mutex<Connection>>,
-  data_channel_wrapper: Arc<Mutex<QuicOnlyDataChannelWrapper>>,
+  data_channel_wrapper: Arc<QuicOnlyDataChannelWrapper>,
   command_processor: Arc<CommandProcessor>,
   control_channel: Option<BufReader<ReadHalf<BidirectionalStream>>>,
   reply_sender: Option<Arc<ReplySender<BidirectionalStream>>>,
@@ -39,15 +39,12 @@ impl QuicOnlyConnectionHandler {
   /// Constructs a new handler for QUIC connections.
   ///
   /// Initializes a new data channel wrapper from the connection. Also creates a new session for
-  /// the client. [`SessionProperties`] and [`CommandProcessor`] are setup with default settings.
+  /// the client. [`SessionProperties`] and [`CommandProcessor`] are set up with default settings.
   ///
   pub(crate) fn new(connection: Connection) -> Self {
     let addr = connection.local_addr().unwrap();
     let connection = Arc::new(Mutex::new(connection));
-    let wrapper = Arc::new(Mutex::new(QuicOnlyDataChannelWrapper::new(
-      addr,
-      connection.clone(),
-    )));
+    let wrapper = Arc::new(QuicOnlyDataChannelWrapper::new(addr, connection.clone()));
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let command_processor = Arc::new(CommandProcessor::new(
@@ -69,7 +66,7 @@ impl QuicOnlyConnectionHandler {
   /// Waits until the client sends a command or the connection closes.
   ///
   /// Reads data from the client until newline. If the connection closes, this returns an [`error`].
-  /// Otherwise it will return [`Ok(())`].
+  /// Otherwise, it will return [`Ok(())`].
   ///
   /// After reading clients message, it sent for evaluation to [`CommandProcessor`].
   ///
@@ -191,19 +188,16 @@ impl QuicOnlyConnectionHandler {
     {
       warn!("[QUIC] Failed to close command channel in time!");
     };
-    if let Ok(mut data_channel_lock) =
-      timeout(Duration::from_secs(2), self.data_channel_wrapper.lock()).await
+    let data_channel = self.data_channel_wrapper.clone();
+    let data_channel_cleanup = async {
+      data_channel.abort();
+      data_channel.close_data_stream().await;
+    };
+    if timeout(Duration::from_secs(2), data_channel_cleanup)
+      .await
+      .is_err()
     {
-      let data_channel_cleanup = async {
-        data_channel_lock.abort();
-        data_channel_lock.close_data_stream().await;
-      };
-      if timeout(Duration::from_secs(2), data_channel_cleanup)
-        .await
-        .is_err()
-      {
-        warn!("[QUIC] Failed to close data channel in time!")
-      };
+      warn!("[QUIC] Failed to close data channel in time!")
     };
   }
 }

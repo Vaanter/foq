@@ -6,7 +6,7 @@ use tracing::{debug, info, warn};
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::r#impl::shared::{
-  get_data_channel_lock, get_open_file_result, get_transfer_reply, transfer_data,
+  acquire_data_channel, get_open_file_result, get_transfer_reply, transfer_data,
 };
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -41,8 +41,8 @@ pub(crate) async fn stor(
   }
 
   {
-    let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
-    let (mut data_channel, token) = match data_channel_lock {
+    let data_channel_pair = acquire_data_channel(command_processor.data_wrapper.clone()).await;
+    let (mut data_channel, token) = match data_channel_pair {
       Ok((dc, token)) => (dc, token),
       Err(e) => {
         return reply_sender.send_control_message(e).await;
@@ -82,7 +82,7 @@ pub(crate) async fn stor(
 
     debug!("Receiving file data!");
     let mut buffer = vec![0; 65536];
-    let transfer = transfer_data(data_channel.as_mut().unwrap(), &mut file, &mut buffer);
+    let transfer = transfer_data(&mut data_channel, &mut file, &mut buffer);
 
     let success = select! {
       result = transfer => result,
@@ -97,17 +97,10 @@ pub(crate) async fn stor(
     reply_sender
       .send_control_message(get_transfer_reply(success))
       .await;
-    if let Err(e) = file.flush().await {
-      warn!("Failed to flush data to file after transfer! {e}");
+    if let Err(e) = data_channel.shutdown().await {
+      warn!("Failed to shutdown data channel after writing! {e}");
     }
   }
-
-  command_processor
-    .data_wrapper
-    .lock()
-    .await
-    .close_data_stream()
-    .await;
 }
 
 #[cfg(test)]
@@ -226,8 +219,6 @@ mod tests {
 
     let _ = command_processor
       .data_wrapper
-      .lock()
-      .await
       .open_data_stream()
       .await
       .unwrap();
@@ -297,8 +288,6 @@ mod tests {
 
     let _ = command_processor
       .data_wrapper
-      .lock()
-      .await
       .open_data_stream()
       .await
       .unwrap();
@@ -556,7 +545,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
 
@@ -577,7 +566,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
 
     let label = "test";
     let view = FileSystemView::new(
@@ -618,7 +607,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_file_specified_test() {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
 
     let label = "test";
     let view = FileSystemView::new(

@@ -4,6 +4,7 @@ use std::io;
 
 use thiserror::Error;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Error)]
 pub(crate) enum IoError {
   #[error("User not logged in!")]

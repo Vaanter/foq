@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::net::TcpStream;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_rustls::server::TlsStream;
@@ -26,7 +26,7 @@ use crate::session::session_properties::SessionProperties;
 ///
 #[allow(unused)]
 pub(crate) struct StandardTlsConnectionHandler {
-  data_channel_wrapper: Arc<Mutex<StandardDataChannelWrapper>>,
+  data_channel_wrapper: Arc<StandardDataChannelWrapper>,
   command_processor: Arc<CommandProcessor>,
   control_channel: BufReader<ReadHalf<TlsStream<TcpStream>>>,
   reply_sender: Arc<ReplySender<TlsStream<TcpStream>>>,
@@ -43,9 +43,9 @@ impl StandardTlsConnectionHandler {
   /// construct [`ReplySender`], the reader will be used to read messages from client.
   ///
   pub(crate) fn new(stream: TlsStream<TcpStream>) -> Self {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(
       stream.get_ref().0.local_addr().unwrap(),
-    )));
+    ));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
     let reply_sender = Arc::new(ReplySender::new(stream_halves.1));
@@ -153,19 +153,16 @@ impl StandardTlsConnectionHandler {
     {
       warn!("[TCP + TLS] Failed to close command channel in time!");
     };
-    if let Ok(mut data_channel_lock) =
-      timeout(Duration::from_secs(2), self.data_channel_wrapper.lock()).await
+    let data_channel = self.data_channel_wrapper.clone();
+    let data_channel_cleanup = async {
+      data_channel.abort();
+      data_channel.close_data_stream().await;
+    };
+    if timeout(Duration::from_secs(2), data_channel_cleanup)
+      .await
+      .is_err()
     {
-      let data_channel_cleanup = async {
-        data_channel_lock.abort();
-        data_channel_lock.close_data_stream().await;
-      };
-      if timeout(Duration::from_secs(2), data_channel_cleanup)
-        .await
-        .is_err()
-      {
-        warn!("[TCP + TLS] Failed to close data channel in time!")
-      };
+      warn!("[TCP + TLS] Failed to close data channel in time!")
     };
   }
 }

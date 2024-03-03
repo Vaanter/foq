@@ -82,7 +82,7 @@ mod tests {
   use std::time::Duration;
 
   use tokio::sync::mpsc::channel;
-  use tokio::sync::{Mutex, RwLock};
+  use tokio::sync::RwLock;
   use tokio::time::timeout;
 
   use crate::auth::user_data::UserData;
@@ -106,7 +106,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "test");
@@ -137,7 +137,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "INVALID");
@@ -162,7 +162,7 @@ mod tests {
   #[tokio::test]
   async fn no_username_test() {
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "test");
@@ -193,7 +193,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "");
@@ -231,7 +231,7 @@ mod tests {
       .insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties, wrapper);
 
     let command = Command::new(Commands::Pass, "test");

@@ -36,7 +36,10 @@ pub(crate) async fn opts(
     "UTF8 ON" => {
       session_properties.utf8 = true;
       reply_sender
-        .send_control_message(Reply::new(ReplyCode::CommandOkay, "UTF8 is always enabled."))
+        .send_control_message(Reply::new(
+          ReplyCode::CommandOkay,
+          "UTF8 is always enabled.",
+        ))
         .await
     }
     _ => {

@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 /// Handles clients connection.
 #[async_trait]
 pub(crate) trait ConnectionHandler {
-  /// The entrypoint for handling a clients connection.
+  /// The entrypoint for handling a clients' connection.
   ///
   /// Starts by sending the client a server hello message. Then enters the command loop, where
   /// it listens for incoming requests and evaluates them.

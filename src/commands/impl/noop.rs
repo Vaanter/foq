@@ -18,7 +18,7 @@ mod tests {
   use std::time::Duration;
 
   use tokio::sync::mpsc::channel;
-  use tokio::sync::{Mutex, RwLock};
+  use tokio::sync::RwLock;
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
@@ -35,7 +35,7 @@ mod tests {
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
 
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties.clone(), wrapper);
 
     let (tx, mut rx) = channel(1024);

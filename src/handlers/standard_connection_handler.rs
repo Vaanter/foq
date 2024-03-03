@@ -7,7 +7,7 @@ use futures::future::join_all;
 
 use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
 use tokio::net::TcpStream;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -26,7 +26,7 @@ use crate::session::session_properties::SessionProperties;
 ///
 #[allow(unused)]
 pub(crate) struct StandardConnectionHandler {
-  data_channel_wrapper: Arc<Mutex<StandardDataChannelWrapper>>,
+  data_channel_wrapper: Arc<StandardDataChannelWrapper>,
   command_processor: Arc<CommandProcessor>,
   control_channel: BufReader<ReadHalf<TcpStream>>,
   reply_sender: Arc<ReplySender<TcpStream>>,
@@ -38,14 +38,14 @@ impl StandardConnectionHandler {
   /// Constructs a new handler for TCP connections.
   ///
   /// Initializes a new data channel wrapper from the connection. Also creates a new session for
-  /// the client. [`SessionProperties`] and [`CommandProcessor`] are setup with default settings.
+  /// the client. [`SessionProperties`] and [`CommandProcessor`] are set up with default settings.
   /// The connection will be split into reader and writer halves. The writer will be used to
   /// construct [`ReplySender`], the reader will be used to read messages from client.
   ///
   pub(crate) fn new(stream: TcpStream) -> Self {
-    let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(
       stream.local_addr().unwrap(),
-    )));
+    ));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
     let reply_sender = Arc::new(ReplySender::new(stream_halves.1));
@@ -139,12 +139,9 @@ impl StandardConnectionHandler {
     let mut commands_to_finish = std::mem::take(&mut self.running_commands);
     commands_to_finish.retain(|t| !t.is_finished());
     debug!("[TCP] Commands to finish: {:#?}", commands_to_finish);
-    if timeout(
-      Duration::from_secs(5),
-      join_all(commands_to_finish),
-    )
-    .await
-    .is_err()
+    if timeout(Duration::from_secs(5), join_all(commands_to_finish))
+      .await
+      .is_err()
     {
       warn!("[TCP] Failed to finish processing running commands in time!");
     } else {
@@ -159,12 +156,10 @@ impl StandardConnectionHandler {
       debug!("[TCP] Closed command channel")
     }
     let data_channel_cleanup = async {
-      debug!("[TCP] Locking data channel for cleanup");
-      let mut data_channel_lock = self.data_channel_wrapper.lock().await;
       debug!("[TCP] Aborting data channel");
-      data_channel_lock.abort();
+      self.data_channel_wrapper.abort();
       debug!("[TCP] Closing data channel");
-      data_channel_lock.close_data_stream().await;
+      self.data_channel_wrapper.close_data_stream().await;
     };
     if timeout(Duration::from_secs(5), data_channel_cleanup)
       .await

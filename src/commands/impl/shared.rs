@@ -3,40 +3,33 @@ use std::time::Duration;
 
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{Mutex, OwnedMutexGuard};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
-use crate::data_channels::data_channel_wrapper::DataChannelWrapper;
-use crate::handlers::connection_handler::AsyncReadWrite;
+use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::io::entry_data::EntryData;
 use crate::io::error::IoError;
 
-pub(crate) async fn get_data_channel_lock(
-  data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
-) -> Result<
-  (
-    OwnedMutexGuard<Option<Box<dyn AsyncReadWrite>>>,
-    CancellationToken,
-  ),
-  Reply,
-> {
+pub const ACQUIRE_TIMEOUT: u64 = 5;
+
+pub(crate) async fn acquire_data_channel(
+  data_wrapper: Arc<dyn DataChannelWrapper>,
+) -> Result<(DataChannel, CancellationToken), Reply> {
+  debug!("Acquiring data stream!");
   let error_reply = Reply::new(
     ReplyCode::BadSequenceOfCommands,
     "Data channel must be open first!",
   );
-  match timeout(Duration::from_secs(20), data_wrapper.lock()).await {
-    Ok(dcw) => {
-      let (data_channel_option, token) = dcw.get_data_stream();
-      let data_channel = data_channel_option.lock_owned().await;
-      if data_channel.is_some() {
-        Ok((data_channel, token))
-      } else {
-        Err(error_reply)
-      }
+
+  // we wait a bit so the data channel can open shortly after it's required
+  match timeout(Duration::from_secs(ACQUIRE_TIMEOUT), data_wrapper.acquire()).await {
+    Ok(Ok((data_channel_option, token))) => Ok((data_channel_option, token)),
+    Ok(Err(e)) => {
+      info!("Error: {e}");
+      Err(error_reply)
     }
     Err(e) => {
       info!("Data channel is not available! {e}");

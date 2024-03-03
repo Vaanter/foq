@@ -234,13 +234,7 @@ pub(crate) fn create_test_server_config() -> ServerConfig {
 pub(crate) const LOCALHOST: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
 
 pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcessor) -> TcpStream {
-  let addr = match command_processor
-    .data_wrapper
-    .lock()
-    .await
-    .open_data_stream()
-    .await
-  {
+  let addr = match command_processor.data_wrapper.open_data_stream().await {
     Ok(addr) => addr,
     Err(_) => panic!("Failed to open passive data listener!"),
   };
@@ -254,14 +248,6 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
   };
   println!("Client passive connection successful!");
 
-  let _ = command_processor
-    .data_wrapper
-    .lock()
-    .await
-    .get_data_stream()
-    .0
-    .lock()
-    .await;
   client_dc
 }
 
@@ -298,7 +284,7 @@ pub(crate) fn setup_test_command_processor_custom(
   }
 
   let session_properties = Arc::new(RwLock::new(session_properties));
-  let wrapper = Arc::new(Mutex::new(StandardDataChannelWrapper::new(LOCALHOST)));
+  let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
   CommandProcessor::new(session_properties, wrapper)
 }
 
@@ -396,7 +382,7 @@ pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(
     .expect("Settings should be valid");
 
   let mut command_processor = setup_test_command_processor_custom(&settings);
-  command_processor.data_wrapper = Arc::new(Mutex::new(data_channel_wrapper));
+  command_processor.data_wrapper = Arc::new(data_channel_wrapper);
   println!("Setup completed.");
   command_processor
 }

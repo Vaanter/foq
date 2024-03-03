@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, info, trace};
 
 use crate::commands::command::Command;
@@ -15,7 +15,7 @@ use crate::session::session_properties::SessionProperties;
 #[derive(Clone)]
 pub(crate) struct CommandProcessor {
   pub(crate) session_properties: Arc<RwLock<SessionProperties>>,
-  pub(crate) data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
+  pub(crate) data_wrapper: Arc<dyn DataChannelWrapper>,
 }
 
 impl CommandProcessor {
@@ -24,7 +24,7 @@ impl CommandProcessor {
   /// Holds session properties and data wrapper which can be used in commands.
   pub(crate) fn new(
     session_properties: Arc<RwLock<SessionProperties>>,
-    data_wrapper: Arc<Mutex<dyn DataChannelWrapper>>,
+    data_wrapper: Arc<dyn DataChannelWrapper>,
   ) -> Self {
     CommandProcessor {
       session_properties,
@@ -34,7 +34,7 @@ impl CommandProcessor {
 
   /// Parses users message into command and then executes it.
   ///
-  /// The commands is first parsed. If parsing fails a reply is sent and this returns. If parsing
+  /// The commands are first parsed. If parsing fails a reply is sent and this returns. If parsing
   /// succeeds and the command is implemented, then it is executed. If it's not implemented then
   /// a reply is sent stating such.
   ///

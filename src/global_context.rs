@@ -17,7 +17,7 @@ pub(crate) static CONFIG: Lazy<Config> = Lazy::new(|| {
   Config::builder()
     .add_source(config::File::with_name("config.toml"))
     // Add in settings from the environment (with a prefix of FOQ)
-    // Eg.. `FOQ_DEBUG=1 ./target/app` would set the `debug` key
+    // E.g. `FOQ_DEBUG=1 ./target/app` would set the `debug` key
     .add_source(config::Environment::with_prefix("FOQ"))
     .build()
     .unwrap()
@@ -41,7 +41,7 @@ pub(crate) static KEY: Lazy<PrivateKey> = Lazy::new(|| {
       .expect("Key must be supplied in config!"),
   ))
   .expect("Unable to load keys! Cannot start.")
-  .get(0)
+  .first()
   .unwrap()
   .clone()
 });

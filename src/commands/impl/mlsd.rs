@@ -2,11 +2,11 @@ use std::io::ErrorKind;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::select;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace, warn};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::r#impl::shared::{get_data_channel_lock, get_listing_or_error_reply};
+use crate::commands::r#impl::shared::{acquire_data_channel, get_listing_or_error_reply};
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
@@ -21,6 +21,14 @@ pub(crate) async fn mlsd(
   debug_assert_eq!(command.command, Commands::Mlsd);
 
   let session_properties = command_processor.session_properties.read().await;
+
+  if !session_properties.is_logged_in() {
+    reply_sender
+      .send_control_message(Reply::new(ReplyCode::NotLoggedIn, "User not logged in!"))
+      .await;
+    return;
+  }
+
   let listing = session_properties
     .file_system_view_root
     .list_dir(&command.argument);
@@ -30,41 +38,13 @@ pub(crate) async fn mlsd(
     Err(r) => return reply_sender.send_control_message(r).await,
   };
 
-  debug!("Locking data stream!");
-  {
-    let data_channel_lock = get_data_channel_lock(command_processor.data_wrapper.clone()).await;
-    let (mut data_channel, token) = match data_channel_lock {
-      Ok((dc, token)) => (dc, token),
-      Err(e) => {
-        return reply_sender.send_control_message(e).await;
-      }
-    };
-
-    match data_channel.as_mut() {
-      Some(s) => {
-        let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
-        trace!(
-          "Sending listing to client:\n{}",
-          mem.replace("\r\n", "\\r\\n")
-        );
-        let transfer = s.write_all(mem.as_ref());
-        let result = select! {
-          result = transfer => result,
-          _ = token.cancelled() => Err(std::io::Error::new(ErrorKind::ConnectionAborted, "Connection aborted!"))
-        };
-        debug!("Sending listing result: {:?}", result);
-      }
-      None => {
-        info!("Data stream is not open!");
-        return reply_sender
-          .send_control_message(Reply::new(
-            ReplyCode::BadSequenceOfCommands,
-            "Data connection is not open!",
-          ))
-          .await;
-      }
+  let data_channel_pair = acquire_data_channel(command_processor.data_wrapper.clone()).await;
+  let (mut data_channel, token) = match data_channel_pair {
+    Ok((dc, token)) => (dc, token),
+    Err(e) => {
+      return reply_sender.send_control_message(e).await;
     }
-  }
+  };
 
   reply_sender
     .send_control_message(Reply::new(
@@ -73,18 +53,31 @@ pub(crate) async fn mlsd(
     ))
     .await;
 
+  let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
+  trace!(
+    "Sending listing to client:\n{}",
+    mem.replace("\r\n", "\\r\\n")
+  );
+  let transfer = data_channel.write_all(mem.as_ref());
+  let result = select! {
+    result = transfer => result,
+    _ = token.cancelled() => Err(std::io::Error::new(ErrorKind::ConnectionAborted, "Connection aborted!"))
+  };
+  debug!("Sending listing result: {:?}", result);
+  debug!("Flushing data");
+  if let Err(e) = data_channel.flush().await {
+    warn!("Failed to flush data after writing! {e}");
+  }
+  debug!("Shutting down data channel");
+  if let Err(e) = data_channel.shutdown().await {
+    warn!("Failed to shutdown data channel after writing! {e}");
+  }
   debug!("Listing sent to client!");
   reply_sender
     .send_control_message(Reply::new(
       ReplyCode::ClosingDataConnection,
       "Directory information sent!",
     ))
-    .await;
-  command_processor
-    .data_wrapper
-    .lock()
-    .await
-    .close_data_stream()
     .await;
 }
 
@@ -101,6 +94,7 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
+  use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
@@ -302,7 +296,7 @@ mod tests {
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     timeout(
-      Duration::from_secs(3),
+      Duration::from_secs(ACQUIRE_TIMEOUT + 3),
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await

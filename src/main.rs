@@ -26,7 +26,7 @@ mod utils;
 /// then [`INFO`] is assumed. Then sets stdout as the tracing output.
 ///
 /// # Runner
-/// After the tracing is setup, the [`runner`] is executed.
+/// After the tracing is set up, the [`runner`] is executed.
 ///
 /// [`INFO`]: Level::INFO
 /// [`runner`]: runner

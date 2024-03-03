@@ -1,8 +1,6 @@
 use std::net::{SocketAddr, SocketAddrV4};
 use std::sync::Arc;
-use std::time::Duration;
 
-use tokio::time::timeout;
 use tracing::error;
 
 use crate::commands::command::Command;
@@ -20,31 +18,18 @@ pub(crate) async fn pasv(
 ) {
   debug_assert_eq!(command.command, Commands::Pasv);
 
-  match timeout(
-    Duration::from_secs(5),
-    command_processor.data_wrapper.clone().lock(),
-  )
-  .await
-  {
-    Ok(mut wrapper) => {
-      let reply = match wrapper.open_data_stream().await.unwrap() {
-        SocketAddr::V4(addr) => {
-          Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr))
-        }
-        SocketAddr::V6(_) => {
-          error!("PASV: IPv6 is not supported!");
-          Reply::new(
-            ReplyCode::CommandNotImplementedForThatParameter,
-            "Server only supports IPv6!",
-          )
-        }
-      };
-      reply_sender.send_control_message(reply).await;
+  let wrapper = command_processor.data_wrapper.clone();
+  let reply = match wrapper.open_data_stream().await.unwrap() {
+    SocketAddr::V4(addr) => Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr)),
+    SocketAddr::V6(_) => {
+      error!("PASV: IPv6 is not supported!");
+      Reply::new(
+        ReplyCode::CommandNotImplementedForThatParameter,
+        "Server only supports IPv6!",
+      )
     }
-    Err(_) => {
-      panic!("Wrapper is not available!");
-    }
-  }
+  };
+  reply_sender.send_control_message(reply).await;
 }
 
 fn create_pasv_response(ip: &SocketAddrV4) -> String {

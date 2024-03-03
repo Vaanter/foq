@@ -1,3 +1,5 @@
+use anyhow::bail;
+use async_channel::{unbounded, Receiver, Sender};
 use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -8,15 +10,16 @@ use s2n_quic::Connection;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 
 pub(crate) struct QuicOnlyDataChannelWrapper {
   addr: SocketAddr,
-  data_channel: DataChannel,
   connection: Arc<Mutex<Connection>>,
   abort_token: CancellationToken,
+  stream_sender: Sender<DataChannel>,
+  stream_receiver: Receiver<DataChannel>,
 }
 
 impl QuicOnlyDataChannelWrapper {
@@ -31,7 +34,7 @@ impl QuicOnlyDataChannelWrapper {
   ///
   /// - `addr`: A [`SocketAddr`] representing the address for the data channel.
   /// The port is set to 0.
-  /// - `connection`: An [`Arc<Mutex<Connection>>`] containing the clients connection.
+  /// - `connection`: An [`Arc<Mutex<Connection>>`] containing the clients' connection.
   ///
   /// # Returns
   ///
@@ -39,11 +42,13 @@ impl QuicOnlyDataChannelWrapper {
   ///
   pub(crate) fn new(mut addr: SocketAddr, connection: Arc<Mutex<Connection>>) -> Self {
     addr.set_port(0);
+    let (sender, receiver) = unbounded();
     QuicOnlyDataChannelWrapper {
       addr,
-      data_channel: Arc::new(Mutex::new(None)),
       connection,
       abort_token: CancellationToken::new(),
+      stream_sender: sender,
+      stream_receiver: receiver,
     }
   }
 
@@ -55,11 +60,10 @@ impl QuicOnlyDataChannelWrapper {
   /// the stream in time or some other error occurs it will be logged.
   ///
   #[tracing::instrument(skip(self))]
-  async fn create_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn create_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
     debug!("Creating passive listener");
     let conn = self.connection.clone();
-    let mut data_channel = self.data_channel.clone().lock_owned().await;
-    self.abort_token = CancellationToken::new();
+    let sender = self.stream_sender.clone();
     tokio::spawn(async move {
       debug!("Awaiting passive connection");
       let conn = tokio::time::timeout(Duration::from_secs(20), {
@@ -73,7 +77,12 @@ impl QuicOnlyDataChannelWrapper {
             "Passive listener connection successful! ID: {}.",
             stream.id()
           );
-          data_channel.replace(Box::new(stream));
+          if let Err(mut e) = sender.send(Box::new(stream)).await {
+            error!("Failed to send new data channel downstream! {e}");
+            if let Err(shutdown_error) = e.0.shutdown().await {
+              error!("Failed to shutdown data channel! {shutdown_error}");
+            }
+          }
         }
         Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
         Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
@@ -88,19 +97,36 @@ impl QuicOnlyDataChannelWrapper {
 #[async_trait]
 impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
   /// Opens a data channel using [`QuicOnlyDataChannelWrapper::create_stream`].
-  async fn open_data_stream(&mut self) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn open_data_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
     self.create_stream().await
   }
 
-  fn get_data_stream(&self) -> (DataChannel, CancellationToken) {
-    (self.data_channel.clone(), self.abort_token.clone())
+  fn try_acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error> {
+    match self.stream_receiver.try_recv() {
+      Ok(stream) => Ok((stream, self.abort_token.clone())),
+      Err(e) => {
+        bail!(e)
+      }
+    }
   }
 
-  async fn close_data_stream(&mut self) {
-    let mut dc = self.data_channel.lock().await;
-    if dc.is_some() {
-      let _ = dc.as_mut().unwrap().shutdown().await;
+  async fn acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error> {
+    debug!("Acquiring data channel");
+    return match self.stream_receiver.recv().await {
+      Ok(stream) => Ok((stream, self.abort_token.clone())),
+      Err(e) => {
+        bail!(e)
+      }
     };
+  }
+
+  async fn close_data_stream(&self) {
+    debug!("Closing all open data streams");
+    while let Ok(mut stream) = self.stream_receiver.try_recv() {
+      if let Err(e) = stream.shutdown().await {
+        warn!("Failed to shutdown data channel {e}");
+      };
+    }
   }
 
   fn get_addr(&self) -> &SocketAddr {

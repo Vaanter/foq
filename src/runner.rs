@@ -100,7 +100,7 @@ pub(crate) async fn run() {
 /// Executes a TCP listener.
 ///
 /// # Listener loop
-/// First a [`listener`] is setup. If it fails, then this will report an error and exit.
+/// First a [`listener`] is set up. If it fails, then this will report an error and exit.
 /// After setup, the listener loop starts. Clients connections are passed into [`handler`],
 /// which runs in a new [`tokio::task`].
 ///

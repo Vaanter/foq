@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
+use tracing::debug;
+
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
-use std::sync::Arc;
-use tracing::debug;
 
 #[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn abor(
@@ -32,13 +34,11 @@ pub(crate) async fn abor(
       .await;
   }
 
-  debug!("Locking data channel");
-  let data_channel_wrapper = command_processor.data_wrapper.lock().await;
   debug!("Aborting data channel");
-  data_channel_wrapper.abort();
+  command_processor.data_wrapper.abort();
 
   debug!("Checking ABOR result");
-  if data_channel_wrapper.get_data_stream().0.try_lock().is_ok() {
+  if command_processor.data_wrapper.try_acquire().is_err() {
     reply_sender
       .send_control_message(Reply::new(
         ReplyCode::ClosingDataConnection,
