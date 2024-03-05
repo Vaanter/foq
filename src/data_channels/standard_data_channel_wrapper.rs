@@ -111,7 +111,6 @@ impl StandardDataChannelWrapper {
 impl DataChannelWrapper for StandardDataChannelWrapper {
   /// Opens a data channel using [`StandardDataChannelWrapper::create_stream`].
   async fn open_data_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
-    //self.close_data_stream().await;
     self.create_stream().await
   }
 

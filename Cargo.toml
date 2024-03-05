@@ -1,41 +1,41 @@
 [package]
 name = "foq"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.80"
 argon2 = "0.5.2"
-async-trait = "0.1.74"
-chrono = "0.4.31"
-config = { version = "0.13.3", features = ["toml"] }
-derive_builder = "0.12.0"
-dyn-clone = "1.0.16"
-once_cell = "1.18.0"
+async-trait = "0.1.77"
+chrono = "0.4.34"
+config = { version = "0.14.0", features = ["toml"] }
+derive_builder = "0.20.0"
+dyn-clone = "1.0.17"
+once_cell = "1.19.0"
 rustls = { version = "0.21.9", features = ["quic", "dangerous_configuration"] }
 rustls-pemfile = "1.0.4"
-s2n-quic = { version = "1.31.0", default-features = true, features = ["provider-tls-rustls", "provider-event-tracing", "zeroize"] }
-sqlx = { version = "0.7.2", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate"] }
-strum = "0.25.0"
-strum_macros = "0.25.3"
-thiserror = "1.0.50"
-tokio = { version = "1.34.0", features = ["full"] }
+s2n-quic = { version = "1.33.0", default-features = true, features = ["provider-tls-rustls", "provider-event-tracing", "zeroize"] }
+sqlx = { version = "0.7.3", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate"] }
+strum = "0.26.1"
+strum_macros = "0.26.1"
+thiserror = "1.0.57"
+tokio = { version = "1.36.0", features = ["full"] }
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tokio-util = "0.7.10"
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-attributes = "0.1.27"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-unicode-segmentation = "1.10.1"
-regex = "1.10.2"
+unicode-segmentation = "1.11.0"
+regex = "1.10.3"
 zeroize = { version = "1.7.0", features = ["derive"] }
 path-clean = "1.0.1"
-futures = "0.3.29"
+futures = "0.3.30"
 async-channel = "2.2.0"
 
 [dev-dependencies]
 blake3 = "1.5.0"
-uuid = { version = "1.5.0", features = ["v4"] }
+uuid = { version = "1.7.0", features = ["v4"] }
 quinn = "0.10.2"
