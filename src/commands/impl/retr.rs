@@ -25,7 +25,6 @@ pub(crate) async fn retr(
   debug_assert_eq!(command.command, Commands::Retr);
 
   let mut session_properties = command_processor.session_properties.write().await;
-  session_properties.offset = 0;
 
   if command.argument.is_empty() {
     return reply_sender
@@ -91,6 +90,8 @@ pub(crate) async fn retr(
     }
 
     debug!("Sending file data, offset: {}!", session_properties.offset);
+    session_properties.offset = 0;
+
     let mut buffer = vec![0; 65536];
     let transfer = transfer_data(&mut file, &mut data_channel, &mut buffer);
 

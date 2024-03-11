@@ -49,7 +49,7 @@ pub(crate) async fn rest(
   reply_sender
     .send_control_message(Reply::new(
       ReplyCode::RequestedFileActionPendingFurtherInformation,
-      "Offset set",
+      format!("Restarting at {}", session_properties.offset),
     ))
     .await;
 }
