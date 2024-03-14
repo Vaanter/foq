@@ -19,6 +19,7 @@ use crate::commands::r#impl::noop::noop;
 use crate::commands::r#impl::opts::opts;
 use crate::commands::r#impl::pass::pass;
 use crate::commands::r#impl::pasv::pasv;
+use crate::commands::r#impl::prot::prot;
 use crate::commands::r#impl::pwd::pwd;
 use crate::commands::r#impl::r#type::r#type;
 use crate::commands::r#impl::rest::rest;
@@ -70,6 +71,7 @@ impl Command {
       Commands::Opts => opts(self, command_processor, reply_sender).await,
       Commands::Pass => pass(self, command_processor, reply_sender).await,
       Commands::Pasv => pasv(self, command_processor, reply_sender).await,
+      Commands::Prot => prot(self, command_processor, reply_sender).await,
       Commands::Pwd => pwd(self, command_processor, reply_sender).await,
       Commands::Rest => rest(self, command_processor, reply_sender).await,
       Commands::Retr => retr(self, command_processor, reply_sender).await,

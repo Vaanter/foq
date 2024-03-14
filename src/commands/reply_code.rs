@@ -41,6 +41,8 @@ pub(crate) enum ReplyCode {
   CommandNotImplementedForThatParameter = 504,
   NotLoggedIn = 530,
   NeedAccountForStoringFiles = 532,
+  RequestDeniedForPolicyReasons = 534,
+  ProtectionLevelNotSupported = 536,
   FileUnavailable = 550,
   RequestedActionAbortedPageTypeUnknown = 551,
   RequestedFileActionAbortedExceededStorage = 552,

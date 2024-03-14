@@ -5,6 +5,7 @@ use crate::auth::auth_provider::AuthProvider;
 use crate::auth::login_form::LoginForm;
 use crate::io::file_system_view_root::FileSystemViewRoot;
 use crate::session::data_type::DataType;
+use crate::session::protection_mode::ProtMode;
 use crate::session::transfer_mode::TransferMode;
 use std::default::Default;
 
@@ -19,6 +20,7 @@ pub(crate) struct SessionProperties {
   pub(crate) login_form: LoginForm,
   pub(crate) offset: u64,
   pub(crate) utf8: bool,
+  pub(crate) prot_mode: ProtMode,
 }
 
 impl SessionProperties {
@@ -65,6 +67,7 @@ impl Default for SessionProperties {
       login_form: Default::default(),
       offset: 0,
       utf8: true,
+      prot_mode: Default::default(),
     }
   }
 }
