@@ -98,8 +98,7 @@ mod tests {
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
     open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor,
-    setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender,
   };
 
   #[tokio::test]
@@ -163,7 +162,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn data_connection_not_open_test() {
+  async fn data_channel_not_open_test() {
     let command = Command::new(Commands::Nlst, String::new());
     let (_, command_processor) = setup_test_command_processor();
 

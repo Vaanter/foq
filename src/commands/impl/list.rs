@@ -330,11 +330,11 @@ mod tests {
 
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
-    if (timeout(
+    if timeout(
       Duration::from_secs(3),
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
-    .await)
+    .await
       .is_err()
     {
       panic!("Command timeout!");

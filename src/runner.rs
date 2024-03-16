@@ -192,7 +192,7 @@ async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) {
           let tls_stream: TlsStream<TcpStream> = match acceptor.accept(stream).await {
             Ok(t) => t,
             Err(e) => {
-              info!("Unable to create TLS connection. Error: {e}");
+              info!(peer_name = ?addr, "Unable to create TLS connection. Error: {e}");
               return;
             }
           };

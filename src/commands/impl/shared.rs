@@ -117,17 +117,22 @@ where
   F: AsyncRead + Unpin,
   T: AsyncWrite + Unpin,
 {
-  let mut success = 'send_loop: loop {
+  'send_loop: loop {
     let result = from.read(buffer).await;
     match result {
+      Ok(0) => {
+        debug!("Flushing data to target");
+        if let Err(e) = to.flush().await {
+          warn!("Failed to flush data to target! {e}");
+          break 'send_loop false;
+        }
+        break 'send_loop true;
+      }
       Ok(n) => {
         trace!("Read {n} bytes from source");
         if let Err(e) = to.write_all(&buffer[..n]).await {
           error!("Write to target failed! {e}");
           break 'send_loop false;
-        }
-        if n == 0 {
-          break true;
         }
       }
       Err(e) => {
@@ -135,11 +140,5 @@ where
         break false;
       }
     }
-  };
-  debug!("Flushing data to target");
-  if let Err(e) = to.flush().await {
-    warn!("Failed to flush data to target! {e}");
-    success = false;
   }
-  success
 }

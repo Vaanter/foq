@@ -75,11 +75,14 @@ impl StandardTlsConnectionHandler {
   /// [`error`]: anyhow::Error
   ///
   #[tracing::instrument(skip(self))]
-  pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
+  pub(crate) async fn await_command(&mut self) -> Result<bool, anyhow::Error> {
     let reader = &mut self.control_channel;
     let mut buf = String::new();
     debug!("[TCP+TLS] Reading message from client.");
-    let bytes = match reader.read_line(&mut buf).await {
+    match reader.read_line(&mut buf).await {
+      Ok(0) => {
+        return Ok(false);
+      }
       Ok(len) => {
         debug!("[TCP+TLS] Received message from client, length: {len}");
         len
@@ -88,21 +91,16 @@ impl StandardTlsConnectionHandler {
         if e.kind() != ErrorKind::UnexpectedEof {
           error!("[TCP+TLS] Reading client message failed! Error: {e}");
         }
-        0
+        return Err(e.into());
       }
     };
-    if bytes == 0 {
-      anyhow::bail!("Connection closed!");
-    }
 
     let command_processor = self.command_processor.clone();
     let task = command_processor.evaluate(buf, self.reply_sender.clone());
     self.running_commands.push(tokio::spawn(task));
-    if self.running_commands.len() > 10 {
-      self.running_commands.retain(|c| !c.is_finished());
-    }
+    self.running_commands.retain(|c| !c.is_finished());
     debug!("Running commands: {}", self.running_commands.len());
-    Ok(())
+    Ok(true)
   }
 }
 
@@ -124,9 +122,13 @@ impl ConnectionHandler for StandardTlsConnectionHandler {
           break;
         }
         result = self.await_command() => {
-          if let Err(e) = result {
-            warn!("[TCP+TLS] Error awaiting command! {e}");
-            break;
+          match result {
+            Ok(true) => {},
+            Ok(false) => break,
+            Err(e) => {
+              warn!("[TCP+TLS] Reading client message failed! Error: {e}!");
+              break;
+            }
           }
         }
       }

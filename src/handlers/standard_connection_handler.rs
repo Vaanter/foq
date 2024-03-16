@@ -75,11 +75,14 @@ impl StandardConnectionHandler {
   /// [`error`]: anyhow::Error
   ///
   #[tracing::instrument(skip(self))]
-  pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
+  pub(crate) async fn await_command(&mut self) -> Result<bool, anyhow::Error> {
     let reader = &mut self.control_channel;
     let mut buf = String::new();
     debug!("[TCP] Reading message from client.");
-    let bytes = match reader.read_line(&mut buf).await {
+    match reader.read_line(&mut buf).await {
+      Ok(0) => {
+        return Ok(false);
+      }
       Ok(len) => {
         debug!("[TCP] Received message from client, length: {len}");
         len
@@ -88,20 +91,16 @@ impl StandardConnectionHandler {
         if e.kind() != ErrorKind::UnexpectedEof {
           error!("[TCP] Reading client message failed! Error: {e}");
         }
-        0
+        return Err(e.into());
       }
     };
-    if bytes == 0 {
-      anyhow::bail!("Connection closed!");
-    }
+
     let command_processor = self.command_processor.clone();
     let task = command_processor.evaluate(buf, self.reply_sender.clone());
     self.running_commands.push(tokio::spawn(task));
-    if self.running_commands.len() > 10 {
-      self.running_commands.retain(|t| !t.is_finished());
-    }
+    self.running_commands.retain(|t| !t.is_finished());
     debug!("Running commands: {}", self.running_commands.len());
-    Ok(())
+    Ok(true)
   }
 }
 
@@ -121,9 +120,13 @@ impl ConnectionHandler for StandardConnectionHandler {
           break;
         }
         result = self.await_command() => {
-          if let Err(e) = result {
-            info!("[TCP] Error awaiting command! {e}");
-            break;
+          match result {
+            Ok(true) => {},
+            Ok(false) => break,
+            Err(e) => {
+              warn!("[TCP] Reading client message failed! Error: {e}!");
+              break;
+            }
           }
         }
       }
@@ -237,7 +240,7 @@ mod tests {
     }
     token.cancel();
 
-    if (timeout(Duration::from_secs(3), handler_fut).await).is_err() {
+    if timeout(Duration::from_secs(3), handler_fut).await.is_err() {
       panic!("Handler future failed to finish!");
     };
   }

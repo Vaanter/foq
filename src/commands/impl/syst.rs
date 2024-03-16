@@ -46,11 +46,11 @@ mod tests {
     let command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
     let reply_sender = TestReplySender::new(tx);
-    if (timeout(
+    if timeout(
       Duration::from_secs(2),
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
-    .await)
+    .await
       .is_err()
     {
       panic!("Command timeout!");

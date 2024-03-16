@@ -1,7 +1,7 @@
 //! Information about an object in the filesystem, such as file or directory.
 
 use std::collections::HashSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::fs::Metadata;
 use std::io;
 use std::io::Error;
@@ -162,8 +162,8 @@ impl EntryData {
   }
 }
 
-impl ToString for EntryData {
-  fn to_string(&self) -> String {
+impl Display for EntryData {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut buffer = String::new();
     let modify_dt: DateTime<Local> = self.modify.into();
     let modify_formatted: DelayedFormat<StrftimeItems> = modify_dt.format(MLSD_DATETIME_FORMAT);
@@ -181,6 +181,6 @@ impl ToString for EntryData {
     buffer.push_str(&format!(" {}", self.name));
     buffer.push('\r');
     buffer.push('\n');
-    buffer
+    write!(f, "{}", buffer)
   }
 }

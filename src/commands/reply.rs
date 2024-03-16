@@ -1,6 +1,7 @@
 //! Container for a reply that is to be sent to client. Can span multiple lines.
 
 use std::collections::VecDeque;
+use std::fmt::Display;
 use std::str::FromStr;
 
 use unicode_segmentation::UnicodeSegmentation;
@@ -28,8 +29,8 @@ impl Reply {
   }
 }
 
-impl ToString for Reply {
-  fn to_string(&self) -> String {
+impl Display for Reply {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut buffer;
     if self.lines.len() < 2 {
       buffer = format!(
@@ -37,7 +38,7 @@ impl ToString for Reply {
         self.code as u16,
         self.lines.first().unwrap_or(&String::new())
       );
-      return buffer;
+      return write!(f, "{}", buffer);
     }
     buffer = format!("{}-{}\r\n", self.code as u16, self.lines.first().unwrap());
     let end = self.lines.len() - 1;
@@ -49,7 +50,7 @@ impl ToString for Reply {
       self.code as u16,
       self.lines.last().unwrap_or(&String::new())
     ));
-    buffer
+    write!(f, "{}", buffer)
   }
 }
 

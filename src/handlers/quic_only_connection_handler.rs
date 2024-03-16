@@ -1,4 +1,3 @@
-use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,7 +10,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -73,37 +72,31 @@ impl QuicOnlyConnectionHandler {
   /// [`error`]: anyhow::Error
   ///
   #[tracing::instrument(skip(self))]
-  pub(crate) async fn await_command(&mut self) -> Result<(), anyhow::Error> {
+  pub(crate) async fn await_command(&mut self) -> Result<bool, std::io::Error> {
     let cc = self
       .control_channel
       .as_mut()
       .expect("Control channel must be open to receive commands!");
     let mut buf = String::new();
-    debug!("Reading message from client.");
-    let bytes = match cc.read_line(&mut buf).await {
+    debug!("[QUIC] Reading message from client.");
+    match cc.read_line(&mut buf).await {
+      Ok(0) => {
+        return Ok(false);
+      }
       Ok(len) => {
         debug!("[QUIC] Received message from client, length: {len}");
-        len
       }
       Err(e) => {
-        if e.kind() != ErrorKind::UnexpectedEof {
-          error!("[QUIC] Reading client message failed! Error: {e}");
-        }
-        0
+        return Err(e);
       }
     };
-    if bytes == 0 {
-      anyhow::bail!("Connection closed!");
-    }
 
     let command_processor = self.command_processor.clone();
     let task = command_processor.evaluate(buf, self.reply_sender.clone().unwrap());
     self.running_commands.push(tokio::spawn(task));
-    if self.running_commands.len() > 10 {
-      self.running_commands.retain(|c| !c.is_finished());
-    }
+    self.running_commands.retain(|c| !c.is_finished());
     debug!("Running commands: {}", self.running_commands.len());
-    Ok(())
+    Ok(true)
   }
 
   /// Initiates a bidirectional stream, that will function as the control channel.
@@ -136,7 +129,6 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
   #[tracing_attributes::instrument(skip_all, fields(_remote_addr))]
   async fn handle(&mut self, token: CancellationToken) -> Result<(), anyhow::Error> {
     debug!("[QUIC] Handler started.");
-    let _remote_addr = self.connection.lock().await.remote_addr().unwrap();
 
     self.create_control_channel().await?;
 
@@ -157,9 +149,13 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
           break;
         }
         result = self.await_command() => {
-          if let Err(e) = result {
-            warn!("[QUIC] Error awaiting command! {e}.");
-            break;
+          match result {
+            Ok(true) => {},
+            Ok(false) => break,
+            Err(e) => {
+              warn!("[QUIC] Reading client message failed! Error: {e}!");
+              break;
+            }
           }
         }
       }

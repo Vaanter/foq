@@ -41,72 +41,72 @@ pub(crate) async fn retr(
       .await;
   }
 
-  {
-    let data_channel_pair = acquire_data_channel(command_processor.data_wrapper.clone()).await;
-    let (mut data_channel, token) = match data_channel_pair {
-      Ok((dc, token)) => (dc, token),
-      Err(e) => {
-        return reply_sender.send_control_message(e).await;
-      }
-    };
-
-    let options = OpenOptionsWrapperBuilder::default()
-      .read(true)
-      .build()
-      .unwrap();
-    let file = session_properties
-      .file_system_view_root
-      .open_file(&command.argument, options)
-      .await;
-    info!(
-      "User '{}' opening file '{}'.",
-      session_properties.username.as_ref().unwrap(),
-      &command.argument
-    );
-    let mut file = match get_open_file_result(file) {
-      Ok(f) => f,
-      Err(reply) => {
-        reply_sender.send_control_message(reply).await;
-        return;
-      }
-    };
-    debug!("File opened successfully.");
-
-    reply_sender
-      .send_control_message(Reply::new(
-        ReplyCode::FileStatusOkay,
-        "Starting file transfer!",
-      ))
-      .await;
-
-    if session_properties.offset > 0 {
-      debug!("Setting cursor to offset: {}", session_properties.offset);
-      if let Err(e) = file.seek(SeekFrom::Start(session_properties.offset)).await {
-        warn!(
-          "Failed to seek file {} to offset {}. Error: {}",
-          &command.argument, session_properties.offset, e
-        );
-      };
+  let data_channel_pair = acquire_data_channel(command_processor.data_wrapper.clone()).await;
+  let (mut data_channel, token) = match data_channel_pair {
+    Ok((dc, token)) => (dc, token),
+    Err(e) => {
+      return reply_sender.send_control_message(e).await;
     }
+  };
 
-    debug!("Sending file data, offset: {}!", session_properties.offset);
-    session_properties.offset = 0;
+  let options = OpenOptionsWrapperBuilder::default()
+    .read(true)
+    .build()
+    .unwrap();
+  let file = session_properties
+    .file_system_view_root
+    .open_file(&command.argument, options)
+    .await;
+  info!(
+    "User '{}' opening file '{}'.",
+    session_properties.username.as_ref().unwrap(),
+    &command.argument
+  );
+  let mut file = match get_open_file_result(file) {
+    Ok(f) => f,
+    Err(reply) => {
+      reply_sender.send_control_message(reply).await;
+      return;
+    }
+  };
+  debug!("File opened successfully.");
 
-    let mut buffer = vec![0; 65536];
-    let transfer = transfer_data(&mut file, &mut data_channel, &mut buffer);
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::FileStatusOkay,
+      "Starting file transfer!",
+    ))
+    .await;
 
-    let success = select! {
-      result = transfer => result,
-      _ = token.cancelled() => {
-        debug!("Received transfer abort");
-        false
-      }
+  if session_properties.offset > 0 {
+    debug!("Setting cursor to offset: {}", session_properties.offset);
+    if let Err(e) = file.seek(SeekFrom::Start(session_properties.offset)).await {
+      warn!(
+        "Failed to seek file {} to offset {}. Error: {}",
+        &command.argument, session_properties.offset, e
+      );
     };
+  }
 
-    reply_sender
-      .send_control_message(get_transfer_reply(success))
-      .await;
+  debug!("Sending file data, offset: {}!", session_properties.offset);
+  session_properties.offset = 0;
 
+  let mut buffer = vec![0; 65536];
+  let transfer = transfer_data(&mut file, &mut data_channel, &mut buffer);
+
+  let success = select! {
+    result = transfer => result,
+    _ = token.cancelled() => {
+      debug!("Received transfer abort");
+      false
+    }
+  };
+
+  reply_sender
+    .send_control_message(get_transfer_reply(success))
+    .await;
+
+  if success {
     if let Err(e) = data_channel.shutdown().await {
       warn!("Failed to shutdown data channel after writing! {e}");
     }
@@ -369,7 +369,7 @@ mod tests {
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
-    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
+    generate_test_file(2u64.pow(30) as usize, &file_path).await;
     common_tcp(temp_dir(), &file_name).await;
   }
 
@@ -407,7 +407,7 @@ mod tests {
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
-    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
+    generate_test_file(2u64.pow(30) as usize, &file_path).await;
     common_quic(temp_dir(), &file_name).await;
   }
 
@@ -455,7 +455,7 @@ mod tests {
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
-    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
+    generate_test_file(2u64.pow(30) as usize, &file_path).await;
     common_quic_quinn(temp_dir(), &file_name).await;
   }
 

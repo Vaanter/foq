@@ -40,63 +40,65 @@ pub(crate) async fn stor(
     return;
   }
 
-  {
-    let data_channel_pair = acquire_data_channel(command_processor.data_wrapper.clone()).await;
-    let (mut data_channel, token) = match data_channel_pair {
-      Ok((dc, token)) => (dc, token),
-      Err(e) => {
-        return reply_sender.send_control_message(e).await;
-      }
-    };
+  let data_channel_pair = acquire_data_channel(command_processor.data_wrapper.clone()).await;
+  let (mut data_channel, token) = match data_channel_pair {
+    Ok((dc, token)) => (dc, token),
+    Err(e) => {
+      return reply_sender.send_control_message(e).await;
+    }
+  };
 
-    let options = OpenOptionsWrapperBuilder::default()
-      .write(true)
-      .truncate(true)
-      .create(true)
-      .build()
-      .unwrap();
-    info!(
-      "User '{}' opening file '{}'.",
-      session_properties.username.as_ref().unwrap(),
-      &command.argument
-    );
-    let file = session_properties
-      .file_system_view_root
-      .open_file(&command.argument, options)
-      .await;
+  let options = OpenOptionsWrapperBuilder::default()
+    .write(true)
+    .truncate(true)
+    .create(true)
+    .build()
+    .unwrap();
+  info!(
+    "User '{}' opening file '{}'.",
+    session_properties.username.as_ref().unwrap(),
+    &command.argument
+  );
+  let file = session_properties
+    .file_system_view_root
+    .open_file(&command.argument, options)
+    .await;
 
-    let mut file = match get_open_file_result(file) {
-      Ok(f) => f,
-      Err(reply) => {
-        reply_sender.send_control_message(reply).await;
-        return;
-      }
-    };
+  let mut file = match get_open_file_result(file) {
+    Ok(f) => f,
+    Err(reply) => {
+      reply_sender.send_control_message(reply).await;
+      return;
+    }
+  };
 
-    reply_sender
-      .send_control_message(Reply::new(
-        ReplyCode::FileStatusOkay,
-        "Starting file transfer!",
-      ))
-      .await;
+  reply_sender
+    .send_control_message(Reply::new(
+      ReplyCode::FileStatusOkay,
+      "Starting file transfer!",
+    ))
+    .await;
 
-    debug!("Receiving file data!");
-    let mut buffer = vec![0; 65536];
-    let transfer = transfer_data(&mut data_channel, &mut file, &mut buffer);
+  debug!("Receiving file data!");
+  let mut buffer = vec![0; 65536];
+  let transfer = transfer_data(&mut data_channel, &mut file, &mut buffer);
 
-    let success = select! {
-      result = transfer => result,
-      _ = token.cancelled() => {
-        debug!("Received transfer abort");
-        false
-      }
-    };
-    if let Err(e) = file.sync_data().await {
-      warn!("Failed to sync file data! {e}");
-    };
-    reply_sender
-      .send_control_message(get_transfer_reply(success))
-      .await;
+  let success = select! {
+    result = transfer => result,
+    _ = token.cancelled() => {
+      debug!("Received transfer abort");
+      false
+    }
+  };
+  if let Err(e) = file.sync_data().await {
+    warn!("Failed to sync file data! {e}");
+  };
+
+  reply_sender
+    .send_control_message(get_transfer_reply(success))
+    .await;
+
+  if success {
     if let Err(e) = data_channel.shutdown().await {
       warn!("Failed to shutdown data channel after writing! {e}");
     }
@@ -439,7 +441,7 @@ mod tests {
   async fn one_gib_test() {
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
-    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
+    generate_test_file(2u64.pow(30) as usize, &file_path).await;
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(&file_path, &remote_file).await;
   }
@@ -480,7 +482,7 @@ mod tests {
   async fn one_gib_quic_test() {
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
-    generate_test_file((2u64.pow(30)) as usize, Path::new(&file_path)).await;
+    generate_test_file(2u64.pow(30) as usize, Path::new(&file_path)).await;
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic(&file_path, &remote_file).await;
   }
@@ -521,7 +523,7 @@ mod tests {
   async fn one_gib_quic_quinn_test() {
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
-    generate_test_file((2u64.pow(30)) as usize, &file_path).await;
+    generate_test_file(2u64.pow(30) as usize, &file_path).await;
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic_quinn(&file_path, &remote_file).await;
   }
