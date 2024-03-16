@@ -1,18 +1,15 @@
 //! Execution point for all listeners.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use crate::auth::auth_provider::AuthProvider;
 use crate::auth::sqlite_data_source::SqliteDataSource;
-use tokio::io::{Error, ErrorKind};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
-use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use crate::global_context::{AUTH_PROVIDER, CERTS, CONFIG, DB_LAZY, KEY};
+use crate::global_context::{AUTH_PROVIDER, CONFIG, DB_LAZY, TLS_ACCEPTOR};
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
 use crate::handlers::standard_connection_handler::StandardConnectionHandler;
@@ -153,25 +150,13 @@ async fn run_tcp(addr: SocketAddr, token: CancellationToken) {
 ///
 #[tracing::instrument(skip(token))]
 async fn run_tcp_tls(addr: SocketAddr, token: CancellationToken) {
-  let mut config = match rustls::ServerConfig::builder()
-    .with_safe_defaults()
-    .with_no_client_auth()
-    .with_single_cert(CERTS.clone(), KEY.clone())
-    .map_err(|err| Error::new(ErrorKind::InvalidInput, err))
-  {
-    Ok(c) => c,
-    Err(e) => {
-      error!("[TCP+TLS] Error creating config! {e}");
+  let tls_acceptor = match TLS_ACCEPTOR.clone() {
+    Some(acceptor) => acceptor,
+    None => {
+      warn!("TLS not available, unable to start TLS listener!");
       return;
     }
   };
-  config.alpn_protocols = vec!["ftp".as_bytes().to_vec()];
-
-  if std::env::var_os("SSLKEYLOGFILE").is_some() {
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
-  }
-
-  let tls_acceptor = TlsAcceptor::from(Arc::new(config));
   let mut standard_listener = match StandardListener::new(addr).await {
     Ok(l) => l,
     Err(e) => {

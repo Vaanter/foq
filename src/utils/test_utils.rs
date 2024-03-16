@@ -1,10 +1,3 @@
-use async_trait::async_trait;
-use derive_builder::Builder;
-use rustls::client::{ServerCertVerified, ServerCertVerifier};
-use rustls::{Certificate, ClientConfig, KeyLogFile, ServerConfig, ServerName};
-use s2n_quic::provider::io::tokio::Builder as IoBuilder;
-use s2n_quic::provider::tls::rustls::Client as TlsClient;
-use s2n_quic::Client;
 use std::collections::HashSet;
 use std::fs::{remove_dir_all, remove_file, OpenOptions as OpenOptionsStd};
 use std::io;
@@ -14,15 +7,25 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+
+use async_trait::async_trait;
+use derive_builder::Builder;
+use rustls::client::{ServerCertVerified, ServerCertVerifier};
+use rustls::{Certificate, ClientConfig, KeyLogFile, ServerConfig, ServerName};
+use s2n_quic::provider::io::tokio::Builder as IoBuilder;
+use s2n_quic::provider::tls::rustls::Client as TlsClient;
+use s2n_quic::Client;
 use strum::IntoEnumIterator;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use tokio_rustls::client::TlsStream;
+use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tracing::Level;
 
@@ -43,6 +46,7 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::io::file_system_view::FileSystemView;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
 use crate::session::command_processor::CommandProcessor;
+use crate::session::protection_mode::ProtMode;
 use crate::session::session_properties::SessionProperties;
 
 pub(crate) struct TestReplySender {
@@ -234,7 +238,11 @@ pub(crate) fn create_test_server_config() -> ServerConfig {
 pub(crate) const LOCALHOST: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
 
 pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcessor) -> TcpStream {
-  let addr = match command_processor.data_wrapper.open_data_stream().await {
+  let addr = match command_processor
+    .data_wrapper
+    .open_data_stream(ProtMode::Clear)
+    .await
+  {
     Ok(addr) => addr,
     Err(_) => panic!("Failed to open passive data listener!"),
   };
@@ -242,6 +250,36 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
   println!("Connecting to passive listener");
   let client_dc = match TcpStream::connect(addr).await {
     Ok(c) => c,
+    Err(e) => {
+      panic!("Client passive connection failed: {}", e);
+    }
+  };
+  println!("Client passive connection successful!");
+
+  client_dc
+}
+
+pub(crate) async fn open_tls_data_channel(
+  command_processor: &mut CommandProcessor,
+) -> TlsStream<TcpStream> {
+  let addr = match command_processor
+    .data_wrapper
+    .open_data_stream(ProtMode::Private)
+    .await
+  {
+    Ok(addr) => addr,
+    Err(_) => panic!("Failed to open passive data listener!"),
+  };
+
+  println!("Connecting to passive listener");
+  let client_dc = match TcpStream::connect(addr).await {
+    Ok(c) => {
+      let connector = TlsConnector::from(Arc::new(create_tls_client_config("ftp")));
+      connector
+        .connect(ServerName::try_from("ftp.vanter.me").unwrap(), c)
+        .await
+        .expect("TLS handshake should succeed")
+    }
     Err(e) => {
       panic!("Client passive connection failed: {}", e);
     }

@@ -128,12 +128,14 @@ mod tests {
   use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
+  use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
   use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::io::file_system_view::FileSystemView;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
   use crate::session::command_processor::CommandProcessor;
+  use crate::session::protection_mode::ProtMode;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::*;
 
@@ -221,7 +223,7 @@ mod tests {
 
     let _ = command_processor
       .data_wrapper
-      .open_data_stream()
+      .open_data_stream(ProtMode::Clear)
       .await
       .unwrap();
 
@@ -290,7 +292,7 @@ mod tests {
 
     let _ = command_processor
       .data_wrapper
-      .open_data_stream()
+      .open_data_stream(ProtMode::Clear)
       .await
       .unwrap();
 
@@ -598,7 +600,7 @@ mod tests {
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     timeout(
-      Duration::from_secs(5),
+      Duration::from_secs(ACQUIRE_TIMEOUT + 5),
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await

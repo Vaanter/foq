@@ -19,7 +19,12 @@ pub(crate) async fn pasv(
   debug_assert_eq!(command.command, Commands::Pasv);
 
   let wrapper = command_processor.data_wrapper.clone();
-  let reply = match wrapper.open_data_stream().await.unwrap() {
+  let properties = command_processor.session_properties.read().await;
+  let reply = match wrapper
+    .open_data_stream(properties.prot_mode)
+    .await
+    .unwrap()
+  {
     SocketAddr::V4(addr) => Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr)),
     SocketAddr::V6(_) => {
       error!("PASV: IPv6 is not supported!");

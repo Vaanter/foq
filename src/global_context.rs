@@ -1,13 +1,17 @@
 //! Contains global statics
 
+use std::io::{Error, ErrorKind};
 use std::path::Path;
+use std::sync::Arc;
 
 use config::Config;
 use once_cell::sync::Lazy;
-use rustls::{Certificate, PrivateKey};
+use rustls::server::ServerSessionMemoryCache;
+use rustls::{Certificate, PrivateKey, Ticketer};
 use sqlx::SqlitePool;
 use tokio::sync::OnceCell;
-use tracing::info;
+use tokio_rustls::TlsAcceptor;
+use tracing::{info, warn};
 
 use crate::auth::auth_provider::AuthProvider;
 use crate::utils::tls_utils::{load_certs, load_keys};
@@ -53,6 +57,31 @@ pub(crate) static DB_LAZY: Lazy<SqlitePool> = Lazy::new(|| {
     .expect("DATABASE_URL must be set!");
   info!("DATABASE_URL: {db_url}");
   SqlitePool::connect_lazy(&db_url).unwrap()
+});
+
+pub(crate) static TLS_ACCEPTOR: Lazy<Option<TlsAcceptor>> = Lazy::new(|| {
+  let mut config = match rustls::ServerConfig::builder()
+    .with_safe_defaults()
+    .with_no_client_auth()
+    .with_single_cert(CERTS.clone(), KEY.clone())
+    .map_err(|err| Error::new(ErrorKind::InvalidInput, err))
+  {
+    Ok(c) => c,
+    Err(e) => {
+      warn!("Failed to configure TLS config! {e}");
+      return None;
+    }
+  };
+  config.alpn_protocols = vec!["ftp".as_bytes().to_vec()];
+  if let Ok(tick) = Ticketer::new() {
+    config.session_storage = ServerSessionMemoryCache::new(256);
+    config.ticketer = tick;
+  }
+
+  if std::env::var_os("SSLKEYLOGFILE").is_some() {
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
+  }
+  Some(TlsAcceptor::from(Arc::new(config)))
 });
 
 pub(crate) static AUTH_PROVIDER: OnceCell<AuthProvider> = OnceCell::const_new();

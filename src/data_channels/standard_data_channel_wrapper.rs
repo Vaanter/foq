@@ -6,12 +6,16 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
+use crate::data_channels::tcp_data_channel::TcpDataChannel;
+use crate::data_channels::tls_data_channel::TlsDataChannel;
+use crate::global_context::TLS_ACCEPTOR;
+use crate::session::protection_mode::ProtMode;
 
 pub(crate) struct StandardDataChannelWrapper {
   addr: SocketAddr,
@@ -63,8 +67,8 @@ impl StandardDataChannelWrapper {
   ///
   /// A [`SocketAddr`] the server listens on.
   ///
-  #[tracing::instrument(skip(self))]
-  async fn create_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
+  #[tracing::instrument(skip_all)]
+  async fn create_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
     debug!("Creating passive listener");
     let listener = TcpListener::bind(self.addr)
       .await
@@ -79,18 +83,7 @@ impl StandardDataChannelWrapper {
       .await;
       match conn {
         Ok(Ok((stream, _))) => {
-          info!(
-            "Passive connection created! Remote address: {}",
-            stream
-              .peer_addr()
-              .expect("Passive data connection should have peer!")
-          );
-          if let Err(mut e) = sender.send(Box::new(stream)).await {
-            error!("Failed to send new data channel downstream! {e}");
-            if let Err(shutdown_error) = e.0.shutdown().await {
-              error!("Failed to shutdown data channel! {shutdown_error}");
-            }
-          }
+          Self::establish_connection(stream, prot_mode, sender).await;
         }
         Ok(Err(e)) => {
           warn!("Passive listener connection failed! {e}");
@@ -105,13 +98,60 @@ impl StandardDataChannelWrapper {
     addr.set_port(port);
     Ok(addr)
   }
+  
+  async fn establish_connection(mut stream: TcpStream, prot_mode: ProtMode, sender: Sender<DataChannel>) {
+    let peer = stream.peer_addr().expect("Data channel should have peer address");
+    info!("Passive connection created! Remote address: {:?}", peer);
+    let tls = TLS_ACCEPTOR.clone();
+    let data_channel = match prot_mode {
+      ProtMode::Private => {
+        trace!(peer_addr = ?peer, "Opening data channel in protected mode.");
+        match tls {
+          Some(t) => {
+            trace!(peer_addr = ?peer, "TLS handshake.");
+            match timeout(Duration::from_secs(10), t.accept(stream)).await {
+              Ok(Ok(tls_stream)) => {
+                let tls_stream = Box::new(TlsDataChannel::new(tls_stream)) as DataChannel;
+                trace!(peer_addr = ?peer, "TLS handshake complete.");
+                tls_stream
+              }
+              Ok(Err(e)) => {
+                info!(peer_addr = ?peer, "TLS handshake failed, closing connection! {e}.");
+                return;
+              }
+              Err(e) => {
+                info!(peer_addr = ?peer, "TLS handshake failed to complete in time, closing connection! {e}.");
+                return;
+              }
+            }
+          }
+          None => {
+            debug!("TLS not available, closing connection");
+            if let Err(e) = stream.shutdown().await {
+              warn!(peer_addr = ?peer, "Failed to close invalid data channel! {e}.");
+            };
+            return;
+          }
+        }
+      }
+      ProtMode::Clear | ProtMode::Confidential | ProtMode::Safe => {
+        Box::new(TcpDataChannel::new(stream)) as DataChannel
+      }
+    };
+    if let Err(mut e) = sender.send(data_channel).await {
+      error!("Failed to send new data channel downstream! {e}");
+      if let Err(shutdown_error) = e.0.shutdown().await {
+        error!("Failed to shutdown data channel! {shutdown_error}");
+      }
+    }
+  }
 }
 
 #[async_trait]
 impl DataChannelWrapper for StandardDataChannelWrapper {
   /// Opens a data channel using [`StandardDataChannelWrapper::create_stream`].
-  async fn open_data_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
-    self.create_stream().await
+  async fn open_data_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
+    self.create_stream(prot_mode).await
   }
 
   fn try_acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error> {

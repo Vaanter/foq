@@ -13,7 +13,10 @@ use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper
 use crate::io::entry_data::EntryData;
 use crate::io::error::IoError;
 
-pub const ACQUIRE_TIMEOUT: u64 = 5;
+#[cfg(not(test))]
+pub const ACQUIRE_TIMEOUT: u64 = 15;
+#[cfg(test)]
+pub const ACQUIRE_TIMEOUT: u64 = 3;
 
 pub(crate) async fn acquire_data_channel(
   data_wrapper: Arc<dyn DataChannelWrapper>,
