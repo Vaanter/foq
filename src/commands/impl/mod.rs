@@ -13,6 +13,7 @@ pub(crate) mod noop;
 pub(crate) mod opts;
 pub(crate) mod pass;
 pub(crate) mod pasv;
+pub(crate) mod pbsz;
 pub(crate) mod prot;
 pub(crate) mod pwd;
 pub(crate) mod rest;

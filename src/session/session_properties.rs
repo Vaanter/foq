@@ -1,17 +1,19 @@
 //! Contains properties used throughout a session, such as username, datatype file system views
 //! and other.
 
+use std::default::Default;
+use std::fmt::Debug;
+
 use crate::auth::auth_provider::AuthProvider;
 use crate::auth::login_form::LoginForm;
 use crate::io::file_system_view_root::FileSystemViewRoot;
 use crate::session::data_type::DataType;
 use crate::session::protection_mode::ProtMode;
 use crate::session::transfer_mode::TransferMode;
-use std::default::Default;
 
 /// Currently implemented properties.
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct SessionProperties {
   pub(crate) username: Option<String>,
   pub(crate) file_system_view_root: FileSystemViewRoot,
@@ -21,6 +23,7 @@ pub(crate) struct SessionProperties {
   pub(crate) offset: u64,
   pub(crate) utf8: bool,
   pub(crate) prot_mode: ProtMode,
+  pub(crate) pbsz: Option<u32>,
 }
 
 impl SessionProperties {
@@ -54,20 +57,5 @@ impl SessionProperties {
       .file_system_view_root
       .set_views(user_data.file_system_views);
     true
-  }
-}
-
-impl Default for SessionProperties {
-  fn default() -> Self {
-    SessionProperties {
-      username: None,
-      file_system_view_root: Default::default(),
-      transfer_mode: Default::default(),
-      data_type: Default::default(),
-      login_form: Default::default(),
-      offset: 0,
-      utf8: true,
-      prot_mode: Default::default(),
-    }
   }
 }
