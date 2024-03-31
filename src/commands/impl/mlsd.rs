@@ -171,7 +171,7 @@ mod tests {
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
-      .is_err()
+    .is_err()
     {
       panic!("Command timeout!");
     };
@@ -200,7 +200,7 @@ mod tests {
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
-      .is_err()
+    .is_err()
     {
       panic!("Command timeout!");
     };
@@ -264,7 +264,7 @@ mod tests {
       command.execute(Arc::new(command_processor), Arc::new(reply_sender)),
     )
     .await
-      .is_err()
+    .is_err()
     {
       panic!("Command timeout!");
     };

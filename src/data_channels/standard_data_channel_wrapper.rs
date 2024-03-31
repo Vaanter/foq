@@ -98,9 +98,15 @@ impl StandardDataChannelWrapper {
     addr.set_port(port);
     Ok(addr)
   }
-  
-  async fn establish_connection(mut stream: TcpStream, prot_mode: ProtMode, sender: Sender<DataChannel>) {
-    let peer = stream.peer_addr().expect("Data channel should have peer address");
+
+  async fn establish_connection(
+    mut stream: TcpStream,
+    prot_mode: ProtMode,
+    sender: Sender<DataChannel>,
+  ) {
+    let peer = stream
+      .peer_addr()
+      .expect("Data channel should have peer address");
     info!("Passive connection created! Remote address: {:?}", peer);
     let tls = TLS_ACCEPTOR.clone();
     let data_channel = match prot_mode {

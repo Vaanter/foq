@@ -52,7 +52,7 @@ impl CommandProcessor {
       Ok(command) => {
         trace!("Parsed command: {:#?}", command);
         command.execute(self, reply_sender).await;
-      },
+      }
       Err(e) => {
         debug!("Failed to parse command! Message: {message}. Error: {e}");
         if !message.trim().is_empty() {

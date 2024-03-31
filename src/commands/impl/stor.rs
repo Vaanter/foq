@@ -349,7 +349,11 @@ mod tests {
     verify_transfer(remote_file, &sender_file_hasher).await;
   }
 
-  async fn transfer_to<T: AsyncWrite + Unpin>(send_file: &Path, client_dc: &mut T, sender_file_hasher: &mut Hasher) -> usize {
+  async fn transfer_to<T: AsyncWrite + Unpin>(
+    send_file: &Path,
+    client_dc: &mut T,
+    sender_file_hasher: &mut Hasher,
+  ) -> usize {
     let mut sends = 0;
     let mut send_file = OpenOptions::new()
       .read(true)
@@ -389,10 +393,7 @@ mod tests {
     sends
   }
 
-  async fn verify_transfer(
-    remote_file: &str,
-    sender_file_hasher: &Hasher,
-  ) {
+  async fn verify_transfer(remote_file: &str, sender_file_hasher: &Hasher) {
     let mut receiver_file_hasher = Hasher::new();
 
     const RECEIVER_BUFFER_SIZE: usize = 16384;
