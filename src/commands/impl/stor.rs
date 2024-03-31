@@ -333,65 +333,70 @@ mod tests {
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatusOkay, None).await;
 
-    let transfer = verify_transfer(local_file, remote_file, &mut client_dc);
+    let mut sender_file_hasher = Hasher::new();
+
+    let transfer = transfer_to(local_file, &mut client_dc, &mut sender_file_hasher);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
-      Ok(()) => println!("Transfer complete!"),
+      Ok(n) => println!("Transfer complete, send: {} bytes!", n),
       Err(_) => panic!("Transfer timed out!"),
     }
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::ClosingDataConnection, None).await;
 
     command_fut.await.expect("Command should complete!");
+
+    verify_transfer(remote_file, &sender_file_hasher).await;
   }
 
-  async fn verify_transfer<T: AsyncWrite + Unpin>(
-    local_file: &Path,
-    remote_file: &str,
-    client_dc: &mut T,
-  ) {
-    let mut local_file_hasher = Hasher::new();
-    let mut remote_file_hasher = Hasher::new();
-
-    let mut local_file = OpenOptions::new()
-      .read(true)
-      .open(local_file)
-      .await
-      .expect("Local test file must exist!");
-
-    const REMOTE_BUFFER_SIZE: usize = 16384;
-    const LOCAL_BUFFER_SIZE: usize = 16384;
-    let mut remote_buffer = [0; REMOTE_BUFFER_SIZE];
-    let mut local_buffer = [0; LOCAL_BUFFER_SIZE];
-
+  async fn transfer_to<T: AsyncWrite + Unpin>(send_file: &Path, client_dc: &mut T, sender_file_hasher: &mut Hasher) -> usize {
     let mut sends = 0;
-    let mut reads = 0;
+    let mut send_file = OpenOptions::new()
+      .read(true)
+      .open(send_file)
+      .await
+      .expect("Send test file must exist!");
+
+    const SENDER_BUFFER_SIZE: usize = 16384;
+    let mut sender_buffer = [0; SENDER_BUFFER_SIZE];
+
     loop {
-      let local_len = match local_file.read(&mut local_buffer).await {
+      let sent_bytes = match send_file.read(&mut sender_buffer).await {
         Ok(len) => len,
         Err(e) => panic!("Failed to read local file! {e}"),
       };
 
-      if local_len == 0 {
+      if sent_bytes == 0 {
         break;
       }
 
-      if let Err(e) = client_dc.write_all(&local_buffer[..local_len]).await {
+      if let Err(e) = client_dc.write_all(&sender_buffer[..sent_bytes]).await {
         panic!("File transfer failed! {e}");
       };
       if let Err(e) = client_dc.flush().await {
         eprintln!("Failed to flush data, {e}");
       };
-      sends += local_len;
+      sends += sent_bytes;
 
-      local_file_hasher.update(&local_buffer[..local_len]);
+      sender_file_hasher.update(&sender_buffer[..sent_bytes]);
 
-      remote_buffer.fill(0);
+      sender_buffer.fill(0);
     }
 
     if let Err(e) = client_dc.shutdown().await {
       eprintln!("Failed to shutdown client data channels, {e}");
     }
+    sends
+  }
+
+  async fn verify_transfer(
+    remote_file: &str,
+    sender_file_hasher: &Hasher,
+  ) {
+    let mut receiver_file_hasher = Hasher::new();
+
+    const RECEIVER_BUFFER_SIZE: usize = 16384;
+    let mut receiver_buffer = [0; RECEIVER_BUFFER_SIZE];
 
     let remote = temp_dir().join(remote_file);
     let mut remote_file = OpenOptions::new()
@@ -401,24 +406,21 @@ mod tests {
       .expect("Remote test file must exist!");
 
     loop {
-      let remote_len = match remote_file.read(&mut remote_buffer).await {
+      let received_bytes = match remote_file.read(&mut receiver_buffer).await {
         Ok(len) => len,
         Err(e) => panic!("Failed to read remote file! {e}"),
       };
 
-      reads += remote_len;
-      if remote_len == 0 {
+      if received_bytes == 0 {
         break;
       }
-      remote_file_hasher.update(&remote_buffer[..remote_len]);
-      remote_buffer.fill(0);
+      receiver_file_hasher.update(&receiver_buffer[..received_bytes]);
+      receiver_buffer.fill(0);
     }
 
-    println!("Read: {reads}, Sent: {sends}");
-
     assert_eq!(
-      local_file_hasher.finalize(),
-      remote_file_hasher.finalize(),
+      sender_file_hasher.finalize(),
+      receiver_file_hasher.finalize(),
       "File hashes do not match!"
     );
     println!("File hashes match!");
