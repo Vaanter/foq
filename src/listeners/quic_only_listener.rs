@@ -68,7 +68,7 @@ impl QuicOnlyListener {
       config.key_log = Arc::new(rustls::KeyLogFile::new());
     }
 
-    let tls_server = TlsServer::new(config);
+    let tls_server = TlsServer::from(config);
 
     let server = Server::builder()
       .with_congestion_controller(congestion_controller)
