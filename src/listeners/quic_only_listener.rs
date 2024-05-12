@@ -3,7 +3,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rustls::ServerConfig;
+use rustls::server::ServerSessionMemoryCache;
+use rustls::{ServerConfig, Ticketer};
 use s2n_quic::provider::congestion_controller::Bbr;
 use s2n_quic::provider::limits::{Limits, Provider};
 use s2n_quic::{
@@ -66,6 +67,11 @@ impl QuicOnlyListener {
 
     if std::env::var_os("SSLKEYLOGFILE").is_some() {
       config.key_log = Arc::new(rustls::KeyLogFile::new());
+    }
+
+    if let Ok(tick) = Ticketer::new() {
+      config.session_storage = ServerSessionMemoryCache::new(256);
+      config.ticketer = tick;
     }
 
     let tls_server = TlsServer::from(config);
