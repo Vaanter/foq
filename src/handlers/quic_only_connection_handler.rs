@@ -225,7 +225,7 @@ mod tests {
     let token = CancellationToken::new();
     let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
-    let tls_client = TlsClient::new(create_tls_client_config("ftpoq-1"));
+    let tls_client = TlsClient::from(create_tls_client_config("ftpoq-1"));
 
     let client = Client::builder()
       .with_tls(tls_client)

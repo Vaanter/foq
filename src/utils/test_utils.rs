@@ -428,7 +428,7 @@ pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(
 pub(crate) fn setup_s2n_client() -> Client {
   let mut tls_config = create_tls_client_config("ftpoq-1");
   tls_config.key_log = Arc::new(KeyLogFile::new());
-  let tls_client = TlsClient::new(tls_config);
+  let tls_client = TlsClient::from(tls_config);
 
   let io = IoBuilder::default()
     .with_receive_address(LOCALHOST)
@@ -451,7 +451,7 @@ pub(crate) fn setup_s2n_client() -> Client {
 
 pub(crate) fn setup_tracing() {
   let subscriber = tracing_subscriber::fmt()
-    .with_env_filter(format!("foq={}", Level::DEBUG))
+    .with_env_filter(format!("foq={}", Level::TRACE))
     .with_file(true)
     .with_line_number(true)
     .with_thread_ids(true)
@@ -463,6 +463,7 @@ pub(crate) fn setup_tracing() {
 pub(crate) fn touch(path: &Path) -> io::Result<()> {
   OpenOptionsStd::new()
     .create(true)
+    .truncate(true)
     .write(true)
     .open(path)
     .map(|_| ())
