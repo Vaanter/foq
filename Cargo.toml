@@ -1,6 +1,6 @@
 [package]
 name = "foq"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Valentín Bolfík"]
 edition = "2021"
 
