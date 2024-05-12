@@ -2,10 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io;
+use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -17,6 +18,8 @@ use crate::io::error::IoError;
 pub const ACQUIRE_TIMEOUT: u64 = 15;
 #[cfg(test)]
 pub const ACQUIRE_TIMEOUT: u64 = 3;
+
+pub const TRANSFER_BUFFER_SIZE: usize = 131072; // 2^17
 
 pub(crate) async fn acquire_data_channel(
   data_wrapper: Arc<dyn DataChannelWrapper>,
@@ -41,8 +44,8 @@ pub(crate) async fn acquire_data_channel(
   }
 }
 
-pub(crate) fn get_transfer_reply(success: bool) -> Reply {
-  if success {
+pub(crate) fn get_transfer_reply(success: &Result<(), io::Error>) -> Reply {
+  if success.is_ok() {
     Reply::new(ReplyCode::ClosingDataConnection, "Transfer complete!")
   } else {
     Reply::new(
@@ -114,34 +117,22 @@ pub(crate) fn get_delete_reply(dele_result: Result<(), IoError>, directory: bool
   }
 }
 
-#[tracing::instrument(skip_all)]
-pub(crate) async fn transfer_data<F, T>(from: &mut F, to: &mut T, buffer: &mut [u8]) -> bool
+pub(crate) async fn copy_data<F, T>(from: &mut F, to: &mut T) -> Result<(), io::Error>
 where
-  F: AsyncRead + Unpin,
+  F: AsyncBufRead + Unpin,
   T: AsyncWrite + Unpin,
 {
-  'send_loop: loop {
-    let result = from.read(buffer).await;
-    match result {
-      Ok(0) => {
-        debug!("Flushing data to target");
-        if let Err(e) = to.flush().await {
-          warn!("Failed to flush data to target! {e}");
-          break 'send_loop false;
-        }
-        break 'send_loop true;
+  match io::copy_buf(from, to).await {
+    Ok(_) => {
+      debug!("Flushing data to target");
+      if let Err(e) = to.flush().await {
+        warn!("Failed to flush data to target! {e}");
       }
-      Ok(n) => {
-        trace!("Read {n} bytes from source");
-        if let Err(e) = to.write_all(&buffer[..n]).await {
-          error!("Write to target failed! {e}");
-          break 'send_loop false;
-        }
-      }
-      Err(e) => {
-        error!("Failed to send data to target. {e}");
-        break false;
-      }
+      Ok(())
+    }
+    Err(e) => {
+      error!("Write to target failed! {e}");
+      Err(e)
     }
   }
 }

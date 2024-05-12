@@ -1,12 +1,13 @@
+use std::io::ErrorKind;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::select;
 use tracing::{debug, info, warn};
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::r#impl::shared::{
-  acquire_data_channel, get_open_file_result, get_transfer_reply, transfer_data,
+  acquire_data_channel, copy_data, get_open_file_result, get_transfer_reply, TRANSFER_BUFFER_SIZE,
 };
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -80,14 +81,15 @@ pub(crate) async fn stor(
     .await;
 
   debug!("Receiving file data!");
-  let mut buffer = vec![0; 65536];
-  let transfer = transfer_data(&mut data_channel, &mut file, &mut buffer);
+
+  let mut buf = BufReader::with_capacity(TRANSFER_BUFFER_SIZE, &mut data_channel);
+  let transfer = copy_data(&mut buf, &mut file);
 
   let success = select! {
     result = transfer => result,
     _ = token.cancelled() => {
       debug!("Received transfer abort");
-      false
+      Err(std::io::Error::new(ErrorKind::ConnectionAborted, "Connection aborted!"))
     }
   };
   if let Err(e) = file.sync_data().await {
@@ -95,10 +97,10 @@ pub(crate) async fn stor(
   };
 
   reply_sender
-    .send_control_message(get_transfer_reply(success))
+    .send_control_message(get_transfer_reply(&success))
     .await;
 
-  if success {
+  if success.is_ok() {
     if let Err(e) = data_channel.shutdown().await {
       warn!("Failed to shutdown data channel after writing! {e}");
     }
