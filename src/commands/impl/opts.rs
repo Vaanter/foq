@@ -52,3 +52,36 @@ pub(crate) async fn opts(
     }
   };
 }
+
+#[cfg(test)]
+mod tests {
+  use std::time::Duration;
+
+  use tokio::sync::mpsc::channel;
+  use tokio::time::timeout;
+
+  use crate::utils::test_utils::{
+    receive_and_verify_reply, setup_test_command_processor, TestReplySender,
+  };
+
+  use super::*;
+
+  #[tokio::test]
+  pub async fn enable_utf8_test() {
+    let (_, command_processor) = setup_test_command_processor();
+    let command_processor = Arc::new(command_processor);
+
+    let command = Command::new(Commands::Opts, "UTF8 ON");
+
+    let (tx, mut rx) = channel(1024);
+    let reply_sender = TestReplySender::new(tx);
+    timeout(
+      Duration::from_secs(3),
+      command.execute(command_processor.clone(), Arc::new(reply_sender)),
+    )
+    .await
+    .expect("Command timeout!");
+
+    receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
+  }
+}
