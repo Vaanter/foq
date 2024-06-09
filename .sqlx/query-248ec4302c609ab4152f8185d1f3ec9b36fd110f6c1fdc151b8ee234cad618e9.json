@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT root, label, permissions FROM views WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "root",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "label",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "permissions",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "248ec4302c609ab4152f8185d1f3ec9b36fd110f6c1fdc151b8ee234cad618e9"
+}
