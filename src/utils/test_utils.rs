@@ -6,12 +6,14 @@ use std::iter::Iterator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use derive_builder::Builder;
-use rustls::client::{ServerCertVerified, ServerCertVerifier};
-use rustls::{Certificate, ClientConfig, KeyLogFile, ServerConfig, ServerName};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::CryptoProvider;
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{ClientConfig, DigitallySignedStruct, KeyLogFile, ServerConfig, SignatureScheme};
 use s2n_quic::provider::io::tokio::Builder as IoBuilder;
 use s2n_quic::provider::tls::rustls::Client as TlsClient;
 use s2n_quic::Client;
@@ -197,6 +199,7 @@ pub(crate) async fn receive_and_verify_reply_from_buf<T: AsyncRead + Unpin>(
   }
 }
 
+#[derive(Debug)]
 pub(crate) struct NoCertificateVerification {}
 
 impl NoCertificateVerification {
@@ -209,29 +212,54 @@ impl NoCertificateVerification {
 impl ServerCertVerifier for NoCertificateVerification {
   fn verify_server_cert(
     &self,
-    end_entity: &Certificate,
-    intermediates: &[Certificate],
-    server_name: &ServerName,
-    scts: &mut dyn Iterator<Item = &[u8]>,
+    end_entity: &CertificateDer<'_>,
+    intermediates: &[CertificateDer<'_>],
+    server_name: &ServerName<'_>,
     ocsp_response: &[u8],
-    now: SystemTime,
+    now: UnixTime,
   ) -> Result<ServerCertVerified, rustls::Error> {
     Ok(ServerCertVerified::assertion())
+  }
+
+  fn verify_tls12_signature(
+    &self,
+    message: &[u8],
+    cert: &CertificateDer<'_>,
+    dss: &DigitallySignedStruct,
+  ) -> Result<HandshakeSignatureValid, rustls::Error> {
+    Ok(HandshakeSignatureValid::assertion())
+  }
+
+  fn verify_tls13_signature(
+    &self,
+    message: &[u8],
+    cert: &CertificateDer<'_>,
+    dss: &DigitallySignedStruct,
+  ) -> Result<HandshakeSignatureValid, rustls::Error> {
+    Ok(HandshakeSignatureValid::assertion())
+  }
+
+  fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+    if let Some(provider) = CryptoProvider::get_default() {
+      return provider
+        .signature_verification_algorithms
+        .supported_schemes();
+    }
+    vec![SignatureScheme::ED25519]
   }
 }
 
 pub(crate) fn create_test_client_config() -> ClientConfig {
   ClientConfig::builder()
-    .with_safe_defaults()
+    .dangerous()
     .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
     .with_no_client_auth()
 }
 
 pub(crate) fn create_test_server_config() -> ServerConfig {
   ServerConfig::builder()
-    .with_safe_defaults()
     .with_no_client_auth()
-    .with_single_cert(CERTS.clone(), KEY.clone())
+    .with_single_cert(CERTS.clone(), KEY.clone_key())
     .unwrap()
 }
 
@@ -361,7 +389,7 @@ pub(crate) async fn run_quic_listener(
 
 pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
   let mut client_config = ClientConfig::builder()
-    .with_safe_defaults()
+    .dangerous()
     .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
     .with_no_client_auth();
   client_config.alpn_protocols = vec![alpn.as_bytes().to_vec()];
@@ -451,7 +479,8 @@ pub(crate) fn setup_s2n_client() -> Client {
 
 pub(crate) fn setup_tracing() {
   let subscriber = tracing_subscriber::fmt()
-    .with_env_filter(format!("foq={}", Level::TRACE))
+    // .with_env_filter(format!("foq={}", Level::TRACE))
+    .with_max_level(Level::INFO)
     .with_file(true)
     .with_line_number(true)
     .with_thread_ids(true)

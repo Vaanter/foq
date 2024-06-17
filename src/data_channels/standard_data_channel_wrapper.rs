@@ -8,13 +8,14 @@ use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
+use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::data_channels::tcp_data_channel::TcpDataChannel;
 use crate::data_channels::tls_data_channel::TlsDataChannel;
-use crate::global_context::TLS_ACCEPTOR;
+use crate::global_context::TLS_CONFIG;
 use crate::session::protection_mode::ProtMode;
 
 pub(crate) struct StandardDataChannelWrapper {
@@ -108,7 +109,7 @@ impl StandardDataChannelWrapper {
       .peer_addr()
       .expect("Data channel should have peer address");
     info!("Passive connection created! Remote address: {:?}", peer);
-    let tls = TLS_ACCEPTOR.clone();
+    let tls = TLS_CONFIG.clone().map(TlsAcceptor::from);
     let data_channel = match prot_mode {
       ProtMode::Private => {
         trace!(peer_addr = ?peer, "Opening data channel in protected mode.");

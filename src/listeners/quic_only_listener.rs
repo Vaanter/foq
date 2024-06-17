@@ -1,10 +1,7 @@
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
-use rustls::server::ServerSessionMemoryCache;
-use rustls::{ServerConfig, Ticketer};
 use s2n_quic::provider::congestion_controller::Bbr;
 use s2n_quic::provider::limits::{Limits, Provider};
 use s2n_quic::{
@@ -14,7 +11,7 @@ use s2n_quic::{
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-use crate::global_context::{CERTS, KEY};
+use crate::global_context::TLS_CONFIG;
 
 pub(crate) struct QuicOnlyListener {
   pub(crate) server: Server,
@@ -55,26 +52,12 @@ impl QuicOnlyListener {
 
     let congestion_controller = Bbr::default();
 
-    let certs = CERTS.clone();
-    let key = KEY.clone();
+    let tls_config = match TLS_CONFIG.clone() {
+      Some(tls) => tls,
+      None => return Err(Error::new(ErrorKind::Other, "TLS config is not available")),
+    };
 
-    let mut config = ServerConfig::builder()
-      .with_safe_defaults()
-      .with_no_client_auth()
-      .with_single_cert(certs, key)
-      .map_err(|err| Error::new(ErrorKind::InvalidInput, err))?;
-    config.alpn_protocols = vec!["ftpoq-1".as_bytes().to_vec()];
-
-    if std::env::var_os("SSLKEYLOGFILE").is_some() {
-      config.key_log = Arc::new(rustls::KeyLogFile::new());
-    }
-
-    if let Ok(tick) = Ticketer::new() {
-      config.session_storage = ServerSessionMemoryCache::new(256);
-      config.ticketer = tick;
-    }
-
-    let tls_server = TlsServer::from(config);
+    let tls_server = TlsServer::from(tls_config);
 
     let server = Server::builder()
       .with_congestion_controller(congestion_controller)

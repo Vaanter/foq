@@ -181,10 +181,10 @@ impl Drop for StandardTlsConnectionHandler {
 
 #[cfg(test)]
 mod tests {
+  use rustls::pki_types::ServerName;
   use std::sync::Arc;
   use std::time::Duration;
 
-  use rustls::ServerName;
   use tokio::io::{AsyncBufReadExt, BufReader};
   use tokio::net::TcpStream;
   use tokio::time::timeout;

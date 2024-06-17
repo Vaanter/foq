@@ -1,40 +1,49 @@
 use std::fs::File;
-use std::io;
-use std::io::{BufReader, ErrorKind};
+use std::io::BufReader;
 use std::path::Path;
 
-use rustls::{Certificate, PrivateKey};
-use rustls_pemfile::{certs, ec_private_keys, rsa_private_keys};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls_pemfile::{certs, ec_private_keys, pkcs8_private_keys, rsa_private_keys};
 
-pub(crate) fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
-  let ec = load_ec_keys(path);
-  let rsa = load_rsa_keys(path);
-
-  match (ec, rsa) {
-    (Ok(mut ec_keys), Ok(rsa_keys)) => Ok({
-      ec_keys.extend(rsa_keys);
-      ec_keys
-    }),
-    (Ok(ec_keys), Err(_)) => Ok(ec_keys),
-    (Err(_), Ok(rsa_keys)) => Ok(rsa_keys),
-    (Err(e_ec), Err(_)) => Err(e_ec),
-  }
+pub(crate) fn load_keys(path: &Path) -> Result<Vec<PrivateKeyDer>, anyhow::Error> {
+  load_ec_keys(path)
+    .or_else(|_| load_rsa_pkcks1_keys(path))
+    .or_else(|_| load_pkcs8_keys(path))
 }
 
-pub(crate) fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
+pub(crate) fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, anyhow::Error> {
   certs(&mut BufReader::new(File::open(path)?))
-    .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "invalid cert"))
-    .map(|certs| certs.into_iter().map(Certificate).collect())
+    .map(|cert| {
+      cert.map_err(|e| anyhow::Error::new(e).context("Could not read certificate".to_string()))
+    })
+    .collect()
 }
 
-pub(crate) fn load_ec_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
+pub(crate) fn load_ec_keys(path: &Path) -> Result<Vec<PrivateKeyDer<'static>>, anyhow::Error> {
   ec_private_keys(&mut BufReader::new(File::open(path)?))
-    .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "invalid ec key"))
-    .map(|keys| keys.into_iter().map(PrivateKey).collect())
+    .map(|key| key.map(PrivateKeyDer::Sec1))
+    .map(|key| {
+      key.map_err(|e| anyhow::Error::new(e).context("Could not read EC certificate".to_string()))
+    })
+    .collect()
 }
 
-pub(crate) fn load_rsa_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
+pub(crate) fn load_rsa_pkcks1_keys(
+  path: &Path,
+) -> Result<Vec<PrivateKeyDer<'static>>, anyhow::Error> {
   rsa_private_keys(&mut BufReader::new(File::open(path)?))
-    .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "invalid rsa key"))
-    .map(|keys| keys.into_iter().map(PrivateKey).collect())
+    .map(|key| key.map(PrivateKeyDer::Pkcs1))
+    .map(|key| {
+      key.map_err(|e| anyhow::Error::new(e).context("Could not read RSA certificate".to_string()))
+    })
+    .collect()
+}
+
+pub(crate) fn load_pkcs8_keys(path: &Path) -> Result<Vec<PrivateKeyDer<'static>>, anyhow::Error> {
+  pkcs8_private_keys(&mut BufReader::new(File::open(path)?))
+    .map(|key| key.map(PrivateKeyDer::Pkcs8))
+    .map(|key| {
+      key.map_err(|e| anyhow::Error::new(e).context("Could not read PKCS8 certificate".to_string()))
+    })
+    .collect()
 }

@@ -2,7 +2,7 @@ use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
-use crate::global_context::TLS_ACCEPTOR;
+use crate::global_context::TLS_CONFIG;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::protection_mode::ProtMode;
@@ -29,7 +29,7 @@ pub(crate) async fn prot(
       "Protection mode not available",
     ),
     Ok(ProtMode::Private) => {
-      if TLS_ACCEPTOR.clone().is_some() {
+      if TLS_CONFIG.clone().is_some() {
         properties.prot_mode = ProtMode::Private;
         Reply::new(ReplyCode::CommandOkay, "Protection level set")
       } else {

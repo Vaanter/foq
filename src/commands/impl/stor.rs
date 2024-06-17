@@ -116,6 +116,7 @@ mod tests {
   use std::time::Duration;
 
   use blake3::Hasher;
+  use quinn::crypto::rustls::QuicClientConfig;
   use quinn::TransportConfig;
   use rustls::KeyLogFile;
   use s2n_quic::client::Connect;
@@ -274,8 +275,10 @@ mod tests {
     let mut tls_config = create_tls_client_config("ftpoq-1");
     tls_config.key_log = Arc::new(KeyLogFile::new());
     let mut transport_config = TransportConfig::default();
-    transport_config.keep_alive_interval(Some(Duration::from_secs(10)));
-    let mut client_config = quinn::ClientConfig::new(Arc::new(tls_config));
+    transport_config.keep_alive_interval(Some(Duration::from_secs(5)));
+    let quic_client_config = QuicClientConfig::try_from(tls_config)
+      .expect("Quinn client config should be creatable from rustls config");
+    let mut client_config = quinn::ClientConfig::new(Arc::new(quic_client_config));
     client_config.transport_config(Arc::new(transport_config));
     quinn_client.set_default_client_config(client_config);
 

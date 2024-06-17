@@ -6,11 +6,13 @@ use std::sync::Arc;
 
 use config::Config;
 use once_cell::sync::Lazy;
+use rustls::crypto::aws_lc_rs::Ticketer;
+use rustls::crypto::CryptoProvider;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::ServerSessionMemoryCache;
-use rustls::{Certificate, PrivateKey, Ticketer};
+use rustls::ServerConfig;
 use sqlx::SqlitePool;
 use tokio::sync::OnceCell;
-use tokio_rustls::TlsAcceptor;
 use tracing::{info, warn};
 
 use crate::auth::auth_provider::AuthProvider;
@@ -28,7 +30,7 @@ pub(crate) static CONFIG: Lazy<Config> = Lazy::new(|| {
 });
 
 /// The certificates loaded from a file
-pub(crate) static CERTS: Lazy<Vec<Certificate>> = Lazy::new(|| {
+pub(crate) static CERTS: Lazy<Vec<CertificateDer>> = Lazy::new(|| {
   load_certs(Path::new(
     &CONFIG
       .get_string("certificate_file")
@@ -38,7 +40,7 @@ pub(crate) static CERTS: Lazy<Vec<Certificate>> = Lazy::new(|| {
 });
 
 /// The key loaded from a file
-pub(crate) static KEY: Lazy<PrivateKey> = Lazy::new(|| {
+pub(crate) static KEY: Lazy<PrivateKeyDer> = Lazy::new(|| {
   load_keys(Path::new(
     &CONFIG
       .get_string("key_file")
@@ -46,8 +48,8 @@ pub(crate) static KEY: Lazy<PrivateKey> = Lazy::new(|| {
   ))
   .expect("Unable to load keys! Cannot start.")
   .first()
-  .unwrap()
-  .clone()
+  .expect("At least one key expected")
+  .clone_key()
 });
 
 /// The SQLite connection
@@ -59,11 +61,15 @@ pub(crate) static DB_LAZY: Lazy<SqlitePool> = Lazy::new(|| {
   SqlitePool::connect_lazy(&db_url).unwrap()
 });
 
-pub(crate) static TLS_ACCEPTOR: Lazy<Option<TlsAcceptor>> = Lazy::new(|| {
-  let mut config = match rustls::ServerConfig::builder()
-    .with_safe_defaults()
+pub(crate) static TLS_CONFIG: Lazy<Option<Arc<ServerConfig>>> = Lazy::new(|| {
+  if CryptoProvider::get_default().is_none() {
+    rustls::crypto::aws_lc_rs::default_provider()
+      .install_default()
+      .expect("CryptoProvider should install successfuly");
+  }
+  let mut config = match ServerConfig::builder()
     .with_no_client_auth()
-    .with_single_cert(CERTS.clone(), KEY.clone())
+    .with_single_cert(CERTS.clone(), KEY.clone_key())
     .map_err(|err| Error::new(ErrorKind::InvalidInput, err))
   {
     Ok(c) => c,
@@ -72,7 +78,7 @@ pub(crate) static TLS_ACCEPTOR: Lazy<Option<TlsAcceptor>> = Lazy::new(|| {
       return None;
     }
   };
-  config.alpn_protocols = vec!["ftp".as_bytes().to_vec()];
+  config.alpn_protocols = vec!["ftpoq-1".as_bytes().to_vec()];
   if let Ok(tick) = Ticketer::new() {
     config.session_storage = ServerSessionMemoryCache::new(256);
     config.ticketer = tick;
@@ -81,7 +87,7 @@ pub(crate) static TLS_ACCEPTOR: Lazy<Option<TlsAcceptor>> = Lazy::new(|| {
   if std::env::var_os("SSLKEYLOGFILE").is_some() {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
   }
-  Some(TlsAcceptor::from(Arc::new(config)))
+  Some(Arc::new(config))
 });
 
 pub(crate) static AUTH_PROVIDER: OnceCell<AuthProvider> = OnceCell::const_new();
