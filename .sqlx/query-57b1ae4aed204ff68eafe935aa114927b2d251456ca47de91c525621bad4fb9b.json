@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO users(username, password)\nVALUES ('testuser1', '$argon2id$v=19$m=19456,t=2,p=1$xS9QG9glzsQ9R7Er/L/zQw$kFDa3+IQ+baHI445Vs5RRdFEHf9g4KU09r5HYMfX+ZM');\n\nINSERT INTO views(user_id, root, label, permissions)\nVALUES ((SELECT user_id FROM users WHERE username = 'testuser1'), 'C:\\', 'c', 'r;l;w;c') ON CONFLICT DO NOTHING;\n\nINSERT INTO views(user_id, root, label, permissions)\nVALUES ((SELECT user_id FROM users WHERE username = 'testuser1'), '/', 'root', 'r;l;w;c') ON CONFLICT DO NOTHING;\n\nINSERT INTO users(username, password)\nVALUES ('testuser2', '$argon2id$v=19$m=19456,t=2,p=1$2oBXOgFkwft9WAyunU1/eA$tLgFjcfaQ3WBxhybAkQTEdVRafgLJTsl3JzY2gUqi5A');\n\nINSERT INTO users(username, password)\nVALUES ('testuser3', '$argon2id$v=19$m=19456,t=2,p=1$wdd9R3bV4juf5+zBb3qmig$TAMrnpTWqd62b0f0Wp8tSIvpCWSQI2x0OW/8yPd/KGg');\n\nINSERT INTO views(user_id, root, label, permissions)\nVALUES ((SELECT user_id FROM users WHERE username = 'testuser3'), 'ROOT', 'LABEL', 'INVALID');",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "57b1ae4aed204ff68eafe935aa114927b2d251456ca47de91c525621bad4fb9b"
+}
