@@ -16,6 +16,7 @@ static LINES: Lazy<Vec<String>> = Lazy::new(|| {
   lines
 });
 
+#[tracing::instrument(skip(reply_sender))]
 pub(crate) async fn feat(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(command.command, Commands::Feat);
   reply_sender

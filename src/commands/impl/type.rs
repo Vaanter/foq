@@ -7,6 +7,7 @@ use crate::session::command_processor::CommandProcessor;
 use crate::session::data_type::{DataType, SubType};
 use std::sync::Arc;
 
+#[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn r#type(
   command: &Command,
   command_processor: Arc<CommandProcessor>,

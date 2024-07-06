@@ -7,6 +7,7 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
 use std::sync::Arc;
 
+#[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn cdup(
   command: &Command,
   command_processor: Arc<CommandProcessor>,

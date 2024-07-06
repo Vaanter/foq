@@ -68,7 +68,7 @@ impl StandardDataChannelWrapper {
   ///
   /// A [`SocketAddr`] the server listens on.
   ///
-  #[tracing::instrument(skip_all)]
+  #[tracing::instrument(skip(self))]
   async fn create_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
     debug!("Creating passive listener");
     let listener = TcpListener::bind(self.addr)

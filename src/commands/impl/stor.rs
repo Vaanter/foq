@@ -15,6 +15,7 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 use crate::session::command_processor::CommandProcessor;
 
+#[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn stor(
   command: &Command,
   command_processor: Arc<CommandProcessor>,

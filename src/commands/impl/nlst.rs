@@ -15,6 +15,7 @@ use crate::handlers::reply_sender::ReplySend;
 use crate::io::entry_data::EntryType;
 use crate::session::command_processor::CommandProcessor;
 
+#[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn nlst(
   command: &Command,
   command_processor: Arc<CommandProcessor>,

@@ -5,6 +5,7 @@ use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use std::sync::Arc;
 
+#[tracing::instrument(skip(reply_sender))]
 pub(crate) async fn noop(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(Commands::Noop, command.command);
   reply_sender

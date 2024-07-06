@@ -8,6 +8,7 @@ use crate::session::command_processor::CommandProcessor;
 use std::sync::Arc;
 use tracing::info;
 
+#[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn rmda(
   command: &Command,
   command_processor: Arc<CommandProcessor>,
