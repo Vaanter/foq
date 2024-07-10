@@ -1,6 +1,6 @@
 use std::fs::OpenOptions;
 use std::str::FromStr;
-
+use chrono::Local;
 use tracing::Level;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -33,10 +33,11 @@ mod utils;
 ///
 #[tokio::main]
 async fn main() {
+  let log_file_name = format_log_file_name();
   let mut log_file_options = OpenOptions::new();
   log_file_options.write(true).truncate(true).create(true);
   let log_file = log_file_options
-    .open("foq.log")
+    .open(log_file_name)
     .expect("Log file should be accessible");
   let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
   let log_level =
@@ -53,4 +54,10 @@ async fn main() {
   Registry::default().with(fmt_layer).init();
 
   runner::run().await;
+}
+
+fn format_log_file_name() -> String {
+  let name = CONFIG.get_string("logfile").unwrap_or(String::from("foq-%Y%m%d%H%M.log"));
+  let current_time = Local::now();
+  return current_time.format(&name).to_string();
 }
