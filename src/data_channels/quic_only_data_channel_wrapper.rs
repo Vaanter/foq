@@ -131,10 +131,6 @@ impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
     }
   }
 
-  fn get_addr(&self) -> &SocketAddr {
-    &self.addr
-  }
-
   fn abort(&self) {
     self.abort_token.cancel();
   }
