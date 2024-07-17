@@ -1,6 +1,6 @@
+use chrono::{DateTime, Local};
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::fs::File;
 use tokio::io;
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
@@ -13,6 +13,7 @@ use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::io::entry_data::EntryData;
 use crate::io::error::IoError;
+use crate::io::timeval::format_timeval;
 
 #[cfg(not(test))]
 pub const ACQUIRE_TIMEOUT: u64 = 15;
@@ -114,6 +115,20 @@ pub(crate) fn get_delete_reply(dele_result: Result<(), IoError>, directory: bool
     (Ok(_), true) => Reply::new(ReplyCode::RequestedFileActionOkay, "File deleted"),
     (Ok(_), false) => Reply::new(ReplyCode::RequestedFileActionOkay, "Folder deleted"),
     (Err(e), _) => map_error_to_reply(e),
+  }
+}
+
+pub(crate) fn get_modify_time_reply(
+  modify_result: Result<(), IoError>,
+  timeval: &DateTime<Local>,
+  path: &str,
+) -> Reply {
+  match modify_result {
+    Ok(_) => Reply::new(
+      ReplyCode::FileStatus,
+      format!("Modify={}; {}", format_timeval(timeval), path),
+    ),
+    Err(e) => map_error_to_reply(e),
   }
 }
 

@@ -2,12 +2,13 @@
 //! single location a user can access. This can be a disk partition or a specific directory.
 //! The user has a set of permissions which specify which operations are permitted.
 
-use path_clean::PathClean;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, ReadDir};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Local};
+use path_clean::PathClean;
 use tokio::fs::{File, OpenOptions};
 use tracing::{debug, trace, warn};
 use unicode_segmentation::UnicodeSegmentation;
@@ -15,7 +16,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
-use crate::io::open_options_flags::OpenOptionsWrapper;
+use crate::io::open_options_flags::{OpenOptionsWrapper, OpenOptionsWrapperBuilder};
 
 /// For documentation about file system view, see [`module`] documentation.
 ///
@@ -382,6 +383,32 @@ impl FileSystemView {
     }
   }
 
+  pub(crate) async fn change_modification_time(
+    &self,
+    new_time: DateTime<Local>,
+    path: impl Into<String>,
+  ) -> Result<(), IoError> {
+    if !self.permissions.contains(&UserPermission::Execute)
+      || !self.permissions.contains(&UserPermission::Write)
+    {
+      return Err(IoError::PermissionError);
+    }
+
+    self
+      .open_file(
+        path,
+        OpenOptionsWrapperBuilder::default()
+          .write(true)
+          .build()
+          .unwrap(),
+      )
+      .await?
+      .into_std()
+      .await
+      .set_modified(new_time.into())
+      .map_err(Self::map_error)
+  }
+
   /// Creates a directory listing.
   ///
   /// This function lists all files and directories at `path` as [`EntryData`]. If the listing
@@ -592,7 +619,10 @@ impl FileSystemView {
 pub(crate) mod tests {
   use std::collections::HashSet;
   use std::env::{current_dir, temp_dir};
+  use std::fs::File;
+  use std::ops::Sub;
 
+  use chrono::{DateTime, Local, TimeDelta};
   use uuid::Uuid;
 
   use crate::auth::user_permission::UserPermission;
@@ -840,7 +870,6 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = root.join(&file_name);
-    println!("Test file path: {file_path:?}");
     touch(&file_path).expect("Test file must exist");
 
     let _cleanup = FileCleanup::new(&file_path);
@@ -1125,6 +1154,84 @@ pub(crate) mod tests {
       panic!("Expected Permission Error, got: {:?}", result);
     };
     assert!(dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = view
+      .change_modification_time(timeval, format!("/{label}/{file_name}"))
+      .await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    let modification_time: DateTime<Local> = File::open(&file_path)
+      .unwrap()
+      .metadata()
+      .unwrap()
+      .modified()
+      .unwrap()
+      .into();
+    assert_eq!(timeval, modification_time);
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_relative_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = view.change_modification_time(timeval, file_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    let modification_time: DateTime<Local> = File::open(&file_path)
+      .unwrap()
+      .metadata()
+      .unwrap()
+      .modified()
+      .unwrap()
+      .into();
+    assert_eq!(timeval, modification_time);
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_directory_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+    let root = temp_dir();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions);
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = view.change_modification_time(timeval, dir_name).await;
+    let Err(IoError::NotAFileError) = result else {
+      panic!("Expected NotAFile Error, got: {:?}", result);
+    };
   }
 
   #[test]

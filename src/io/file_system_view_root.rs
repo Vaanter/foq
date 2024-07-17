@@ -3,9 +3,9 @@
 //!
 //! [`File system view`]: crate::io::file_system_view
 
+use chrono::{DateTime, Local};
 use std::collections::BTreeMap;
 use std::time::SystemTime;
-
 use tokio::fs::File;
 use tracing::debug;
 
@@ -524,6 +524,31 @@ impl FileSystemViewRoot {
     }
   }
 
+  pub(crate) async fn change_modification_time(
+    &self,
+    new_time: DateTime<Local>,
+    path: impl Into<String>,
+  ) -> Result<(), IoError> {
+    let mut path = path.into();
+    if self.file_system_views.is_none() {
+      return Err(IoError::UserError);
+    }
+
+    if path.is_empty() || path == "/" {
+      return Err(IoError::InvalidPathError(String::from(
+        "Cannot change modification time of current directory!",
+      )));
+    }
+
+    let view = self.find_view(&mut path);
+
+    if let Some(v) = view {
+      v.change_modification_time(new_time, &path).await
+    } else {
+      Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
+    }
+  }
+
   fn find_view(&self, path: &mut String) -> Option<&FileSystemView> {
     let p = path.clone();
     let mut parts = p.split('/');
@@ -542,8 +567,11 @@ impl FileSystemViewRoot {
 
 #[cfg(test)]
 mod tests {
+  use chrono::{DateTime, Local, TimeDelta};
   use std::collections::{BTreeMap, HashSet};
   use std::env::temp_dir;
+  use std::fs::File;
+  use std::ops::Sub;
   use uuid::Uuid;
 
   use crate::auth::user_permission::UserPermission;
@@ -1652,6 +1680,166 @@ mod tests {
       panic!("Expected Permission error, got: {:?}", result);
     };
     assert!(dir_path.exists());
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_relative_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    root
+      .change_working_directory(format!("/{}", label1))
+      .unwrap();
+
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root1.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = root.change_modification_time(timeval, file_name).await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    let modification_time: DateTime<Local> = File::open(&file_path)
+      .unwrap()
+      .metadata()
+      .unwrap()
+      .modified()
+      .unwrap()
+      .into();
+    assert_eq!(timeval, modification_time);
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_relative_with_label_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root1.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = root
+      .change_modification_time(timeval, format!("{}/{}", label1, file_name))
+      .await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    let modification_time: DateTime<Local> = File::open(&file_path)
+      .unwrap()
+      .metadata()
+      .unwrap()
+      .modified()
+      .unwrap()
+      .into();
+    assert_eq!(timeval, modification_time);
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_absolute_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root1.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = root
+      .change_modification_time(timeval, format!("/{}/{}", label1, file_name))
+      .await;
+    let Ok(()) = result else {
+      panic!("Expected OK, got: {:?}", result);
+    };
+    let modification_time: DateTime<Local> = File::open(&file_path)
+      .unwrap()
+      .metadata()
+      .unwrap()
+      .modified()
+      .unwrap()
+      .into();
+    assert_eq!(timeval, modification_time);
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_no_permission_test() {
+    let permissions = HashSet::new();
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let file_path = root1.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let _cleanup = FileCleanup::new(&file_path);
+
+    assert!(file_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = root
+      .change_modification_time(timeval, format!("/{}/{}", label1, file_name))
+      .await;
+    let Err(IoError::PermissionError) = result else {
+      panic!("Expected Permission error, got: {:?}", result);
+    };
+  }
+
+  #[tokio::test]
+  async fn change_modification_time_folder_test() {
+    let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
+
+    let root1 = temp_dir();
+    let label1 = "test_files";
+    let view1 = FileSystemView::new(root1.clone(), label1, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root1.join(&dir_name);
+    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+
+    let _cleanup = DirCleanup::new(&dir_path);
+
+    assert!(dir_path.exists());
+    let timeval = Local::now().sub(TimeDelta::hours(4));
+    let result = root
+      .change_modification_time(timeval, format!("/{}/{}", label1, dir_name))
+      .await;
+    let Err(IoError::NotAFileError) = result else {
+      panic!("Expected NotAFile Error, got: {:?}", result);
+    };
   }
 
   pub(crate) fn create_root(views: Vec<FileSystemView>) -> BTreeMap<String, FileSystemView> {
