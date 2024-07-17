@@ -1,6 +1,6 @@
+use chrono::Local;
 use std::fs::OpenOptions;
 use std::str::FromStr;
-use chrono::Local;
 use tracing::Level;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -57,7 +57,9 @@ async fn main() {
 }
 
 fn format_log_file_name() -> String {
-  let name = CONFIG.get_string("logfile").unwrap_or(String::from("foq-%Y%m%d%H%M.log"));
+  let name = CONFIG
+    .get_string("logfile")
+    .unwrap_or(String::from("foq-%Y%m%d%H%M.log"));
   let current_time = Local::now();
   return current_time.format(&name).to_string();
 }

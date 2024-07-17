@@ -259,7 +259,10 @@ impl FileSystemViewRoot {
   ///
   #[tracing::instrument(skip(self, path))]
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
-    let path = path.into();
+    let mut path = path.into();
+    if path.is_empty() {
+      path = self.get_current_working_directory();
+    }
     debug!("Listing directory, path: {}", path);
     if self.file_system_views.is_none() {
       // not logged in

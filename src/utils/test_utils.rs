@@ -122,6 +122,7 @@ impl<'a> DirCleanup<'a> {
 
 impl<'a> Drop for DirCleanup<'a> {
   fn drop(&mut self) {
+    println!("Cleaning up directory '{:?}'", self.directory_path);
     if let Err(remove_result) = remove_dir_all(self.directory_path) {
       eprintln!("Failed to remove directory: {}", remove_result);
     }
@@ -139,6 +140,7 @@ impl<'a> FileCleanup<'a> {
 
 impl<'a> Drop for FileCleanup<'a> {
   fn drop(&mut self) {
+    println!("Cleaning up file '{:?}'", self.0);
     if let Err(e) = remove_file(self.0) {
       eprintln!("Failed to remove: {:?}, {}", self.0, e);
     };
@@ -479,8 +481,8 @@ pub(crate) fn setup_s2n_client() -> Client {
 
 pub(crate) fn setup_tracing() {
   let subscriber = tracing_subscriber::fmt()
-    // .with_env_filter(format!("foq={}", Level::TRACE))
-    .with_max_level(Level::INFO)
+    .with_env_filter(format!("foq={}", Level::TRACE))
+    // .with_max_level(Level::INFO)
     .with_file(true)
     .with_line_number(true)
     .with_thread_ids(true)

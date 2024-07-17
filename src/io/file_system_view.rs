@@ -169,7 +169,7 @@ impl FileSystemView {
       }
     } else if path == "~" || path == "/" {
       self.display_path = format!("/{}", self.label);
-      self.current_path = self.root.clone();
+      self.current_path.clone_from(&self.root);
     } else if let Some(stripped) = path.strip_prefix('/') {
       let new_current = match self.root.join(stripped).canonicalize() {
         Ok(n) => n,
