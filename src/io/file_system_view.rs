@@ -273,11 +273,11 @@ impl FileSystemView {
     path: impl Into<String>,
     options: OpenOptionsWrapper,
   ) -> Result<File, IoError> {
-    if options.read() && !self.permissions.contains(&UserPermission::Read)
-      || (options.write() && !self.permissions.contains(&UserPermission::Write))
-      || (options.create() && !self.permissions.contains(&UserPermission::Create))
-      || (options.append()) && !self.permissions.contains(&UserPermission::Append)
-      || (options.truncate() && !self.permissions.contains(&UserPermission::Write))
+    if options.read && !self.permissions.contains(&UserPermission::Read)
+      || (options.write && !self.permissions.contains(&UserPermission::Write))
+      || (options.create && !self.permissions.contains(&UserPermission::Create))
+      || (options.append && !self.permissions.contains(&UserPermission::Append))
+      || (options.truncate && !self.permissions.contains(&UserPermission::Write))
     {
       return Err(IoError::PermissionError);
     }
