@@ -22,6 +22,7 @@ pub enum Commands {
   Md5,
   Mdtm,
   Mfmt,
+  Mfct,
   Mkd,
   Mlsd,
   Mode,
