@@ -3,8 +3,8 @@
 //!
 //! [`File system view`]: crate::io::file_system_view
 
-use chrono::{DateTime, Local};
 use std::collections::BTreeMap;
+use std::fs::FileTimes;
 use std::time::SystemTime;
 use tokio::fs::File;
 use tracing::debug;
@@ -527,9 +527,9 @@ impl FileSystemViewRoot {
     }
   }
 
-  pub(crate) async fn change_modification_time(
+  pub(crate) async fn change_file_times(
     &self,
-    new_time: DateTime<Local>,
+    new_time: FileTimes,
     path: impl Into<String>,
   ) -> Result<(), IoError> {
     let mut path = path.into();
@@ -546,7 +546,7 @@ impl FileSystemViewRoot {
     let view = self.find_view(&mut path);
 
     if let Some(v) = view {
-      v.change_modification_time(new_time, &path).await
+      v.change_file_times(new_time, &path).await
     } else {
       Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
@@ -573,7 +573,7 @@ mod tests {
   use chrono::{DateTime, Local, TimeDelta};
   use std::collections::{BTreeMap, HashSet};
   use std::env::temp_dir;
-  use std::fs::File;
+  use std::fs::{File, FileTimes};
   use std::ops::Sub;
   use uuid::Uuid;
 
@@ -1686,7 +1686,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn change_modification_time_relative_test() {
+  async fn change_file_times_relative_test() {
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1707,7 +1707,8 @@ mod tests {
 
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
-    let result = root.change_modification_time(timeval, file_name).await;
+    let new_time = FileTimes::new().set_modified(timeval.into());
+    let result = root.change_file_times(new_time, file_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1722,7 +1723,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn change_modification_time_relative_with_label_test() {
+  async fn change_file_times_relative_with_label_test() {
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1740,8 +1741,9 @@ mod tests {
 
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
+    let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_modification_time(timeval, format!("{}/{}", label1, file_name))
+      .change_file_times(new_time, format!("{}/{}", label1, file_name))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1757,7 +1759,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn change_modification_time_absolute_test() {
+  async fn change_file_times_absolute_test() {
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1775,8 +1777,9 @@ mod tests {
 
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
+    let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_modification_time(timeval, format!("/{}/{}", label1, file_name))
+      .change_file_times(new_time, format!("/{}/{}", label1, file_name))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1792,7 +1795,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn change_modification_time_no_permission_test() {
+  async fn change_file_times_no_permission_test() {
     let permissions = HashSet::new();
 
     let root1 = temp_dir();
@@ -1810,8 +1813,9 @@ mod tests {
 
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
+    let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_modification_time(timeval, format!("/{}/{}", label1, file_name))
+      .change_file_times(new_time, format!("/{}/{}", label1, file_name))
       .await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission error, got: {:?}", result);
@@ -1819,7 +1823,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn change_modification_time_folder_test() {
+  async fn change_file_times_folder_test() {
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1837,8 +1841,9 @@ mod tests {
 
     assert!(dir_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
+    let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_modification_time(timeval, format!("/{}/{}", label1, dir_name))
+      .change_file_times(new_time, format!("/{}/{}", label1, dir_name))
       .await;
     let Err(IoError::NotAFileError) = result else {
       panic!("Expected NotAFile Error, got: {:?}", result);

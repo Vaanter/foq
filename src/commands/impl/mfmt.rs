@@ -1,12 +1,12 @@
+use std::fs::FileTimes;
 use std::sync::Arc;
 
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
-use crate::commands::r#impl::shared::get_modify_time_reply;
+use crate::commands::r#impl::shared::{get_modify_time_reply, parse_change_time};
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
-use crate::io::timeval::parse_timeval;
 use crate::session::command_processor::CommandProcessor;
 
 #[tracing::instrument(skip(command_processor, reply_sender))]
@@ -26,36 +26,14 @@ pub(crate) async fn mfmt(
     return;
   }
 
-  let (timeval, path) = match command.argument.split_once(' ') {
-    Some((timeval, path)) => {
-      let timeval = match parse_timeval(timeval) {
-        Ok(Some(t)) => t,
-        Err(_) | Ok(None) => {
-          reply_sender
-            .send_control_message(Reply::new(
-              ReplyCode::SyntaxErrorInParametersOrArguments,
-              "Failed to parse modification time.".to_string(),
-            ))
-            .await;
-          return;
-        }
-      };
-      (timeval, path)
-    }
-    None => {
-      reply_sender
-        .send_control_message(Reply::new(
-          ReplyCode::SyntaxErrorInParametersOrArguments,
-          "Modification time or path not specified",
-        ))
-        .await;
-      return;
-    }
+  let (timeval, path) = match parse_change_time(&command.argument) {
+    Ok(parsed) => parsed,
+    Err(r) => return reply_sender.send_control_message(r).await,
   };
 
   let result = session_properties
     .file_system_view_root
-    .change_modification_time(timeval, path)
+    .change_file_times(FileTimes::new().set_modified(timeval.into()), path)
     .await;
 
   reply_sender

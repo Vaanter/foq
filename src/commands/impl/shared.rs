@@ -13,7 +13,7 @@ use crate::commands::reply_code::ReplyCode;
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::io::entry_data::EntryData;
 use crate::io::error::IoError;
-use crate::io::timeval::format_timeval;
+use crate::io::timeval::{format_timeval, parse_timeval};
 
 #[cfg(not(test))]
 pub const ACQUIRE_TIMEOUT: u64 = 15;
@@ -41,6 +41,31 @@ pub(crate) async fn acquire_data_channel(
     Err(e) => {
       info!("Data channel is not available! {e}");
       Err(error_reply)
+    }
+  }
+}
+
+pub(crate) fn parse_change_time(input: &str) -> Result<(DateTime<Local>, &str), Reply> {
+  match input.split_once(' ') {
+    Some((timeval, path)) => {
+      let timeval = match parse_timeval(timeval) {
+        Ok(Some(t)) => t,
+        Err(_) | Ok(None) => {
+          let reply = Reply::new(
+            ReplyCode::SyntaxErrorInParametersOrArguments,
+            "Failed to parse modification time.".to_string(),
+          );
+          return Err(reply);
+        }
+      };
+      Ok((timeval, path))
+    }
+    None => {
+      let reply = Reply::new(
+        ReplyCode::SyntaxErrorInParametersOrArguments,
+        "Modification time or path not specified",
+      );
+      Err(reply)
     }
   }
 }
