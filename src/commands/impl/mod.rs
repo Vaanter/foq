@@ -6,6 +6,7 @@ pub(crate) mod cwd;
 pub(crate) mod dele;
 pub(crate) mod feat;
 pub(crate) mod list;
+#[cfg(windows)]
 pub(crate) mod mfct;
 pub(crate) mod mfmt;
 pub(crate) mod mkd;

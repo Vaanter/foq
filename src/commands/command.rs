@@ -12,6 +12,7 @@ use crate::commands::r#impl::cwd::cwd;
 use crate::commands::r#impl::dele::dele;
 use crate::commands::r#impl::feat::feat;
 use crate::commands::r#impl::list::list;
+#[cfg(windows)]
 use crate::commands::r#impl::mfct::mfct;
 use crate::commands::r#impl::mfmt::mfmt;
 use crate::commands::r#impl::mkd::mkd;
@@ -67,6 +68,7 @@ impl Command {
       Commands::Dele => dele(self, command_processor, reply_sender).await,
       Commands::Feat => feat(self, reply_sender).await,
       Commands::List => list(self, command_processor, reply_sender).await,
+      #[cfg(windows)]
       Commands::Mfct => mfct(self, command_processor, reply_sender).await,
       Commands::Mfmt => mfmt(self, command_processor, reply_sender).await,
       Commands::Mkd => mkd(self, command_processor, reply_sender).await,
