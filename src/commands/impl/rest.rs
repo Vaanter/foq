@@ -4,7 +4,9 @@ use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use tracing::debug;
 
 #[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn rest(
@@ -24,7 +26,7 @@ pub(crate) async fn rest(
     return;
   }
 
-  let mut session_properties = command_processor.session_properties.write().await;
+  let session_properties = command_processor.session_properties.read().await;
 
   if !session_properties.is_logged_in() {
     return reply_sender
@@ -44,18 +46,22 @@ pub(crate) async fn rest(
     }
   };
 
-  session_properties.offset = offset;
+  session_properties.offset.store(offset, Ordering::SeqCst);
 
   reply_sender
     .send_control_message(Reply::new(
       ReplyCode::RequestedFileActionPendingFurtherInformation,
-      format!("Restarting at {}", session_properties.offset),
+      format!(
+        "Restarting at {}",
+        session_properties.offset.load(Ordering::Relaxed)
+      ),
     ))
     .await;
 }
 
 #[cfg(test)]
 mod tests {
+  use std::sync::atomic::Ordering;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -94,7 +100,12 @@ mod tests {
     .await;
     assert_eq!(
       123,
-      command_processor.session_properties.read().await.offset
+      command_processor
+        .session_properties
+        .read()
+        .await
+        .offset
+        .load(Ordering::Relaxed)
     );
   }
 
@@ -117,7 +128,15 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
-    assert_eq!(0, command_processor.session_properties.read().await.offset);
+    assert_eq!(
+      0,
+      command_processor
+        .session_properties
+        .read()
+        .await
+        .offset
+        .load(Ordering::Relaxed)
+    );
   }
 
   #[tokio::test]
@@ -143,7 +162,15 @@ mod tests {
       None,
     )
     .await;
-    assert_eq!(0, command_processor.session_properties.read().await.offset);
+    assert_eq!(
+      0,
+      command_processor
+        .session_properties
+        .read()
+        .await
+        .offset
+        .load(Ordering::Relaxed)
+    );
   }
 
   #[tokio::test]
@@ -169,6 +196,14 @@ mod tests {
       None,
     )
     .await;
-    assert_eq!(0, command_processor.session_properties.read().await.offset);
+    assert_eq!(
+      0,
+      command_processor
+        .session_properties
+        .read()
+        .await
+        .offset
+        .load(Ordering::Relaxed)
+    );
   }
 }

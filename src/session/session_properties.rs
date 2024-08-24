@@ -1,15 +1,15 @@
 //! Contains properties used throughout a session, such as username, datatype file system views
 //! and other.
 
-use std::default::Default;
-use std::fmt::Debug;
-
 use crate::auth::auth_provider::AuthProvider;
 use crate::auth::login_form::LoginForm;
 use crate::io::file_system_view_root::FileSystemViewRoot;
 use crate::session::data_type::DataType;
 use crate::session::protection_mode::ProtMode;
 use crate::session::transfer_mode::TransferMode;
+use std::default::Default;
+use std::fmt::Debug;
+use std::sync::atomic::AtomicU64;
 
 /// Currently implemented properties.
 #[allow(unused)]
@@ -20,7 +20,7 @@ pub(crate) struct SessionProperties {
   pub(crate) transfer_mode: TransferMode,
   pub(crate) data_type: DataType,
   pub(crate) login_form: LoginForm,
-  pub(crate) offset: u64,
+  pub(crate) offset: AtomicU64,
   pub(crate) utf8: bool,
   pub(crate) prot_mode: ProtMode,
   pub(crate) pbsz: Option<u32>,

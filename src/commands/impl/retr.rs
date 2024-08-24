@@ -1,6 +1,6 @@
 use std::io::{ErrorKind, SeekFrom};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufReader};
 use tokio::select;
 use tracing::{debug, info, warn};
@@ -24,7 +24,7 @@ pub(crate) async fn retr(
 ) {
   debug_assert_eq!(command.command, Commands::Retr);
 
-  let mut session_properties = command_processor.session_properties.write().await;
+  let session_properties = command_processor.session_properties.read().await;
 
   if command.argument.is_empty() {
     return reply_sender
@@ -78,18 +78,18 @@ pub(crate) async fn retr(
     ))
     .await;
 
-  if session_properties.offset > 0 {
-    debug!("Setting cursor to offset: {}", session_properties.offset);
-    if let Err(e) = file.seek(SeekFrom::Start(session_properties.offset)).await {
+  let offset = session_properties.offset.swap(0, Ordering::SeqCst);
+  if offset > 0 {
+    debug!("Setting cursor to offset: {}", offset);
+    if let Err(e) = file.seek(SeekFrom::Start(offset)).await {
       warn!(
         "Failed to seek file {} to offset {}. Error: {}",
-        &command.argument, session_properties.offset, e
+        &command.argument, offset, e
       );
     };
   }
 
-  debug!("Sending file data, offset: {}!", session_properties.offset);
-  session_properties.offset = 0;
+  debug!("Sending file data, offset: {}!", offset);
 
   let mut buf = BufReader::with_capacity(TRANSFER_BUFFER_SIZE, &mut file);
   let transfer = copy_data(&mut buf, &mut data_channel);
