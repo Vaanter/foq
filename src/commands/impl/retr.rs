@@ -122,9 +122,6 @@ mod tests {
   use std::time::Duration;
 
   use blake3::Hasher;
-  use quinn::crypto::rustls::QuicClientConfig;
-  use quinn::TransportConfig;
-  use rustls::KeyLogFile;
   use s2n_quic::client::Connect;
   use tokio::fs::OpenOptions;
   use tokio::io::{AsyncRead, AsyncReadExt};
@@ -226,17 +223,8 @@ mod tests {
       setup_transfer_command_processor(wrapper, root)
     });
 
-    let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
-
-    let mut tls_config = create_tls_client_config("ftpoq-1");
-    tls_config.key_log = Arc::new(KeyLogFile::new());
-    let mut transport_config = TransportConfig::default();
-    transport_config.keep_alive_interval(Some(Duration::from_secs(15)));
-    let quic_client_config = QuicClientConfig::try_from(tls_config)
-      .expect("Quinn client config should be creatable from rustls config");
-    let mut client_config = quinn::ClientConfig::new(Arc::new(quic_client_config));
-    client_config.transport_config(Arc::new(transport_config));
-    quinn_client.set_default_client_config(client_config);
+    let tls_config = create_tls_client_config("ftpoq-1");
+    let quinn_client = setup_quinn_client(tls_config);
 
     let connection = match quinn_client.connect(addr, "localhost").unwrap().await {
       Ok(conn) => conn,

@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use derive_builder::Builder;
+use quinn::crypto::rustls::QuicClientConfig;
+use quinn::{Endpoint, TransportConfig, VarInt};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -395,6 +397,7 @@ pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
     .with_custom_certificate_verifier(Arc::new(NoCertificateVerification::new()))
     .with_no_client_auth();
   client_config.alpn_protocols = vec![alpn.as_bytes().to_vec()];
+  client_config.key_log = Arc::new(KeyLogFile::new());
   client_config
 }
 
@@ -456,8 +459,7 @@ pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(
 }
 
 pub(crate) fn setup_s2n_client() -> Client {
-  let mut tls_config = create_tls_client_config("ftpoq-1");
-  tls_config.key_log = Arc::new(KeyLogFile::new());
+  let tls_config = create_tls_client_config("ftpoq-1");
   let tls_client = TlsClient::from(tls_config);
 
   let io = IoBuilder::default()
@@ -477,6 +479,19 @@ pub(crate) fn setup_s2n_client() -> Client {
     .expect("Client requires valid I/O settings!")
     .start()
     .expect("Client must be able to start")
+}
+
+pub(crate) fn setup_quinn_client(tls_config: ClientConfig) -> Endpoint {
+  let mut quinn_client = Endpoint::client(LOCALHOST).unwrap();
+  let mut transport_config = TransportConfig::default();
+  transport_config.keep_alive_interval(Some(Duration::from_secs(15)));
+  transport_config.max_idle_timeout(Some(VarInt::from(300_000u32).into()));
+  let quic_client_config = QuicClientConfig::try_from(tls_config)
+    .expect("Quinn client config should be creatable from rustls config");
+  let mut client_config = quinn::ClientConfig::new(Arc::new(quic_client_config));
+  client_config.transport_config(Arc::new(transport_config));
+  quinn_client.set_default_client_config(client_config);
+  quinn_client
 }
 
 pub(crate) fn setup_tracing() {

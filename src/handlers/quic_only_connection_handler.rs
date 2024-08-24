@@ -207,8 +207,6 @@ impl Drop for QuicOnlyConnectionHandler {
 
 #[cfg(test)]
 mod tests {
-  use quinn::crypto::rustls::QuicClientConfig;
-  use std::sync::Arc;
   use std::time::Duration;
 
   use s2n_quic::client::Connect;
@@ -275,13 +273,8 @@ mod tests {
     let token = CancellationToken::new();
     let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
-    let client_config = create_tls_client_config("ftpoq-1");
-
-    let mut quinn_client = quinn::Endpoint::client(LOCALHOST).unwrap();
-
-    let quic_client_config = QuicClientConfig::try_from(client_config)
-      .expect("Quinn client config should be creatable from rustls config");
-    quinn_client.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_client_config)));
+    let tls_config = create_tls_client_config("ftpoq-1");
+    let quinn_client = setup_quinn_client(tls_config);
 
     let connection = match quinn_client.connect(addr, "localhost").unwrap().await {
       Ok(conn) => conn,
