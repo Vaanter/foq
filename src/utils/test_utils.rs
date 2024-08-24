@@ -5,6 +5,7 @@ use std::io::Error;
 use std::iter::Iterator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -494,7 +495,13 @@ pub(crate) fn setup_quinn_client(tls_config: ClientConfig) -> Endpoint {
   quinn_client
 }
 
+static TRACING_SETUP: AtomicBool = AtomicBool::new(false);
+
 pub(crate) fn setup_tracing() {
+  if TRACING_SETUP.load(Ordering::SeqCst) {
+    return;
+  }
+  TRACING_SETUP.swap(true, Ordering::SeqCst);
   let subscriber = tracing_subscriber::fmt()
     .with_env_filter(format!("foq={}", Level::TRACE))
     // .with_max_level(Level::INFO)
@@ -512,5 +519,5 @@ pub(crate) fn touch(path: &Path) -> io::Result<()> {
     .truncate(true)
     .write(true)
     .open(path)
-    .map(|_| ())
+    .map(|_| println!("Touching: {:?}", path.canonicalize().unwrap()))
 }
