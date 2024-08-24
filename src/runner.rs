@@ -34,7 +34,7 @@ use crate::listeners::standard_listener::StandardListener;
 pub(crate) async fn run() {
   AUTH_PROVIDER
     .get_or_init(|| async {
-      info!("Setting up auth provider.");
+      debug!("Setting up auth provider.");
       let mut provider = AuthProvider::new();
       provider.add_data_source(Box::new(SqliteDataSource::new(DB_LAZY.clone())));
       provider

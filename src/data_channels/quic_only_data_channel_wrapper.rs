@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use s2n_quic::Connection;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -68,7 +69,7 @@ impl QuicOnlyDataChannelWrapper {
     let sender = self.stream_sender.clone();
     tokio::spawn(async move {
       debug!("Awaiting passive connection");
-      let conn = tokio::time::timeout(Duration::from_secs(20), {
+      let conn = timeout(Duration::from_secs(20), {
         conn.lock().await.accept_bidirectional_stream()
       })
       .await;
@@ -114,12 +115,12 @@ impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
 
   async fn acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error> {
     debug!("Acquiring data channel");
-    return match self.stream_receiver.recv().await {
+    match self.stream_receiver.recv().await {
       Ok(stream) => Ok((stream, self.abort_token.clone())),
       Err(e) => {
         bail!(e)
       }
-    };
+    }
   }
 
   async fn close_data_stream(&self) {

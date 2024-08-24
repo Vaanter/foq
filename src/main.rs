@@ -61,5 +61,5 @@ fn format_log_file_name() -> String {
     .get_string("logfile")
     .unwrap_or(String::from("foq-%Y%m%d%H%M.log"));
   let current_time = Local::now();
-  return current_time.format(&name).to_string();
+  current_time.format(&name).to_string()
 }

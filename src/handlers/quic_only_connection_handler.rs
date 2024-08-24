@@ -72,7 +72,7 @@ impl QuicOnlyConnectionHandler {
   /// [`error`]: anyhow::Error
   ///
   #[tracing::instrument(skip(self))]
-  pub(crate) async fn await_command(&mut self) -> Result<bool, std::io::Error> {
+  pub(crate) async fn await_command(&mut self) -> Result<bool, anyhow::Error> {
     let cc = self
       .control_channel
       .as_mut()
@@ -87,7 +87,7 @@ impl QuicOnlyConnectionHandler {
         debug!("[QUIC] Received message from client, length: {len}");
       }
       Err(e) => {
-        return Err(e);
+        return Err(anyhow::Error::from(e));
       }
     };
 
@@ -110,7 +110,7 @@ impl QuicOnlyConnectionHandler {
   async fn create_control_channel(&mut self) -> Result<(), anyhow::Error> {
     let conn = self.connection.clone();
 
-    return match conn.lock().await.open_bidirectional_stream().await {
+    match conn.lock().await.open_bidirectional_stream().await {
       Ok(control_channel) => {
         let (reader, writer) = tokio::io::split(control_channel);
         let control_channel = BufReader::new(reader);
@@ -120,7 +120,7 @@ impl QuicOnlyConnectionHandler {
         Ok(())
       }
       Err(e) => Err(e.into()),
-    };
+    }
   }
 }
 

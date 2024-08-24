@@ -32,7 +32,7 @@ pub(crate) async fn opts(
       .await;
   }
 
-  return match command.argument.to_uppercase().as_str() {
+  match command.argument.to_uppercase().as_str() {
     "UTF8 ON" => {
       session_properties.utf8 = true;
       reply_sender
@@ -50,7 +50,7 @@ pub(crate) async fn opts(
         ))
         .await
     }
-  };
+  }
 }
 
 #[cfg(test)]

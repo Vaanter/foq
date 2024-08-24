@@ -140,20 +140,20 @@ impl ConnectionHandler for StandardTlsConnectionHandler {
 
 impl StandardTlsConnectionHandler {
   async fn cleanup(&mut self) {
-    info!("[TCP + TLS] Shutdown received!");
+    info!("[TCP+TLS] Shutdown received!");
     let mut commands_to_finish = std::mem::take(&mut self.running_commands);
     commands_to_finish.retain(|t| !t.is_finished());
     if timeout(Duration::from_secs(5), join_all(commands_to_finish))
       .await
       .is_err()
     {
-      warn!("[TCP + TLS] Failed to finish processing running commands in time!");
+      warn!("[TCP+TLS] Failed to finish processing running commands in time!");
     }
     if timeout(Duration::from_secs(2), self.reply_sender.close())
       .await
       .is_err()
     {
-      warn!("[TCP + TLS] Failed to close command channel in time!");
+      warn!("[TCP+TLS] Failed to close command channel in time!");
     };
     let data_channel = self.data_channel_wrapper.clone();
     let data_channel_cleanup = async {
@@ -164,7 +164,7 @@ impl StandardTlsConnectionHandler {
       .await
       .is_err()
     {
-      warn!("[TCP + TLS] Failed to close data channel in time!")
+      warn!("[TCP+TLS] Failed to close data channel in time!")
     };
   }
 }

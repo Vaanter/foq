@@ -141,7 +141,7 @@ impl StandardConnectionHandler {
     info!("[TCP] Shutdown received!");
     let mut commands_to_finish = std::mem::take(&mut self.running_commands);
     commands_to_finish.retain(|t| !t.is_finished());
-    debug!("[TCP] Commands to finish: {:#?}", commands_to_finish);
+    debug!("[TCP] Commands to finish: {:?}", commands_to_finish);
     if timeout(Duration::from_secs(5), join_all(commands_to_finish))
       .await
       .is_err()
