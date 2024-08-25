@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use s2n_quic::stream::BidirectionalStream;
+use s2n_quic::stream::{ReceiveStream, SendStream};
 use s2n_quic::Connection;
-use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
@@ -28,8 +28,8 @@ pub(crate) struct QuicOnlyConnectionHandler {
   connection: Arc<Mutex<Connection>>,
   data_channel_wrapper: Arc<QuicOnlyDataChannelWrapper>,
   command_processor: Arc<CommandProcessor>,
-  control_channel: Option<BufReader<ReadHalf<BidirectionalStream>>>,
-  reply_sender: Option<Arc<ReplySender<BidirectionalStream>>>,
+  control_channel: Option<BufReader<ReceiveStream>>,
+  reply_sender: Option<Arc<ReplySender<SendStream>>>,
   session_properties: Arc<RwLock<SessionProperties>>,
   running_commands: Vec<JoinHandle<()>>,
 }
@@ -110,17 +110,19 @@ impl QuicOnlyConnectionHandler {
   async fn create_control_channel(&mut self) -> Result<(), anyhow::Error> {
     let conn = self.connection.clone();
 
-    match conn.lock().await.open_bidirectional_stream().await {
+    return match conn.lock().await.open_bidirectional_stream().await {
       Ok(control_channel) => {
-        let (reader, writer) = tokio::io::split(control_channel);
-        let control_channel = BufReader::new(reader);
+        // let (reader, writer) = tokio::io::split(control_channel);
+        let (reader, writer) = control_channel.split();
+        // let control_channel = BufReader::new(reader);
         let reply_sender = Arc::new(ReplySender::new(writer));
-        let _ = self.control_channel.insert(control_channel);
+        // self.control_channel.replace(control_channel);
+        self.control_channel.replace(BufReader::new(reader));
         self.reply_sender.replace(reply_sender);
         Ok(())
       }
       Err(e) => Err(e.into()),
-    }
+    };
   }
 }
 

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf};
+use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -29,7 +29,7 @@ pub(crate) struct StandardTlsConnectionHandler {
   data_channel_wrapper: Arc<StandardDataChannelWrapper>,
   command_processor: Arc<CommandProcessor>,
   control_channel: BufReader<ReadHalf<TlsStream<TcpStream>>>,
-  reply_sender: Arc<ReplySender<TlsStream<TcpStream>>>,
+  reply_sender: Arc<ReplySender<WriteHalf<TlsStream<TcpStream>>>>,
   session_properties: Arc<RwLock<SessionProperties>>,
   running_commands: Vec<JoinHandle<()>>,
 }

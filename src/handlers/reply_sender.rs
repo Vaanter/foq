@@ -2,7 +2,7 @@ use std::io::Error;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter, WriteHalf};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
@@ -10,17 +10,17 @@ use crate::commands::reply::Reply;
 
 /// A generic abstraction for sending replies to client.
 #[derive(Clone, Debug)]
-pub(crate) struct ReplySender<T: AsyncWrite + Sync + Send> {
-  writer: Arc<Mutex<BufWriter<WriteHalf<T>>>>,
+pub(crate) struct ReplySender<T: AsyncWrite + Sync + Send + Unpin> {
+  writer: Arc<Mutex<BufWriter<T>>>,
 }
 
-impl<T: AsyncWrite + Sync + Send> ReplySender<T> {
+impl<T: AsyncWrite + Sync + Send + Unpin> ReplySender<T> {
   /// Constructs a new reply sender.
   ///
   /// Creates a new [`BufWriter`] from the argument, that can be later used to send messages to
   /// client.
   ///
-  pub(crate) fn new(writer: WriteHalf<T>) -> Self {
+  pub(crate) fn new(writer: T) -> Self {
     ReplySender {
       writer: Arc::new(Mutex::new(BufWriter::new(writer))),
     }
@@ -28,7 +28,7 @@ impl<T: AsyncWrite + Sync + Send> ReplySender<T> {
 }
 
 #[async_trait]
-impl<T: AsyncWrite + Sync + Send> ReplySend for ReplySender<T> {
+impl<T: AsyncWrite + Sync + Send + Unpin> ReplySend for ReplySender<T> {
   #[tracing::instrument(skip(self))]
   /// Sends a reply to the client.
   ///
