@@ -1,9 +1,8 @@
 //! Execution point for all listeners.
 
-use std::net::SocketAddr;
-
 use crate::auth::auth_provider::AuthProvider;
 use crate::auth::sqlite_data_source::SqliteDataSource;
+use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
@@ -13,9 +12,11 @@ use tracing::{debug, error, info, warn};
 use crate::global_context::{AUTH_PROVIDER, CONFIG, DB_LAZY, TLS_CONFIG};
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
+use crate::handlers::quic_quinn_connection_handler::QuicQuinnConnectionHandler;
 use crate::handlers::standard_connection_handler::StandardConnectionHandler;
 use crate::handlers::standard_tls_connection_handler::StandardTlsConnectionHandler;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
+use crate::listeners::quinn_listener::QuinnListener;
 use crate::listeners::standard_listener::StandardListener;
 
 /// Starts all available listeners.
@@ -81,6 +82,17 @@ pub(crate) async fn run() {
     }
   } else {
     warn!("No QUIC address in config!");
+  }
+
+  let quinn_address = CONFIG.get_string("quinn_address");
+  if let Ok(quinn_address) = quinn_address {
+    match quinn_address.parse() {
+      Ok(quinn_addr) => {
+        let quinn_task = tokio::spawn(run_quinn(quinn_addr, cancellation_token.clone()));
+        tasks.push(quinn_task);
+      }
+      Err(_) => error!("Failed to parse QUINN address!"),
+    }
   }
 
   match tokio::signal::ctrl_c().await {
@@ -225,6 +237,38 @@ async fn run_quic(addr: SocketAddr, token: CancellationToken) {
         tokio::spawn(async move {
           debug!("[QUIC] Creating handler for connection from {:?}", peer);
           let mut handler = QuicOnlyConnectionHandler::new(conn);
+          if let Err(e) = handler.handle(cancel).await {
+            error!("{:?}", e);
+          };
+        });
+      }
+      None => {
+        break;
+      }
+    }
+  }
+}
+
+#[tracing::instrument(skip(token))]
+async fn run_quinn(addr: SocketAddr, token: CancellationToken) {
+  let quic_quinn_listener = match QuinnListener::new(addr) {
+    Ok(l) => l,
+    Err(e) => {
+      error!("[QUINN] Failed to create listener! Error: {}", e);
+      return;
+    }
+  };
+  info!("[QUINN] Listening on {}.", addr);
+  loop {
+    let cancel = token.clone();
+    match quic_quinn_listener.accept(cancel.clone()).await {
+      Some(connection) => {
+        let conn = connection.await.unwrap();
+        let peer = conn.remote_address();
+        info!("[QUINN] Received connection from: {:?}", peer);
+        tokio::spawn(async move {
+          debug!("[QUINN] Creating handler for connection from {:?}", peer);
+          let mut handler = QuicQuinnConnectionHandler::new(conn);
           if let Err(e) = handler.handle(cancel).await {
             error!("{:?}", e);
           };

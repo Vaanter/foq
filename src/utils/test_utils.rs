@@ -47,9 +47,11 @@ use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrap
 use crate::global_context::{CERTS, KEY};
 use crate::handlers::connection_handler::ConnectionHandler;
 use crate::handlers::quic_only_connection_handler::QuicOnlyConnectionHandler;
+use crate::handlers::quic_quinn_connection_handler::QuicQuinnConnectionHandler;
 use crate::handlers::reply_sender::ReplySend;
 use crate::io::file_system_view::FileSystemView;
 use crate::listeners::quic_only_listener::QuicOnlyListener;
+use crate::listeners::quinn_listener::QuinnListener;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::protection_mode::ProtMode;
 use crate::session::session_properties::SessionProperties;
@@ -388,6 +390,21 @@ pub(crate) async fn run_quic_listener(
       .handle(ct)
       .await
       .expect("Handler should exit gracefully");
+  });
+  (handler_fut, addr)
+}
+
+pub fn run_quinn_listener(token: CancellationToken) -> (JoinHandle<()>, SocketAddr) {
+  let listener = QuinnListener::new(LOCALHOST).unwrap();
+  let addr = listener.listener.local_addr().unwrap();
+  let handler_fut = tokio::spawn(async move {
+    let conn = listener.accept(token.clone()).await;
+    let mut handler = QuicQuinnConnectionHandler::new(conn.unwrap().await.unwrap());
+
+    handler
+      .handle(token.clone())
+      .await
+      .expect("Handler should exit gracefully")
   });
   (handler_fut, addr)
 }
