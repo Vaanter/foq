@@ -40,8 +40,11 @@ async fn main() {
     .open(log_file_name)
     .expect("Log file should be accessible");
   let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
-  let log_level =
-    Level::from_str(&CONFIG.get_string("log_level").unwrap_or_default()).unwrap_or(Level::INFO);
+  let log_filter = &CONFIG.get_string("log_filter").unwrap_or_else(move |_| {
+    let log_level =
+      Level::from_str(&CONFIG.get_string("log_level").unwrap_or_default()).unwrap_or(Level::INFO);
+    format!("foq={}", log_level)
+  });
   let fmt_layer = tracing_subscriber::fmt::Layer::default()
     .with_writer(non_blocking)
     .with_file(false)
@@ -49,7 +52,7 @@ async fn main() {
     .with_line_number(false)
     .with_thread_ids(true)
     .with_target(false)
-    .with_filter(EnvFilter::new(format!("foq={}", log_level)));
+    .with_filter(EnvFilter::new(log_filter));
 
   Registry::default().with(fmt_layer).init();
 
