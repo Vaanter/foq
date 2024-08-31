@@ -71,7 +71,7 @@ pub(crate) async fn nlst(
     _ = token.cancelled() => Err(std::io::Error::new(ErrorKind::ConnectionAborted, "Connection aborted!"))
   };
   debug!("Sending listing result: {:?}", result);
-  debug!("Flushing data");
+  trace!("Flushing data");
   if let Err(e) = data_channel.flush().await {
     warn!("Failed to flush data after writing! {e}");
   }
@@ -79,7 +79,7 @@ pub(crate) async fn nlst(
     warn!("Failed to shutdown data channel after writing! {e}");
   }
 
-  debug!("Listing sent to client!");
+  trace!("Listing sent to client!");
   reply_sender
     .send_control_message(Reply::new(
       ReplyCode::ClosingDataConnection,

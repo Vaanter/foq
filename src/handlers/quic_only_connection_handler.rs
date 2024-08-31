@@ -110,19 +110,16 @@ impl QuicOnlyConnectionHandler {
   async fn create_control_channel(&mut self) -> Result<(), anyhow::Error> {
     let conn = self.connection.clone();
 
-    return match conn.lock().await.open_bidirectional_stream().await {
+    match conn.lock_owned().await.open_bidirectional_stream().await {
       Ok(control_channel) => {
-        // let (reader, writer) = tokio::io::split(control_channel);
         let (reader, writer) = control_channel.split();
-        // let control_channel = BufReader::new(reader);
         let reply_sender = Arc::new(ReplySender::new(writer));
-        // self.control_channel.replace(control_channel);
         self.control_channel.replace(BufReader::new(reader));
         self.reply_sender.replace(reply_sender);
         Ok(())
       }
       Err(e) => Err(e.into()),
-    };
+    }
   }
 }
 

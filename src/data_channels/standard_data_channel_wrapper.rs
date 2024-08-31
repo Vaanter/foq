@@ -10,7 +10,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::data_channels::tcp_data_channel::TcpDataChannel;
@@ -76,24 +76,28 @@ impl StandardDataChannelWrapper {
       .expect("Implement passive port search!");
     let port = listener.local_addr()?.port();
     let sender = self.channel_sender.clone();
-    tokio::spawn(async move {
-      let conn = timeout(Duration::from_secs(20), {
-        debug!("Awaiting passive connection");
-        listener.accept()
-      })
-      .await;
-      match conn {
-        Ok(Ok((stream, _))) => {
-          Self::establish_connection(stream, prot_mode, sender).await;
-        }
-        Ok(Err(e)) => {
-          warn!("Passive listener connection failed! {e}");
-        }
-        Err(e) => {
-          info!("Client failed to connect to passive listener before timeout! {e}");
-        }
-      };
-    });
+    let span = Span::current();
+    tokio::spawn(
+      async move {
+        let conn = timeout(Duration::from_secs(20), {
+          debug!("Awaiting passive connection");
+          listener.accept()
+        })
+        .await;
+        match conn {
+          Ok(Ok((stream, _))) => {
+            Self::establish_connection(stream, prot_mode, sender).await;
+          }
+          Ok(Err(e)) => {
+            warn!("Passive listener connection failed! {e}");
+          }
+          Err(e) => {
+            info!("Client failed to connect to passive listener before timeout! {e}");
+          }
+        };
+      }
+      .instrument(span),
+    );
 
     let mut addr = self.addr;
     addr.set_port(port);
@@ -171,12 +175,12 @@ impl DataChannelWrapper for StandardDataChannelWrapper {
   }
 
   async fn acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error> {
-    return match self.channel_receiver.recv().await {
+    match self.channel_receiver.recv().await {
       Ok(stream) => Ok((stream, self.abort_token.clone())),
       Err(e) => {
         bail!(e)
       }
-    };
+    }
   }
 
   #[tracing_attributes::instrument(skip(self))]

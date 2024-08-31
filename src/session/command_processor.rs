@@ -45,7 +45,7 @@ impl CommandProcessor {
     mut message: String,
     reply_sender: Arc<T>,
   ) {
-    debug!("Evaluating command");
+    trace!("Evaluating command");
     let command = message.trim().parse::<Command>();
     message.zeroize();
     match command {

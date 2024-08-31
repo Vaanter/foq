@@ -6,7 +6,7 @@ use tokio::io;
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -82,7 +82,7 @@ pub(crate) fn get_transfer_reply(success: &Result<(), io::Error>) -> Reply {
 }
 
 pub(crate) fn get_open_file_result(file: Result<File, IoError>) -> Result<File, Reply> {
-  debug!("Checking file open result.");
+  trace!("Checking file open result.");
   match file {
     Ok(f) => Ok(f),
     Err(e) => Err(map_error_to_reply(e)),

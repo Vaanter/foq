@@ -11,7 +11,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, warn, Instrument, Span};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::data_channels::quic_data_channel::QuicDataChannel;
@@ -67,31 +67,35 @@ impl QuicOnlyDataChannelWrapper {
     debug!("Creating passive listener");
     let conn = self.connection.clone();
     let sender = self.stream_sender.clone();
-    tokio::spawn(async move {
-      debug!("Awaiting passive connection");
-      let conn = timeout(Duration::from_secs(20), {
-        conn.lock().await.accept_bidirectional_stream()
-      })
-      .await;
+    let span = Span::current();
+    tokio::spawn(
+      async move {
+        debug!("Awaiting passive connection");
+        let conn = timeout(Duration::from_secs(20), {
+          conn.lock().await.accept_bidirectional_stream()
+        })
+        .await;
 
-      match conn {
-        Ok(Ok(Some(stream))) => {
-          debug!(
-            "Passive listener connection successful! ID: {}.",
-            stream.id()
-          );
-          if let Err(mut e) = sender.send(Box::new(QuicDataChannel::new(stream))).await {
-            error!("Failed to send new data channel downstream! {e}");
-            if let Err(shutdown_error) = e.0.shutdown().await {
-              error!("Failed to shutdown data channel! {shutdown_error}");
+        match conn {
+          Ok(Ok(Some(stream))) => {
+            debug!(
+              "Passive listener connection successful! ID: {}.",
+              stream.id()
+            );
+            if let Err(mut e) = sender.send(Box::new(QuicDataChannel::new(stream))).await {
+              error!("Failed to send new data channel downstream! {e}");
+              if let Err(shutdown_error) = e.0.shutdown().await {
+                error!("Failed to shutdown data channel! {shutdown_error}");
+              }
             }
           }
-        }
-        Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
-        Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
-        Err(e) => info!("Client failed to connect to passive listener before timeout! {e}"),
-      };
-    });
+          Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
+          Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
+          Err(e) => info!("Client failed to connect to passive listener before timeout! {e}"),
+        };
+      }
+      .instrument(span),
+    );
 
     Ok(self.addr)
   }
