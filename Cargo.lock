@@ -1167,7 +1167,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -2123,9 +2123,9 @@ dependencies = [
 
 [[package]]
 name = "s2n-tls"
-version = "0.3.4"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bcdb20817971e94417364332d82580d528ea8ec3339416c493ab2cb91801846"
+checksum = "71c4ae82ce5a6eeb6668450b27ca64d5c4b23b5fb521ff64eaccc7e8875b89b9"
 dependencies = [
  "errno",
  "hex",
@@ -2136,9 +2136,9 @@ dependencies = [
 
 [[package]]
 name = "s2n-tls-sys"
-version = "0.3.4"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bc97f4a0cbaef090ed158d510f213049d4d25512f14d6a5d372092d036ffa99"
+checksum = "2fe935f7ecca7c7b13d520832bd7e06a0addf070aa3dfee17bdc2151628c6963"
 dependencies = [
  "aws-lc-rs",
  "cc",
