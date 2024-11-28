@@ -22,6 +22,11 @@ pub(crate) struct FileSystemViewRoot {
   current_view: Option<String>,
 }
 
+enum ViewType<'a> {
+  Virtual(&'a FileSystemViewRoot),
+  Real(&'a FileSystemView)
+}
+
 /// Permissions a user can have in the root.
 const ROOT_PERMISSIONS: [UserPermission; 2] = [UserPermission::Execute, UserPermission::List];
 
@@ -44,7 +49,7 @@ impl FileSystemViewRoot {
   ///
   /// This function changes the current path to `path` and returns [`Ok`] if the new path is valid,
   /// [`Err(IoError)`] otherwise. New path can be absolute or relative and also the current path
-  /// (.), parent (..) and root (/).
+  /// (.), parent (..) and root (/ or ~).
   ///
   /// # Arguments
   ///
@@ -62,106 +67,35 @@ impl FileSystemViewRoot {
   ///
   /// - [`IoError::UserError`]: If the user is not logged in.
   /// - [`IoError::SystemError`]: If a programmatic error occurs, e.g.: the current view_view
-  /// refers to nonexistent [`FileSystemView`].
+  ///   refers to nonexistent [`FileSystemView`].
   /// - [`IoError::InvalidPathError`]: If the `path` refers to parent (..) but current path is
-  /// already at root.
+  ///   already at root.
   /// - Other [`IoError`] returned by [`FileSystemView::change_working_directory`].
   ///
-  pub(crate) fn change_working_directory(
-    &mut self,
-    path: impl Into<String>,
+  pub(crate) fn change_working_directory(&mut self, path: impl Into<String>,
   ) -> Result<bool, IoError> {
     let path = path.into();
     if self.file_system_views.is_none() {
-      // User is not logged in
       return Err(IoError::UserError);
     }
-    if path == "." || path.is_empty() {
-      Ok(false)
-    } else if path == ".." {
-      // At root
-      if self.current_view.is_none() {
-        return Err(IoError::InvalidPathError(String::from(
-          "Cannot change to parent from root!",
-        )));
-      }
 
-      let view = self
-        .file_system_views
-        .as_mut()
-        .unwrap()
-        .get_mut(self.current_view.as_ref().unwrap());
-
-      let view = match view {
-        Some(v) => v,
-        None => return Err(IoError::SystemError),
-      };
-
-      let changed = view.change_working_directory_up();
-
-      if let Err(IoError::InvalidPathError(_)) = changed {
-        self.current_view = None;
-        return Ok(true);
-      };
-      return changed;
-    } else if path == "~" || path == "/" {
-      return match (&self.current_view, self.file_system_views.as_mut()) {
-        (Some(view), Some(views)) => {
-          let _ = views.get_mut(view).unwrap().change_working_directory("/");
-          self.current_view = None;
-          Ok(true)
-        }
-        (_, _) => Ok(false),
-      };
-    } else if path.starts_with('/') {
-      let label = match path.split('/').nth(1) {
-        Some(l) => l,
-        None => return Err(IoError::SystemError),
-      };
-
-      let view = self.file_system_views.as_mut().unwrap().get_mut(label);
-
-      let view = match view {
-        Some(v) => v,
-        None => return Err(IoError::SystemError),
-      };
-
-      let mut sub_path = path.split('/').skip(2).collect::<Vec<&str>>().join("/");
-      sub_path.insert(0, '/');
-      let changed = view.change_working_directory(sub_path);
-      if changed.is_ok() {
-        self.current_view.replace(label.to_string());
-        return Ok(true);
-      }
-      changed
-    } else {
-      if self.current_view.is_none() {
-        let mut path_parts = path.split('/');
-        let label = match path_parts.next() {
-          Some(l) => l,
-          None => return Err(IoError::SystemError),
-        };
-        let view = match self.file_system_views.as_mut().unwrap().get_mut(label) {
-          Some(v) => v,
-          None => return Err(IoError::SystemError),
-        };
-
-        let sub_path = path_parts.next().unwrap_or("/");
-        let changed = view.change_working_directory(sub_path);
-        if let Ok(_) | Err(IoError::InvalidPathError(_)) = changed {
-          self.current_view.replace(label.to_string());
+    match self.find_view(&path) {
+      Some((ViewType::Real(v), sub_path)) => {
+        let label = v.label.clone();
+        self.current_view.replace(label);
+        if sub_path == "/" || sub_path.is_empty() {
           return Ok(true);
         }
-        return changed;
+        self.file_system_views.as_mut()
+          .unwrap()
+          .get_mut(self.current_view.as_ref().unwrap())
+          .unwrap()
+          .change_working_directory(sub_path)
       }
-      return self
-        .file_system_views
-        .as_mut()
-        .unwrap()
-        .get_mut(self.current_view.as_ref().unwrap())
-        .as_mut()
-        .unwrap()
-        .change_working_directory(path);
+      Some((ViewType::Virtual(_), _)) => {
+        Ok(self.current_view.take().is_some())
+      },
+      None => Err(IoError::InvalidPathError(String::from("Path is not available or accessible!")))
     }
   }
 
@@ -179,48 +113,11 @@ impl FileSystemViewRoot {
       return Err(IoError::UserError);
     }
 
-    return if path.starts_with('/') {
-      let label = match path.split('/').nth(1) {
-        Some(l) => l,
-        None => return Err(IoError::SystemError),
-      };
-
-      let view = self.file_system_views.as_ref().unwrap().get(label);
-
-      let view = match view {
-        Some(v) => v,
-        None => return Err(IoError::SystemError),
-      };
-
-      let mut sub_path = path.split('/').skip(2).collect::<Vec<&str>>().join("/");
-      sub_path.insert(0, '/');
-      view.create_directory(sub_path)
-    } else {
-      match self.current_view {
-        Some(ref view) => match self.file_system_views.as_ref().unwrap().get(view) {
-          Some(view) => view.create_directory(path),
-          None => Err(IoError::SystemError),
-        },
-        None => {
-          let mut path_parts = path.splitn(2, '/');
-          let label = match path_parts.next() {
-            Some(l) => l,
-            None => return Err(IoError::SystemError),
-          };
-          let view = match self.file_system_views.as_ref().unwrap().get(label) {
-            Some(v) => v,
-            None => return Err(IoError::SystemError),
-          };
-          return if let Some(new_dir_path) = path_parts.next() {
-            view.create_directory(new_dir_path)
-          } else {
-            Err(IoError::InvalidPathError(String::from(
-              "Directory path is invalid",
-            )))
-          };
-        }
-      }
-    };
+    match self.find_view(&path) {
+      Some((ViewType::Virtual(_), _)) => Err(IoError::SystemError),
+      Some((ViewType::Real(v), sub_path)) => v.create_directory(&sub_path),
+      None => Err(IoError::InvalidPathError(String::from("Directory path is invalid!")))
+    }
   }
 
   /// Returns the path to current working directory.
@@ -259,106 +156,20 @@ impl FileSystemViewRoot {
   ///
   #[tracing::instrument(skip(self, path))]
   pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
-    let mut path = path.into();
-    if path.is_empty() {
-      path = self.get_current_working_directory();
-    }
-    debug!("Listing directory, path: {}", path);
+    let path = path.into();
+
     if self.file_system_views.is_none() {
       // not logged in
       return Err(IoError::UserError);
     }
 
-    if path.is_empty() || path == "." {
-      if self.current_view.is_none() {
-        self.list_root()
-      } else {
-        // list current view
-        let view = self
-          .file_system_views
-          .as_ref()
-          .unwrap()
-          .get(self.current_view.as_ref().unwrap());
-
-        if view.is_none() {
-          // Current view doesn't exist (should panic?)
-          return Err(IoError::SystemError);
-        }
-
-        view.unwrap().list_dir(".")
+    if let Some((view_type, sub_path)) = self.find_view(&path) {
+      match view_type {
+        ViewType::Virtual(v) => v.list_root(),
+        ViewType::Real(v) => v.list_dir(&sub_path)
       }
-    } else if path == "/" || path == "~" {
-      self.list_root()
-    } else if path == ".." {
-      if self.current_view.is_none() {
-        // We are at root, nothing is before
-        return Err(IoError::InvalidPathError(String::from(
-          "Parent path is inaccessible!",
-        )));
-      }
-
-      let view = self
-        .file_system_views
-        .as_ref()
-        .unwrap()
-        .get(self.current_view.as_ref().unwrap());
-
-      if view.is_none() {
-        // Current view doesn't exist (should panic?)
-        return Err(IoError::SystemError);
-      }
-
-      let listing = view.unwrap().list_dir("..");
-
-      return match listing {
-        Ok(l) => Ok(l),
-        Err(IoError::InvalidPathError(_)) => self.list_root(),
-        Err(e) => Err(e),
-      };
-    } else if path.starts_with('/') {
-      // list absolute
-      let label = path.split('/').nth(1);
-      if label.is_none() {
-        // path is invalid (e.g.: //foo/bar)
-        return Err(IoError::InvalidPathError(String::from("Invalid path!")));
-      }
-
-      let view = self.file_system_views.as_ref().unwrap().get(label.unwrap());
-
-      if view.is_none() {
-        // Current view doesn't exist (should panic?)
-        return Err(IoError::SystemError);
-      }
-
-      let mut sub_path = path.split('/').skip(2).collect::<Vec<&str>>().join("/");
-      sub_path.insert(0, '/');
-      view.unwrap().list_dir(sub_path)
     } else {
-      // list relative
-      if self.current_view.is_none() {
-        // relative of root
-        let label = path.split('/').nth(0).expect("Path cannot be empty here!");
-        let view = self.file_system_views.as_ref().unwrap().get(label);
-        if view.is_none() {
-          return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
-        }
-        let sub_path = path.split('/').skip(1).collect::<Vec<&str>>().join("/");
-        return view.unwrap().list_dir(sub_path);
-      }
-
-      // relative of view
-      let view = self
-        .file_system_views
-        .as_ref()
-        .unwrap()
-        .get(self.current_view.as_ref().unwrap());
-
-      if view.is_none() {
-        // Current view doesn't exist (should panic?)
-        return Err(IoError::SystemError);
-      }
-
-      view.unwrap().list_dir(path)
+      Err(IoError::InvalidPathError(String::from("Invalid path!")))
     }
   }
 
@@ -419,48 +230,18 @@ impl FileSystemViewRoot {
       return Err(IoError::UserError);
     }
 
-    return if path.is_empty() || path == "/" {
-      Err(IoError::InvalidPathError(String::from(
+    match self.find_view(&path) {
+      Some((ViewType::Virtual(_), _)) => Err(IoError::InvalidPathError(String::from(
         "Path references a directory, not a file!",
-      )))
-    } else if path.starts_with('/') {
-      let label = path.split('/').nth(1).expect("Path cannot be empty here!");
-      let view = self.file_system_views.as_ref().unwrap().get(label);
-
-      if view.is_none() {
-        return Err(IoError::NotFoundError(String::from("File not found!")));
-      }
-
-      let mut sub_path = path.split('/').skip(2).collect::<Vec<&str>>().join("/");
-      sub_path.insert(0, '/');
-      view.unwrap().open_file(sub_path, options).await
-    } else {
-      if self.current_view.is_none() {
-        // relative of root
-        let label = path.split('/').nth(0).expect("Path cannot be empty here!");
-        let view = self.file_system_views.as_ref().unwrap().get(label);
-        if view.is_none() {
-          return Err(IoError::InvalidPathError(String::from(
-            "Path doesn't exist!",
-          )));
-        }
-        let sub_path = path.split('/').skip(1).collect::<Vec<&str>>().join("/");
-        return view.unwrap().open_file(sub_path, options).await;
-      }
-      self
-        .file_system_views
-        .as_ref()
-        .unwrap()
-        .get(self.current_view.as_ref().unwrap())
-        .unwrap()
-        .open_file(path, options)
-        .await
-    };
+      ))),
+      Some((ViewType::Real(v), subpath)) => v.open_file(subpath, options).await,
+      None => Err(IoError::UserError)
+    }
   }
 
   #[tracing::instrument(skip(self, path))]
   pub(crate) async fn delete_file(&self, path: impl Into<String>) -> Result<(), IoError> {
-    let mut path = path.into();
+    let path = path.into();
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -471,18 +252,18 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&mut path);
+    let view = self.find_view(&path);
 
-    if let Some(v) = view {
-      v.delete_file(&path).await
+    if let Some((ViewType::Real(v), sub_path)) = view {
+      v.delete_file(&sub_path).await
     } else {
-      return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
+      Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
   }
 
   #[tracing::instrument(skip(self, path))]
   pub(crate) async fn delete_folder(&self, path: impl Into<String>) -> Result<(), IoError> {
-    let mut path = path.into();
+    let path = path.into();
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -493,10 +274,10 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&mut path);
+    let view = self.find_view(&path);
 
-    if let Some(v) = view {
-      v.delete_folder(&path).await
+    if let Some((ViewType::Real(v), sub_path)) = view {
+      v.delete_folder(&sub_path).await
     } else {
       return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
     }
@@ -507,7 +288,7 @@ impl FileSystemViewRoot {
     &self,
     path: impl Into<String>,
   ) -> Result<(), IoError> {
-    let mut path = path.into();
+    let path = path.into();
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -518,10 +299,10 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&mut path);
+    let view = self.find_view(&path);
 
-    if let Some(v) = view {
-      v.delete_folder_recursive(&path).await
+    if let Some((ViewType::Real(v), sub_path)) = view {
+      v.delete_folder_recursive(&sub_path).await
     } else {
       return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
     }
@@ -532,7 +313,7 @@ impl FileSystemViewRoot {
     new_time: FileTimes,
     path: impl Into<String>,
   ) -> Result<(), IoError> {
-    let mut path = path.into();
+    let path = path.into();
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -543,27 +324,47 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&mut path);
+    let view = self.find_view(&path);
 
-    if let Some(v) = view {
-      v.change_file_times(new_time, &path).await
+    if let Some((ViewType::Real(v), sub_path)) = view {
+      v.change_file_times(new_time, &sub_path).await
     } else {
       Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
   }
 
-  fn find_view(&self, path: &mut String) -> Option<&FileSystemView> {
-    let p = path.clone();
-    let mut parts = p.split('/');
-    if path.starts_with('/') {
+  fn find_view(&self, path: &str) -> Option<(ViewType, String)> {
+    let mut parts = path.split('/');
+    if path == "/" || path == "~" {
+      Some((ViewType::Virtual(self), String::new()))
+    } else if path == ".." || path == "." {
+      if let Some(ref label) = self.current_view {
+        if let Some(v) = self.file_system_views.as_ref().unwrap().get(label) {
+          if v.root == v.current_path && path == ".." {
+            Some((ViewType::Virtual(self), path.to_string()))
+          } else {
+            Some((ViewType::Real(v), path.to_string()))
+          }
+        } else {
+          None
+        }
+      } else if path == ".." {
+        None
+      } else {
+        Some((ViewType::Virtual(self), ".".to_string()))
+      }
+    } else if path.starts_with('/') {
       let label = parts.nth(1).expect("Path cannot be empty here!");
-      self.file_system_views.as_ref().unwrap().get(label)
+      let mut view_path = "/".to_string();
+      view_path.push_str(&parts.collect::<Vec<&str>>().join("/"));
+      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), view_path))
     } else if let Some(ref label) = self.current_view {
-      self.file_system_views.as_ref().unwrap().get(label)
+      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
+    } else if path.is_empty() {
+      Some((ViewType::Virtual(self), String::new()))
     } else {
       let label = parts.next().expect("Path cannot be empty here!");
-      path.insert(0, '/');
-      self.file_system_views.as_ref().unwrap().get(label)
+      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
     }
   }
 }
@@ -1188,6 +989,7 @@ mod tests {
     root.change_working_directory("test_files").unwrap();
 
     let listing = root.list_dir(".").unwrap();
+    listing.iter().for_each(|l| print!("{}", l));
 
     validate_listing("test_files", &listing, 5, permissions.len(), 3, 1);
   }
@@ -1400,7 +1202,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1428,7 +1230,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1453,7 +1255,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1478,7 +1280,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1505,7 +1307,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1562,7 +1364,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1589,8 +1391,8 @@ mod tests {
     let dir_path = root1.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
-    std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
+    create_dir(&dir_sub_path).expect("Test subdirectory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1619,7 +1421,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1671,7 +1473,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1695,9 +1497,9 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    root
+    assert!(root
       .change_working_directory(format!("/{}", label1))
-      .unwrap();
+      .unwrap());
 
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = root1.join(&file_name);
@@ -1835,7 +1637,7 @@ mod tests {
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root1.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 

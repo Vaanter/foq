@@ -538,3 +538,8 @@ pub(crate) fn touch(path: &Path) -> io::Result<()> {
     .open(path)
     .map(|_| println!("Touching: {:?}", path.canonicalize().unwrap()))
 }
+
+pub(crate) fn create_dir(path: &Path) -> io::Result<()> {
+  println!("Creating directory: {:?}", path);
+  std::fs::create_dir_all(path)
+} 

@@ -111,7 +111,7 @@ impl FromStr for Command {
   #[tracing::instrument(skip(message))]
   fn from_str(message: &str) -> Result<Self, Self::Err> {
     trace!("Parsing message to command.");
-    let message_trimmed = message.trim_end_matches(|c| c == '\n' || c == '\r');
+    let message_trimmed = message.trim_end_matches(['\n', '\r']);
     let split = message_trimmed
       .split_once(' ')
       .unwrap_or((message_trimmed, ""));

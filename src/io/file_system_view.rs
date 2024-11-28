@@ -38,9 +38,9 @@ impl FileSystemView {
   /// # Arguments
   /// - `root`: A [`PathBuf`] representing the root path of the file system view.
   /// - `label`: A type that can be converted into a [`String`], representing the label of the file
-  /// system view.
+  ///   system view.
   /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
-  /// in the view.
+  ///   in the view.
   ///
   /// # Panics
   ///
@@ -78,9 +78,9 @@ impl FileSystemView {
   ///
   /// - `root`: A [`PathBuf`] representing the root path of the file system view.
   /// - `label`: A type that can be converted into a [`String`], representing the label of the
-  /// file system view.
+  ///   file system view.
   /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
-  /// in the view.
+  ///   in the view.
   ///
   /// # Returns
   ///
@@ -130,7 +130,7 @@ impl FileSystemView {
   /// - [`IoError::OsError`]: If the OS reports any other error.
   /// - [`IoError::NotADirectoryError`]: If the `path` does not refer to a directory.
   /// - [`IoError::InvalidPathError`]: If the `path` refers to parent (..) but current path is
-  /// already at root.
+  ///   already at root.
   ///
   pub(crate) fn change_working_directory(
     &mut self,
@@ -202,13 +202,6 @@ impl FileSystemView {
       ErrorKind::PermissionDenied => IoError::PermissionError,
       _ => IoError::OsError(error),
     }
-  }
-
-  /// Changes current path to parent.
-  ///
-  /// See [`FileSystemView::change_working_directory`].
-  pub(crate) fn change_working_directory_up(&mut self) -> Result<bool, IoError> {
-    self.change_working_directory("..")
   }
 
   pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
@@ -287,18 +280,16 @@ impl FileSystemView {
       return Err(IoError::InvalidPathError(String::from("Invalid path!")));
     }
 
+    if path.is_dir() {
+      return Err(IoError::NotAFileError);
+    }
+
     debug!("Opening: {:?}", &path);
 
-    let file = OpenOptions::from(options).open(&path).await.map_err(|e| {
+    OpenOptions::from(options).open(&path).await.map_err(|e| {
       warn!("Error opening file: {}", e);
       FileSystemView::map_error(e)
-    });
-
-    return if path.is_dir() {
-      Err(IoError::NotAFileError)
-    } else {
-      file
-    };
+    })
   }
 
   pub(crate) async fn delete_file(&self, path: impl Into<String>) -> Result<(), IoError> {
@@ -416,7 +407,7 @@ impl FileSystemView {
   /// # Arguments
   ///
   /// - `path` A type that can be converted into a [`String`], representing the path to directory
-  /// to list.
+  ///   to list.
   ///
   /// # Returns
   ///
@@ -565,12 +556,12 @@ impl FileSystemView {
   ///
   /// # Arguments
   /// - `name`: A type that can be converted into a [`String`], representing the name of the
-  /// listed directory.
+  ///   listed directory.
   /// - `path`: A type that can be converted into a [`String`], representing the path to the
-  /// listed directory.
+  ///   listed directory.
   /// - `read_dir`: A [`ReadDir`] containing all the listed objects.
   /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
-  /// for the objects.
+  ///   for the objects.
   ///
   /// # Returns
   ///
@@ -602,6 +593,12 @@ impl FileSystemView {
     listing
   }
 
+  ///
+  /// Preprocesses path by stripping leading characters and joining with view's root or current_path.
+  ///
+  /// If the input path is absolute, leading '/' and if present the view's label are stripped.
+  /// Relative path just joins with current_path.
+  #[inline(always)]
   fn process_path(&self, path: &str) -> PathBuf {
     trace!("Processing path: {}", path);
     if let Some(stripped) = path.strip_prefix(&format!("/{}/", &self.label)) {
@@ -909,7 +906,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -950,7 +947,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -970,7 +967,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1010,7 +1007,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1030,7 +1027,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1052,7 +1049,7 @@ pub(crate) mod tests {
     let dir_path = root.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
     std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
 
     let _cleanup = DirCleanup::new(&dir_path);
@@ -1075,7 +1072,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
@@ -1097,7 +1094,7 @@ pub(crate) mod tests {
     let dir_path = root.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
     std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
 
     let _cleanup = DirCleanup::new(&dir_path);
@@ -1142,7 +1139,7 @@ pub(crate) mod tests {
     let dir_path = root.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
     std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
 
     let _cleanup = DirCleanup::new(&dir_path);
@@ -1223,7 +1220,7 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
