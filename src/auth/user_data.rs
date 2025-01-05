@@ -1,13 +1,13 @@
 //! An entity containing user information.
 
-use crate::io::file_system_view::FileSystemView;
+use crate::io::view_dispatch::ViewDispatch;
 
 #[derive(Clone, Debug)]
 pub(crate) struct UserData {
   pub(crate) username: String,
   #[allow(unused)]
   pub(crate) password: String,
-  pub(crate) file_system_views: Vec<FileSystemView>,
+  pub(crate) file_system_views: Vec<ViewDispatch>,
 }
 
 impl UserData {
@@ -16,7 +16,7 @@ impl UserData {
   /// # Arguments
   /// - `username`: A type that can be converted into a [`String`], representing the users name.
   /// - `password`: A type that can be converted into a [`String`], representing the users
-  /// password.
+  ///   password.
   ///
   /// # Returns
   ///
@@ -30,12 +30,12 @@ impl UserData {
     }
   }
 
-  pub(crate) fn add_view(&mut self, view: FileSystemView) {
+  pub(crate) fn add_view(&mut self, view: ViewDispatch) {
     self.file_system_views.push(view);
   }
 
   #[allow(unused)]
-  pub(crate) fn remove_view(&mut self, view: &FileSystemView) {
+  pub(crate) fn remove_view(&mut self, view: &ViewDispatch) {
     if let Some(pos) = self.file_system_views.iter().position(|x| *x == *view) {
       self.file_system_views.remove(pos);
     }

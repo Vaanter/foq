@@ -3,7 +3,7 @@
 //!
 //! [`File system view`]: crate::io::file_system_view
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs::FileTimes;
 use std::time::SystemTime;
 use tokio::fs::File;
@@ -12,19 +12,20 @@ use tracing::debug;
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
-use crate::io::file_system_view::FileSystemView;
 use crate::io::open_options_flags::OpenOptionsWrapper;
+use crate::io::view::View;
+use crate::io::view_dispatch::ViewDispatch;
 
 /// Contains the users file system views.
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct FileSystemViewRoot {
-  pub(crate) file_system_views: Option<BTreeMap<String, FileSystemView>>,
+  pub(crate) file_system_views: Option<HashMap<String, ViewDispatch>>,
   current_view: Option<String>,
 }
 
 enum ViewType<'a> {
   Virtual(&'a FileSystemViewRoot),
-  Real(&'a FileSystemView)
+  Real(&'a ViewDispatch),
 }
 
 /// Permissions a user can have in the root.
@@ -33,15 +34,18 @@ const ROOT_PERMISSIONS: [UserPermission; 2] = [UserPermission::Execute, UserPerm
 impl FileSystemViewRoot {
   /// Constructs a new instance of [`FileSystemViewRoot`].
   #[cfg(test)]
-  pub(crate) fn new(views: Option<BTreeMap<String, FileSystemView>>) -> Self {
+  pub(crate) fn new(views: Option<HashMap<String, ViewDispatch>>) -> Self {
     FileSystemViewRoot {
       file_system_views: views,
       current_view: None,
     }
   }
 
-  pub(crate) fn set_views(&mut self, view: Vec<FileSystemView>) {
-    let views = view.into_iter().map(|v| (v.label.clone(), v)).collect();
+  pub(crate) fn set_views(&mut self, view: Vec<ViewDispatch>) {
+    let views = view
+      .into_iter()
+      .map(|v| (v.get_label().to_string(), v))
+      .collect();
     self.file_system_views = Some(views);
   }
 
@@ -72,30 +76,30 @@ impl FileSystemViewRoot {
   ///   already at root.
   /// - Other [`IoError`] returned by [`FileSystemView::change_working_directory`].
   ///
-  pub(crate) fn change_working_directory(&mut self, path: impl Into<String>,
-  ) -> Result<bool, IoError> {
-    let path = path.into();
+  pub(crate) fn change_working_directory(&mut self, path: &str) -> Result<bool, IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
 
-    match self.find_view(&path) {
+    match self.find_view(path) {
       Some((ViewType::Real(v), sub_path)) => {
-        let label = v.label.clone();
+        let label = v.get_label().to_string();
         self.current_view.replace(label);
         if sub_path == "/" || sub_path.is_empty() {
           return Ok(true);
         }
-        self.file_system_views.as_mut()
+        self
+          .file_system_views
+          .as_mut()
           .unwrap()
           .get_mut(self.current_view.as_ref().unwrap())
           .unwrap()
-          .change_working_directory(sub_path)
+          .change_working_directory(&sub_path)
       }
-      Some((ViewType::Virtual(_), _)) => {
-        Ok(self.current_view.take().is_some())
-      },
-      None => Err(IoError::InvalidPathError(String::from("Path is not available or accessible!")))
+      Some((ViewType::Virtual(_), _)) => Ok(self.current_view.take().is_some()),
+      None => Err(IoError::InvalidPathError(String::from(
+        "Path is not available or accessible!",
+      ))),
     }
   }
 
@@ -106,17 +110,18 @@ impl FileSystemViewRoot {
     self.change_working_directory("..")
   }
 
-  pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
-    let path = path.into();
+  pub(crate) fn create_directory(&self, path: &str) -> Result<String, IoError> {
     if self.file_system_views.is_none() {
       // User is not logged in
       return Err(IoError::UserError);
     }
 
-    match self.find_view(&path) {
+    match self.find_view(path) {
       Some((ViewType::Virtual(_), _)) => Err(IoError::SystemError),
       Some((ViewType::Real(v), sub_path)) => v.create_directory(&sub_path),
-      None => Err(IoError::InvalidPathError(String::from("Directory path is invalid!")))
+      None => Err(IoError::InvalidPathError(String::from(
+        "Directory path is invalid!",
+      ))),
     }
   }
 
@@ -129,14 +134,14 @@ impl FileSystemViewRoot {
     }
 
     let current_view = self.current_view.as_ref().unwrap();
-    return self
+    self
       .file_system_views
       .as_ref()
       .unwrap()
       .get(current_view)
       .unwrap()
-      .display_path
-      .to_string();
+      .get_display_path()
+      .to_string()
   }
 
   /// Creates a directory listing.
@@ -155,18 +160,16 @@ impl FileSystemViewRoot {
   /// an error occurs.
   ///
   #[tracing::instrument(skip(self, path))]
-  pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
-    let path = path.into();
-
+  pub(crate) fn list_dir(&self, path: &str) -> Result<Vec<EntryData>, IoError> {
     if self.file_system_views.is_none() {
       // not logged in
       return Err(IoError::UserError);
     }
 
-    if let Some((view_type, sub_path)) = self.find_view(&path) {
+    if let Some((view_type, sub_path)) = self.find_view(path) {
       match view_type {
         ViewType::Virtual(v) => v.list_root(),
-        ViewType::Real(v) => v.list_dir(&sub_path)
+        ViewType::Real(v) => v.list_dir(&sub_path),
       }
     } else {
       Err(IoError::InvalidPathError(String::from("Invalid path!")))
@@ -207,9 +210,9 @@ impl FileSystemViewRoot {
       EntryData::new(
         0,
         EntryType::Dir,
-        v.1.permissions.iter().cloned().collect(),
+        v.1.get_permissions().iter().cloned().collect(),
         SystemTime::now(),
-        v.1.label.clone(),
+        v.1.get_label().to_string(),
       )
     }));
 
@@ -222,26 +225,24 @@ impl FileSystemViewRoot {
   #[tracing::instrument(skip(self, path, options))]
   pub(crate) async fn open_file(
     &self,
-    path: impl Into<String>,
+    path: &str,
     options: OpenOptionsWrapper,
   ) -> Result<File, IoError> {
-    let path = path.into();
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
 
-    match self.find_view(&path) {
+    match self.find_view(path) {
       Some((ViewType::Virtual(_), _)) => Err(IoError::InvalidPathError(String::from(
         "Path references a directory, not a file!",
       ))),
-      Some((ViewType::Real(v), subpath)) => v.open_file(subpath, options).await,
-      None => Err(IoError::UserError)
+      Some((ViewType::Real(v), subpath)) => v.open_file(&subpath, options).await,
+      None => Err(IoError::UserError),
     }
   }
 
   #[tracing::instrument(skip(self, path))]
-  pub(crate) async fn delete_file(&self, path: impl Into<String>) -> Result<(), IoError> {
-    let path = path.into();
+  pub(crate) async fn delete_file(&self, path: &str) -> Result<(), IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -252,7 +253,7 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&path);
+    let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
       v.delete_file(&sub_path).await
@@ -262,8 +263,7 @@ impl FileSystemViewRoot {
   }
 
   #[tracing::instrument(skip(self, path))]
-  pub(crate) async fn delete_folder(&self, path: impl Into<String>) -> Result<(), IoError> {
-    let path = path.into();
+  pub(crate) async fn delete_folder(&self, path: &str) -> Result<(), IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -274,21 +274,17 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&path);
+    let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
       v.delete_folder(&sub_path).await
     } else {
-      return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
+      Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
   }
 
   #[tracing::instrument(skip(self, path))]
-  pub(crate) async fn delete_folder_recursive(
-    &self,
-    path: impl Into<String>,
-  ) -> Result<(), IoError> {
-    let path = path.into();
+  pub(crate) async fn delete_folder_recursive(&self, path: &str) -> Result<(), IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -299,21 +295,20 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&path);
+    let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
       v.delete_folder_recursive(&sub_path).await
     } else {
-      return Err(IoError::NotFoundError(String::from("Path doesn't exist!")));
+      Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
   }
 
   pub(crate) async fn change_file_times(
     &self,
     new_time: FileTimes,
-    path: impl Into<String>,
+    path: &str,
   ) -> Result<(), IoError> {
-    let path = path.into();
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
     }
@@ -324,7 +319,7 @@ impl FileSystemViewRoot {
       )));
     }
 
-    let view = self.find_view(&path);
+    let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
       v.change_file_times(new_time, &sub_path).await
@@ -340,7 +335,7 @@ impl FileSystemViewRoot {
     } else if path == ".." || path == "." {
       if let Some(ref label) = self.current_view {
         if let Some(v) = self.file_system_views.as_ref().unwrap().get(label) {
-          if v.root == v.current_path && path == ".." {
+          if v.get_root_path() == v.get_current_path() && path == ".." {
             Some((ViewType::Virtual(self), path.to_string()))
           } else {
             Some((ViewType::Real(v), path.to_string()))
@@ -357,14 +352,29 @@ impl FileSystemViewRoot {
       let label = parts.nth(1).expect("Path cannot be empty here!");
       let mut view_path = "/".to_string();
       view_path.push_str(&parts.collect::<Vec<&str>>().join("/"));
-      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), view_path))
+      self
+        .file_system_views
+        .as_ref()
+        .unwrap()
+        .get(label)
+        .map(|v| (ViewType::Real(v), view_path))
     } else if let Some(ref label) = self.current_view {
-      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
+      self
+        .file_system_views
+        .as_ref()
+        .unwrap()
+        .get(label)
+        .map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
     } else if path.is_empty() {
       Some((ViewType::Virtual(self), String::new()))
     } else {
       let label = parts.next().expect("Path cannot be empty here!");
-      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
+      self
+        .file_system_views
+        .as_ref()
+        .unwrap()
+        .get(label)
+        .map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
     }
   }
 }
@@ -372,7 +382,7 @@ impl FileSystemViewRoot {
 #[cfg(test)]
 mod tests {
   use chrono::{DateTime, Local, TimeDelta};
-  use std::collections::{BTreeMap, HashSet};
+  use std::collections::{HashMap, HashSet};
   use std::env::temp_dir;
   use std::fs::{File, FileTimes};
   use std::ops::Sub;
@@ -385,6 +395,8 @@ mod tests {
   use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view_root::FileSystemViewRoot;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+  use crate::io::view::View;
+  use crate::io::view_dispatch::ViewDispatch;
   use crate::utils::test_utils::*;
 
   #[tokio::test]
@@ -420,7 +432,7 @@ mod tests {
     let mut root = FileSystemViewRoot::new(Some(views));
     root.change_working_directory(label1).unwrap();
     let file = root
-      .open_file(format!("{}/2KiB.txt", root1.to_str().unwrap()), options)
+      .open_file(&format!("{}/2KiB.txt", root1.to_str().unwrap()), options)
       .await;
     let Err(IoError::InvalidPathError(_)) = file else {
       panic!("Expected InvalidPath Error, got: {:?}", file);
@@ -446,7 +458,9 @@ mod tests {
       .build()
       .unwrap();
     let root = FileSystemViewRoot::new(Some(views));
-    let file = root.open_file(format!("/{label2}/2KiB.txt"), options).await;
+    let file = root
+      .open_file(&format!("/{label2}/2KiB.txt"), options)
+      .await;
     assert!(file.is_ok());
   }
 
@@ -469,7 +483,7 @@ mod tests {
       .build()
       .unwrap();
     let root = FileSystemViewRoot::new(Some(views));
-    let file = root.open_file(format!("{label2}/2KiB.txt"), options).await;
+    let file = root.open_file(&format!("{label2}/2KiB.txt"), options).await;
     assert!(file.is_ok());
   }
 
@@ -493,7 +507,7 @@ mod tests {
       .unwrap();
     let root = FileSystemViewRoot::new(Some(views));
     let file = root
-      .open_file(format!("{label2}/NONEXISTENT"), options)
+      .open_file(&format!("{label2}/NONEXISTENT"), options)
       .await;
     let Err(IoError::NotFoundError(_)) = file else {
       panic!("Expected NotFound error, got: {:?}", file);
@@ -518,7 +532,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root
-      .change_working_directory(format!("{}/test_files", label))
+      .change_working_directory(&format!("{}/test_files", label))
       .unwrap());
     assert_eq!(
       root.get_current_working_directory(),
@@ -546,7 +560,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root
-      .change_working_directory(format!("{}/test_files", label))
+      .change_working_directory(&format!("{}/test_files", label))
       .unwrap());
     assert!(root.change_working_directory("~").unwrap());
     assert!(root.current_view.is_none());
@@ -602,7 +616,7 @@ mod tests {
         .unwrap()
         .get(label)
         .unwrap()
-        .display_path,
+        .get_display_path(),
       format!("/{label}")
     );
   }
@@ -617,7 +631,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root
-      .change_working_directory(format!("{label}/test_files"))
+      .change_working_directory(&format!("{label}/test_files"))
       .unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label);
@@ -627,7 +641,7 @@ mod tests {
         .unwrap()
         .get(label)
         .unwrap()
-        .display_path,
+        .get_display_path(),
       format!("/{label}/test_files")
     );
   }
@@ -658,7 +672,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root
-      .change_working_directory(format!("/{label}/test_files"))
+      .change_working_directory(&format!("/{label}/test_files"))
       .unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label);
@@ -668,7 +682,7 @@ mod tests {
         .unwrap()
         .get(label)
         .unwrap()
-        .display_path,
+        .get_display_path(),
       format!("/{label}/test_files")
     );
   }
@@ -682,7 +696,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("/{label}")).unwrap());
+    assert!(root.change_working_directory(&format!("/{label}")).unwrap());
     assert!(root.change_working_directory("test_files").unwrap());
     assert!(root.current_view.is_some());
     assert_eq!(root.current_view.unwrap(), label);
@@ -692,7 +706,7 @@ mod tests {
         .unwrap()
         .get(label)
         .unwrap()
-        .display_path,
+        .get_display_path(),
       format!("/{label}/test_files")
     );
   }
@@ -706,7 +720,7 @@ mod tests {
     let views = create_root(vec![view1]);
 
     let mut root = FileSystemViewRoot::new(Some(views));
-    assert!(root.change_working_directory(format!("/{label}")).unwrap());
+    assert!(root.change_working_directory(&format!("/{label}")).unwrap());
     assert!(root.change_working_directory("..").unwrap());
     assert!(root.current_view.is_none());
     assert_eq!(
@@ -715,7 +729,7 @@ mod tests {
         .unwrap()
         .get(label)
         .unwrap()
-        .display_path,
+        .get_display_path(),
       format!("/{label}")
     );
   }
@@ -1053,7 +1067,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     root
-      .change_working_directory(format!("/{}", label1))
+      .change_working_directory(&format!("/{}", label1))
       .unwrap();
 
     let listing = root.list_dir("..").map_err(|e| println!("{}", e)).unwrap();
@@ -1078,7 +1092,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     root
-      .change_working_directory(format!("/{}/subfolder", label1))
+      .change_working_directory(&format!("/{}/subfolder", label1))
       .unwrap();
 
     let listing = root.list_dir("..").unwrap();
@@ -1097,7 +1111,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     root
-      .change_working_directory(format!("/{}", label1))
+      .change_working_directory(&format!("/{}", label1))
       .unwrap();
 
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
@@ -1107,7 +1121,7 @@ mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = root.delete_file(file_name).await;
+    let result = root.delete_file(&file_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1132,7 +1146,7 @@ mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = root.delete_file(format!("{}/{}", label1, file_name)).await;
+    let result = root.delete_file(&format!("{}/{}", label1, file_name)).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1157,7 +1171,9 @@ mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = root.delete_file(format!("/{}/{}", label1, file_name)).await;
+    let result = root
+      .delete_file(&format!("/{}/{}", label1, file_name))
+      .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1182,7 +1198,9 @@ mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = root.delete_file(format!("/{}/{}", label1, file_name)).await;
+    let result = root
+      .delete_file(&format!("/{}/{}", label1, file_name))
+      .await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission error, got: {:?}", result);
     };
@@ -1207,7 +1225,7 @@ mod tests {
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = root.delete_file(format!("/{}/{}", label1, dir_name)).await;
+    let result = root.delete_file(&format!("/{}/{}", label1, dir_name)).await;
     let Err(IoError::NotAFileError) = result else {
       panic!("Expected NotAFile Error, got: {:?}", result);
     };
@@ -1225,7 +1243,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     root
-      .change_working_directory(format!("/{}", label1))
+      .change_working_directory(&format!("/{}", label1))
       .unwrap();
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
@@ -1235,7 +1253,7 @@ mod tests {
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = root.delete_folder(dir_name).await;
+    let result = root.delete_folder(&dir_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1260,7 +1278,9 @@ mod tests {
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = root.delete_folder(format!("{}/{}", label1, dir_name)).await;
+    let result = root
+      .delete_folder(&format!("{}/{}", label1, dir_name))
+      .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1286,7 +1306,7 @@ mod tests {
 
     assert!(dir_path.exists());
     let result = root
-      .delete_folder(format!("/{}/{}", label1, dir_name))
+      .delete_folder(&format!("/{}/{}", label1, dir_name))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1313,7 +1333,7 @@ mod tests {
 
     assert!(dir_path.exists());
     let result = root
-      .delete_folder(format!("/{}/{}", label1, dir_name))
+      .delete_folder(&format!("/{}/{}", label1, dir_name))
       .await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission error, got: {:?}", result);
@@ -1340,7 +1360,7 @@ mod tests {
 
     assert!(file_path.exists());
     let result = root
-      .delete_folder(format!("/{}/{}", label1, file_name))
+      .delete_folder(&format!("/{}/{}", label1, file_name))
       .await;
     let Err(IoError::NotADirectoryError) = result else {
       panic!("Expected NotADirectory Error, got: {:?}", result);
@@ -1359,7 +1379,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     root
-      .change_working_directory(format!("/{}", label1))
+      .change_working_directory(&format!("/{}", label1))
       .unwrap();
 
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
@@ -1369,7 +1389,7 @@ mod tests {
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = root.delete_folder_recursive(dir_name).await;
+    let result = root.delete_folder_recursive(&dir_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1399,7 +1419,7 @@ mod tests {
     assert!(dir_path.exists());
     assert!(dir_sub_path.exists());
     let result = root
-      .delete_folder_recursive(format!("/{}/{}", label1, dir_name))
+      .delete_folder_recursive(&format!("/{}/{}", label1, dir_name))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1426,7 +1446,9 @@ mod tests {
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = root.delete_folder(format!("{}/{}", label1, dir_name)).await;
+    let result = root
+      .delete_folder(&format!("{}/{}", label1, dir_name))
+      .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1452,7 +1474,7 @@ mod tests {
 
     assert!(file_path.exists());
     let result = root
-      .delete_folder_recursive(format!("/{}/{}", label1, file_name))
+      .delete_folder_recursive(&format!("/{}/{}", label1, file_name))
       .await;
     let Err(IoError::NotADirectoryError) = result else {
       panic!("Expected NotADirectory Error, got: {:?}", result);
@@ -1479,7 +1501,7 @@ mod tests {
 
     assert!(dir_path.exists());
     let result = root
-      .delete_folder_recursive(format!("/{}/{}", label1, dir_name))
+      .delete_folder_recursive(&format!("/{}/{}", label1, dir_name))
       .await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission error, got: {:?}", result);
@@ -1498,7 +1520,7 @@ mod tests {
 
     let mut root = FileSystemViewRoot::new(Some(views));
     assert!(root
-      .change_working_directory(format!("/{}", label1))
+      .change_working_directory(&format!("/{}", label1))
       .unwrap());
 
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
@@ -1510,7 +1532,7 @@ mod tests {
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
-    let result = root.change_file_times(new_time, file_name).await;
+    let result = root.change_file_times(new_time, &file_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1545,7 +1567,7 @@ mod tests {
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_file_times(new_time, format!("{}/{}", label1, file_name))
+      .change_file_times(new_time, &format!("{}/{}", label1, file_name))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1581,7 +1603,7 @@ mod tests {
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_file_times(new_time, format!("/{}/{}", label1, file_name))
+      .change_file_times(new_time, &format!("/{}/{}", label1, file_name))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1617,7 +1639,7 @@ mod tests {
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_file_times(new_time, format!("/{}/{}", label1, file_name))
+      .change_file_times(new_time, &format!("/{}/{}", label1, file_name))
       .await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission error, got: {:?}", result);
@@ -1645,14 +1667,17 @@ mod tests {
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
     let result = root
-      .change_file_times(new_time, format!("/{}/{}", label1, dir_name))
+      .change_file_times(new_time, &format!("/{}/{}", label1, dir_name))
       .await;
     let Err(IoError::NotAFileError) = result else {
       panic!("Expected NotAFile Error, got: {:?}", result);
     };
   }
 
-  pub(crate) fn create_root(views: Vec<FileSystemView>) -> BTreeMap<String, FileSystemView> {
-    views.into_iter().map(|v| (v.label.clone(), v)).collect()
+  pub(crate) fn create_root(views: Vec<FileSystemView>) -> HashMap<String, ViewDispatch> {
+    views
+      .into_iter()
+      .map(|v| (v.label.clone(), v.into()))
+      .collect()
   }
 }

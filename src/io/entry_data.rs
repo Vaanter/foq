@@ -3,8 +3,6 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::fs::Metadata;
-use std::io;
-use std::io::Error;
 use std::time::SystemTime;
 
 use chrono::format::{DelayedFormat, StrftimeItems};
@@ -71,11 +69,10 @@ impl EntryData {
   ///
   /// Users permissions are filtered to permissions that are relevant for an object.
   pub(crate) fn create_from_metadata(
-    metadata: io::Result<Metadata>,
+    metadata: Metadata,
     name: impl Into<String>,
     permissions: &HashSet<UserPermission>,
-  ) -> Result<Self, Error> {
-    let metadata = metadata?;
+  ) -> Self {
     let size = metadata.len();
 
     let modify = metadata.modified().unwrap_or(SystemTime::now());
@@ -95,7 +92,7 @@ impl EntryData {
       .filter_map(|p| permissions.get(p).map(|v| v.to_owned()))
       .collect();
 
-    Ok(EntryData::new(size, entry_type, permissions, modify, name))
+    EntryData::new(size, entry_type, permissions, modify, name)
   }
   pub fn size(&self) -> u64 {
     self.size
