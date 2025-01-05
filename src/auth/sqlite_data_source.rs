@@ -14,6 +14,7 @@ use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
 use crate::auth::user_permission::UserPermission;
 use crate::io::file_system_view::FileSystemView;
+use crate::io::view_dispatch::ViewDispatch;
 
 #[derive(Clone)]
 pub(crate) struct SqliteDataSource {
@@ -84,7 +85,7 @@ impl DataSource for SqliteDataSource {
     }
 
     let views = sqlx::query!(
-      "SELECT root, label, permissions FROM views WHERE user_id = $1",
+      "SELECT root, label, permissions, type FROM views WHERE user_id = $1",
       user_info.user_id
     )
     .fetch_all(&self.pool)
@@ -102,8 +103,13 @@ impl DataSource for SqliteDataSource {
           .filter(|&p| !p.is_empty())
           .map(|p| UserPermission::from_str(p).map_err(|_| AuthError::PermissionParsingError)),
       )?;
-      match FileSystemView::new_option(PathBuf::from(&view.root), &view.label, permissions) {
-        Ok(v) => user_data.add_view(v),
+      let v: Result<ViewDispatch, ()> = match &view.r#type {
+        0 => FileSystemView::new_option(PathBuf::from(&view.root), &view.label, permissions)
+          .map(|v| v.into()),
+        _ => unreachable!(),
+      };
+      match v {
+        Ok(view) => user_data.add_view(view),
         Err(_) => warn!(
           "Failed to load view, the path may not exist! View: {:?}",
           view
@@ -125,7 +131,7 @@ pub(crate) mod tests {
   use crate::auth::sqlite_data_source::SqliteDataSource;
 
   pub(crate) async fn setup_test_db(pool: &SqlitePool) -> sqlx::Result<()> {
-    sqlx::query_file!("sql/scheme.sql").execute(pool).await?;
+    sqlx::query_file!("sql/schema.sql").execute(pool).await?;
     sqlx::query_file!("sql/data.sql").execute(pool).await?;
     Ok(())
   }

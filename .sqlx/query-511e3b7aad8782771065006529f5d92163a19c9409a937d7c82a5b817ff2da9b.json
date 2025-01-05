@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "create table if not exists users\n(\n    user_id  integer primary key autoincrement not null,\n    username text                              not null,\n    password text                              not null\n);\n\ncreate table if not exists views\n(\n    user_id     integer not null,\n    root        text    not null,\n    label       text    not null,\n    permissions text    not null,\n    type        integer not null default 0 check ( type in (0, 1) ), -- this could be FK to another table\n    foreign key (user_id) references users (user_id),\n    constraint unique_label_per_user unique (user_id, label)\n);\n\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "511e3b7aad8782771065006529f5d92163a19c9409a937d7c82a5b817ff2da9b"
+}
