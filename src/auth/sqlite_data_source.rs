@@ -14,6 +14,7 @@ use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
 use crate::auth::user_permission::UserPermission;
 use crate::io::file_system_view::FileSystemView;
+use crate::io::recursive_view::RecursiveView;
 use crate::io::view_dispatch::ViewDispatch;
 
 #[derive(Clone)]
@@ -105,6 +106,8 @@ impl DataSource for SqliteDataSource {
       )?;
       let v: Result<ViewDispatch, ()> = match &view.r#type {
         0 => FileSystemView::new_option(PathBuf::from(&view.root), &view.label, permissions)
+          .map(|v| v.into()),
+        1 => RecursiveView::new_option(PathBuf::from(&view.root), &view.label, permissions)
           .map(|v| v.into()),
         _ => unreachable!(),
       };
