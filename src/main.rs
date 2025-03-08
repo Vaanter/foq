@@ -1,7 +1,7 @@
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::str::FromStr;
-use tracing::Level;
+use tracing::{debug, trace, Level};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
@@ -31,8 +31,7 @@ mod utils;
 /// [`INFO`]: Level::INFO
 /// [`runner`]: runner
 ///
-#[tokio::main]
-async fn main() {
+fn main() {
   let log_file_name = format_log_file_name();
   let mut log_file_options = OpenOptions::new();
   log_file_options.write(true).truncate(true).create(true);
@@ -40,7 +39,7 @@ async fn main() {
     .open(log_file_name)
     .expect("Log file should be accessible");
   let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
-  let log_filter = &CONFIG.get_string("log_filter").unwrap_or_else(move |_| {
+  let log_filter = CONFIG.get_string("log_filter").unwrap_or_else(|_| {
     let log_level =
       Level::from_str(&CONFIG.get_string("log_level").unwrap_or_default()).unwrap_or(Level::INFO);
     format!("foq={}", log_level)
@@ -53,10 +52,29 @@ async fn main() {
     .with_thread_ids(true)
     .with_target(false)
     .with_filter(EnvFilter::new(log_filter));
-
   Registry::default().with(fmt_layer).init();
 
-  runner::run().await;
+  let threads: i64 = CONFIG.get_int("threads").unwrap_or_else(|_| {
+    std::thread::available_parallelism()
+      .map(|p| p.get())
+      .unwrap_or(1usize) as i64
+  });
+  debug!("Using {} threads", threads);
+
+  tokio::runtime::Builder::new_multi_thread()
+    .worker_threads(threads as usize)
+    .enable_all()
+    .on_task_spawn(|meta| {
+      trace!("Task {} spawned", meta.id());
+    })
+    .on_task_terminate(|task| {
+      trace!("Task {} terminated", task.id());
+    })
+    .build()
+    .unwrap()
+    .block_on(async {
+      runner::run().await;
+    });
 }
 
 fn format_log_file_name() -> String {

@@ -263,7 +263,13 @@ async fn run_quinn(addr: SocketAddr, token: CancellationToken) {
     let cancel = token.clone();
     match quic_quinn_listener.accept(cancel.clone()).await {
       Some(connection) => {
-        let conn = connection.await.unwrap();
+        let conn = match connection.await {
+          Ok(c) => c,
+          Err(e) => {
+            error!("Failed to create connection! {e}");
+            continue;
+          }
+        };
         let peer = conn.remote_address();
         info!("[QUINN] Received connection from: {:?}", peer);
         tokio::spawn(async move {
