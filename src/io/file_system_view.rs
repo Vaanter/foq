@@ -1157,6 +1157,18 @@ pub(crate) mod tests {
   }
 
   #[test]
+  fn list_dir_no_permission_test() {
+    let permissions = HashSet::from([]);
+    let root = current_dir().unwrap();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
+    let listing = view.list_dir("test");
+    let Err(IoError::PermissionError) = listing else {
+      panic!("Expected Permission Error, got: {:?}", listing);
+    };
+  }
+
+  #[test]
   fn list_dir_relative_test() {
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
     let root = current_dir().unwrap();

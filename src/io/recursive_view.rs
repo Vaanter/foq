@@ -8,7 +8,7 @@ use std::fs::FileTimes;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::debug;
+use tracing::{debug, warn};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Clone, Debug)]
@@ -90,15 +90,15 @@ impl RecursiveView {
     entry.metadata().ok().and_then(|meta| {
       let file_components = entry.path().components();
       let root_components: HashSet<Component> = self.root.components().collect();
-      let file_name = file_components
+      file_components
         .filter(|comp| !root_components.contains(comp))
         .map(|comp| comp.as_os_str().to_string_lossy().to_string())
         .reduce(|mut acc, comp_name| {
           acc.push('\\');
           acc.push_str(&comp_name);
           acc
-        });
-      file_name.map(|name| EntryData::create_from_metadata(meta, name, &self.permissions))
+        })
+        .map(|name| EntryData::create_from_metadata(meta, name, &self.permissions))
     })
   }
 }
@@ -107,7 +107,7 @@ impl RecursiveView {
 impl View for RecursiveView {
   fn change_working_directory(&mut self, path: &str) -> Result<bool, IoError> {
     // As all files are shown at the same level, this shouldn't even get called
-    debug!("{:?}", path);
+    warn!("{:?}", path);
     Err(IoError::SystemError)
   }
 
@@ -121,12 +121,16 @@ impl View for RecursiveView {
     todo!()
   }
 
-  async fn delete_folder(&self, _path: &str) -> Result<(), IoError> {
-    unreachable!();
+  async fn delete_folder(&self, path: &str) -> Result<(), IoError> {
+    // No folders should ever be sent, so this shouldn't even get called
+    warn!("{:?}", path);
+    Err(IoError::SystemError)
   }
 
-  async fn delete_folder_recursive(&self, _path: &str) -> Result<(), IoError> {
-    unreachable!();
+  async fn delete_folder_recursive(&self, path: &str) -> Result<(), IoError> {
+    // No folders should ever be sent, so this shouldn't even get called
+    warn!("{:?}", path);
+    Err(IoError::SystemError)
   }
 
   async fn change_file_times(&self, new_time: FileTimes, path: &str) -> Result<(), IoError> {
@@ -205,8 +209,10 @@ impl View for RecursiveView {
 
 #[cfg(test)]
 mod tests {
-  use std::env::current_dir;
   use super::*;
+  use crate::utils::test_utils::{create_dir, touch, DirCleanup};
+  use std::env::{current_dir, temp_dir};
+  use uuid::Uuid;
 
   #[test]
   fn list_dir_sanity_test() {
@@ -239,6 +245,41 @@ mod tests {
     let listing = view.list_dir("test");
     let cached = view.cached_entries.try_lock().unwrap();
     assert!(cached.is_some());
-    assert_eq!(listing.unwrap().len(), cached.as_ref().unwrap().entries.len());
+    assert_eq!(
+      listing.unwrap().len(),
+      cached.as_ref().unwrap().entries.len()
+    );
+  }
+
+  #[test]
+  fn map_entries_to_entry_data_same_components_test() {
+    let permissions = HashSet::from([UserPermission::List]);
+    let root = temp_dir();
+    let dir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let dir_path = root.join(&dir_name);
+    create_dir(&dir_path).expect("Test directory should exist");
+    DirCleanup::new(&dir_path);
+    let same_component = "same_component";
+    let sub_path = dir_path.join(same_component).join(same_component);
+    create_dir(&sub_path).unwrap();
+
+    let files = (1..5)
+      .map(|_| Uuid::new_v4().as_hyphenated().to_string())
+      .collect::<Vec<_>>();
+    for file in files.iter() {
+      touch(&sub_path.join(file)).expect("Test file should exist");
+    }
+
+    let label = "test";
+    let view = RecursiveView::new(dir_path.clone(), label, permissions);
+    let listing: Vec<DirEntry> = WalkDir::new(&sub_path)
+      .into_iter()
+      .filter_map(|e| e.ok())
+      .collect();
+    for entry in &listing {
+      let entry_data = view.map_entries_to_entry_data(entry).unwrap();
+      let name = entry_data.name().to_string();
+      assert_eq!(2, name.matches(&same_component).count(), "name: {}", &name);
+    }
   }
 }
