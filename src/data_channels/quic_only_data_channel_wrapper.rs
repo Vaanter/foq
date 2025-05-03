@@ -1,6 +1,5 @@
 use anyhow::bail;
 use async_channel::{unbounded, Receiver, Sender};
-use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,7 +35,7 @@ impl QuicOnlyDataChannelWrapper {
   /// # Arguments
   ///
   /// - `addr`: A [`SocketAddr`] representing the address for the data channel.
-  /// The port is set to 0.
+  ///   The port is set to 0.
   /// - `connection`: An [`Arc<Mutex<Connection>>`] containing the clients' connection.
   ///
   /// # Returns
@@ -63,7 +62,7 @@ impl QuicOnlyDataChannelWrapper {
   /// the stream in time or some other error occurs it will be logged.
   ///
   #[tracing::instrument(skip(self))]
-  async fn create_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn create_stream(&self) -> Result<SocketAddr, anyhow::Error> {
     debug!("Creating passive listener");
     let conn = self.connection.clone();
     let sender = self.stream_sender.clone();
@@ -71,28 +70,29 @@ impl QuicOnlyDataChannelWrapper {
     tokio::spawn(
       async move {
         debug!("Awaiting passive connection");
-        let conn = timeout(Duration::from_secs(20), {
-          conn.lock().await.accept_bidirectional_stream()
-        })
-        .await;
-
-        match conn {
-          Ok(Ok(Some(stream))) => {
-            debug!(
-              "Passive listener connection successful! ID: {}.",
-              stream.id()
-            );
-            if let Err(mut e) = sender.send(Box::new(QuicDataChannel::new(stream))).await {
-              error!("Failed to send new data channel downstream! {e}");
-              if let Err(shutdown_error) = e.0.shutdown().await {
-                error!("Failed to shutdown data channel! {shutdown_error}");
+        if let Ok(mut conn_lock) = timeout(Duration::from_secs(3), conn.lock()).await {
+          let conn = timeout(Duration::from_secs(20), {
+            conn_lock.accept_bidirectional_stream()
+          })
+          .await;
+          match conn {
+            Ok(Ok(Some(stream))) => {
+              debug!(
+                "Passive listener connection successful! ID: {}.",
+                stream.id()
+              );
+              if let Err(mut e) = sender.send(Box::new(QuicDataChannel::new(stream))).await {
+                error!("Failed to send new data channel downstream! {e}");
+                if let Err(shutdown_error) = e.0.shutdown().await {
+                  error!("Failed to shutdown data channel! {shutdown_error}");
+                }
               }
             }
-          }
-          Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
-          Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
-          Err(e) => info!("Client failed to connect to passive listener before timeout! {e}"),
-        };
+            Ok(Ok(None)) => warn!("Connection closed while awaiting stream!"),
+            Ok(Err(e)) => warn!("Passive listener connection failed! {e}"),
+            Err(e) => info!("Client failed to connect to passive listener before timeout! {e}"),
+          };
+        }
       }
       .instrument(span),
     );
@@ -104,7 +104,7 @@ impl QuicOnlyDataChannelWrapper {
 #[async_trait]
 impl DataChannelWrapper for QuicOnlyDataChannelWrapper {
   /// Opens a data channel using [`QuicOnlyDataChannelWrapper::create_stream`].
-  async fn open_data_stream(&self, _prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn open_data_stream(&self, _prot_mode: ProtMode) -> Result<SocketAddr, anyhow::Error> {
     self.create_stream().await
   }
 
