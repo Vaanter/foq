@@ -23,15 +23,22 @@ pub(crate) async fn pasv(
   let reply = match wrapper
     .open_data_stream(properties.prot_mode)
     .await
-    .unwrap()
   {
-    SocketAddr::V4(addr) => Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr)),
-    SocketAddr::V6(_) => {
-      error!("PASV: IPv6 is not supported!");
-      Reply::new(
-        ReplyCode::CommandNotImplementedForThatParameter,
-        "Server only supports IPv6!",
-      )
+    Ok(addr) => {
+      match addr {
+        SocketAddr::V4(addr) => Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr)),
+        SocketAddr::V6(_) => {
+          error!("PASV: IPv6 is not supported!");
+          Reply::new(
+            ReplyCode::CommandNotImplementedForThatParameter,
+            "Server only supports IPv6!",
+          )
+        }
+      }
+    },
+    Err(e) => {
+      error!("Failed to open data stream: {}", e);
+      Reply::new(ReplyCode::SyntaxErrorInParametersOrArguments, "Failed to listen for data stream")
     }
   };
   reply_sender.send_control_message(reply).await;
