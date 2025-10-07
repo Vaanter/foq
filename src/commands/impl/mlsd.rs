@@ -31,9 +31,7 @@ pub(crate) async fn mlsd(
     return;
   }
 
-  let listing = session_properties
-    .file_system_view_root
-    .list_dir(&command.argument);
+  let listing = session_properties.file_system_view_root.list_dir(&command.argument);
 
   let listing = match get_listing_or_error_reply(listing) {
     Ok(l) => l,
@@ -56,10 +54,7 @@ pub(crate) async fn mlsd(
     .await;
 
   let mem = listing.iter().map(|l| l.to_string()).collect::<String>();
-  trace!(
-    "Sending listing to client:\n{}",
-    mem.replace("\r\n", "\\r\\n")
-  );
+  trace!("Sending listing to client:\n{}", mem.replace("\r\n", "\\r\\n"));
 
   let mut buf = BufReader::new(mem.as_bytes());
   let transfer = copy_data(&mut buf, &mut data_channel);
@@ -101,8 +96,8 @@ mod tests {
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor_custom,
-    CommandProcessorSettingsBuilder, TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, open_tcp_data_channel,
+    receive_and_verify_reply, setup_test_command_processor_custom,
   };
 
   #[tokio::test]
@@ -138,12 +133,8 @@ mod tests {
         let msg = String::from_utf8_lossy(&buffer[..len]);
         assert!(!msg.is_empty());
 
-        let file_count = settings
-          .view_root
-          .read_dir()
-          .expect("Failed to read current path!")
-          .count()
-          + 1; // Add 1 to account for current path (.)
+        let file_count =
+          settings.view_root.read_dir().expect("Failed to read current path!").count() + 1; // Add 1 to account for current path (.)
 
         println!("Message:\n{}", msg);
         assert_eq!(file_count, msg.lines().count());
@@ -163,9 +154,8 @@ mod tests {
   async fn not_logged_in_test() {
     let command = Command::new(Commands::Mlsd, String::new());
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
@@ -209,13 +199,7 @@ mod tests {
       panic!("Command timeout!");
     };
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]

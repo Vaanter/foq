@@ -5,8 +5,8 @@ use std::time::Duration;
 use s2n_quic::provider::congestion_controller::Bbr;
 use s2n_quic::provider::limits::{Limits, Provider};
 use s2n_quic::{
-  provider::io::tokio::Builder as IoBuilder, provider::tls::rustls::Server as TlsServer,
-  Connection, Server,
+  Connection, Server, provider::io::tokio::Builder as IoBuilder,
+  provider::tls::rustls::Server as TlsServer,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -46,7 +46,7 @@ impl QuicOnlyListener {
       .build()?;
     let limits = Limits::new()
       .with_max_idle_timeout(Duration::from_secs(30))
-      .map_err(|e| Error::new(ErrorKind::Other, e))?
+      .map_err(Error::other)?
       .start()
       .unwrap();
 
@@ -54,7 +54,7 @@ impl QuicOnlyListener {
 
     let tls_config = match TLS_CONFIG.clone() {
       Some(tls) => tls,
-      None => return Err(Error::new(ErrorKind::Other, "TLS config is not available")),
+      None => return Err(Error::other("TLS config is not available")),
     };
 
     let tls_server = TlsServer::from(tls_config);
@@ -69,7 +69,7 @@ impl QuicOnlyListener {
       .with_limits(limits)
       .unwrap()
       .start()
-      .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+      .map_err(|e| Error::other(e.to_string()))?;
 
     Ok(QuicOnlyListener { server })
   }

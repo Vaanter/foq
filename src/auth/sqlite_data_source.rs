@@ -76,10 +76,7 @@ impl DataSource for SqliteDataSource {
     let password_hash = user_info.password;
     let parsed_hash = PasswordHash::new(&password_hash).unwrap();
     if argon
-      .verify_password(
-        login_form.password.as_ref().unwrap().as_bytes(),
-        &parsed_hash,
-      )
+      .verify_password(login_form.password.as_ref().unwrap().as_bytes(), &parsed_hash)
       .is_err()
     {
       return Err(AuthError::InvalidCredentials);
@@ -113,10 +110,7 @@ impl DataSource for SqliteDataSource {
       };
       match v {
         Ok(view) => user_data.add_view(view),
-        Err(_) => warn!(
-          "Failed to load view, the path may not exist! View: {:?}",
-          view
-        ),
+        Err(_) => warn!("Failed to load view, the path may not exist! View: {:?}", view),
       }
     }
 
@@ -148,10 +142,7 @@ pub(crate) mod tests {
     let _ = form.username.insert("testuser1".to_string());
     let _ = form.password.insert("user1".to_string());
 
-    let result = data_source
-      .authenticate(&form)
-      .await
-      .expect("Authenticate should succeed!");
+    let result = data_source.authenticate(&form).await.expect("Authenticate should succeed!");
 
     assert!(!result.file_system_views.is_empty());
 

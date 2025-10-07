@@ -4,8 +4,8 @@ use crate::auth::auth_provider::AuthProvider;
 use crate::auth::sqlite_data_source::SqliteDataSource;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
-use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
+use tokio_rustls::server::TlsStream;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 

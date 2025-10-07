@@ -25,13 +25,13 @@ use crate::commands::r#impl::pasv::pasv;
 use crate::commands::r#impl::pbsz::pbsz;
 use crate::commands::r#impl::prot::prot;
 use crate::commands::r#impl::pwd::pwd;
-use crate::commands::r#impl::r#type::r#type;
 use crate::commands::r#impl::rest::rest;
 use crate::commands::r#impl::retr::retr;
 use crate::commands::r#impl::rmd::rmd;
 use crate::commands::r#impl::rmda::rmda;
 use crate::commands::r#impl::stor::stor;
 use crate::commands::r#impl::syst::syst;
+use crate::commands::r#impl::r#type::r#type;
 use crate::commands::r#impl::user::user;
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -90,10 +90,7 @@ impl Command {
       Commands::Type => r#type(self, command_processor, reply_sender).await,
       Commands::User => user(self, command_processor, reply_sender).await,
       _ => {
-        info!(
-          "Couldn't execute command, not implemented! Command: {:?}",
-          self.command
-        );
+        info!("Couldn't execute command, not implemented! Command: {:?}", self.command);
         reply_sender
           .send_control_message(Reply::new(
             ReplyCode::CommandNotImplemented,
@@ -112,9 +109,7 @@ impl FromStr for Command {
   fn from_str(message: &str) -> Result<Self, Self::Err> {
     trace!("Parsing message to command.");
     let message_trimmed = message.trim_end_matches(['\n', '\r']);
-    let split = message_trimmed
-      .split_once(' ')
-      .unwrap_or((message_trimmed, ""));
+    let split = message_trimmed.split_once(' ').unwrap_or((message_trimmed, ""));
     let command = split.0;
     let argument = split.1;
     let command = Command::new(command.parse()?, argument);

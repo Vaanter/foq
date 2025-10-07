@@ -8,9 +8,7 @@ use std::sync::Arc;
 #[tracing::instrument(skip(reply_sender))]
 pub(crate) async fn noop(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(Commands::Noop, command.command);
-  reply_sender
-    .send_control_message(Reply::new(ReplyCode::CommandOkay, "OK"))
-    .await;
+  reply_sender.send_control_message(Reply::new(ReplyCode::CommandOkay, "OK")).await;
 }
 
 #[cfg(test)]
@@ -18,8 +16,8 @@ mod tests {
   use std::sync::Arc;
   use std::time::Duration;
 
-  use tokio::sync::mpsc::channel;
   use tokio::sync::RwLock;
+  use tokio::sync::mpsc::channel;
   use tokio::time::timeout;
 
   use crate::commands::command::Command;
@@ -28,7 +26,7 @@ mod tests {
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{receive_and_verify_reply, TestReplySender, LOCALHOST};
+  use crate::utils::test_utils::{LOCALHOST, TestReplySender, receive_and_verify_reply};
 
   #[tokio::test]
   async fn response_test() {

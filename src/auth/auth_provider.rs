@@ -50,8 +50,8 @@ mod tests {
 
   use crate::auth::auth_provider::AuthProvider;
   use crate::auth::login_form::LoginForm;
-  use crate::auth::sqlite_data_source::tests::setup_test_db;
   use crate::auth::sqlite_data_source::SqliteDataSource;
+  use crate::auth::sqlite_data_source::tests::setup_test_db;
 
   #[sqlx::test]
   async fn authenticate_test(pool: SqlitePool) -> sqlx::Result<()> {

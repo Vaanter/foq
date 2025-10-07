@@ -34,10 +34,7 @@ pub(crate) async fn r#type(
     return;
   }
 
-  let (new_type, sub_type) = command
-    .argument
-    .split_once(' ')
-    .unwrap_or((&command.argument, ""));
+  let (new_type, sub_type) = command.argument.split_once(' ').unwrap_or((&command.argument, ""));
 
   match (new_type, sub_type) {
     ("A", "N") | ("A", "") => {
@@ -68,10 +65,7 @@ pub(crate) async fn r#type(
   };
 
   reply_sender
-    .send_control_message(Reply::new(
-      ReplyCode::CommandOkay,
-      format!("TYPE set to {}.", new_type),
-    ))
+    .send_control_message(Reply::new(ReplyCode::CommandOkay, format!("TYPE set to {}.", new_type)))
     .await;
 }
 
@@ -89,8 +83,8 @@ mod tests {
   use crate::commands::reply_code::ReplyCode;
   use crate::session::data_type::{DataType, SubType};
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
 
   #[tokio::test]
@@ -193,10 +187,7 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
-    assert_eq!(
-      command_processor.session_properties.read().await.data_type,
-      DataType::Binary
-    );
+    assert_eq!(command_processor.session_properties.read().await.data_type, DataType::Binary);
   }
 
   #[tokio::test]
@@ -294,17 +285,8 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
-    assert_eq!(
-      command_processor.session_properties.read().await.data_type,
-      original_type
-    );
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    assert_eq!(command_processor.session_properties.read().await.data_type, original_type);
   }
 
   #[tokio::test]
@@ -334,16 +316,8 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::CommandNotImplementedForThatParameter,
-      None,
-    )
-    .await;
-    assert_eq!(
-      command_processor.session_properties.read().await.data_type,
-      original_type
-    );
+    receive_and_verify_reply(2, &mut rx, ReplyCode::CommandNotImplementedForThatParameter, None)
+      .await;
+    assert_eq!(command_processor.session_properties.read().await.data_type, original_type);
   }
 }

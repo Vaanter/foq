@@ -20,20 +20,14 @@ pub(crate) async fn pasv(
 
   let wrapper = command_processor.data_wrapper.clone();
   let properties = command_processor.session_properties.read().await;
-  let reply = match wrapper
-    .open_data_stream(properties.prot_mode)
-    .await
-  {
-    Ok(addr) => {
-      match addr {
-        SocketAddr::V4(addr) => Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr)),
-        SocketAddr::V6(_) => {
-          error!("PASV: IPv6 is not supported!");
-          Reply::new(
-            ReplyCode::CommandNotImplementedForThatParameter,
-            "Server only supports IPv6!",
-          )
-        }
+  let reply = match wrapper.open_data_stream(properties.prot_mode).await {
+    Ok(addr) => match addr {
+      SocketAddr::V4(addr) => {
+        Reply::new(ReplyCode::EnteringPassiveMode, create_pasv_response(&addr))
+      }
+      SocketAddr::V6(_) => {
+        error!("PASV: IPv6 is not supported!");
+        Reply::new(ReplyCode::CommandNotImplementedForThatParameter, "Server only supports IPv6!")
       }
     },
     Err(e) => {
@@ -72,16 +66,13 @@ mod tests {
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, setup_test_command_processor_custom,
   };
 
   #[test]
   fn response_test() {
     let ip = SocketAddrV4::new(Ipv4Addr::from([127, 0, 0, 1]), 55692);
-    assert_eq!(
-      create_pasv_response(&ip),
-      "Entering Passive Mode (127,0,0,1,217,140)"
-    );
+    assert_eq!(create_pasv_response(&ip), "Entering Passive Mode (127,0,0,1,217,140)");
   }
 
   #[tokio::test]
@@ -115,15 +106,7 @@ mod tests {
     let reply = match timeout(Duration::from_secs(5), rx.recv()).await {
       Ok(Some(reply)) => {
         assert_eq!(reply.code, ReplyCode::EnteringPassiveMode);
-        assert_eq!(
-          reply
-            .to_string()
-            .trim_end()
-            .chars()
-            .filter(|c| *c == ',')
-            .count(),
-          5
-        );
+        assert_eq!(reply.to_string().trim_end().chars().filter(|c| *c == ',').count(), 5);
         reply
       }
       Ok(None) => {
@@ -145,23 +128,15 @@ mod tests {
 
   fn parse_socketaddr(reply: Reply) -> SocketAddr {
     let message = reply.to_string();
-    let start = message
-      .find('(')
-      .expect("Address should start with '(' (non-standard)");
-    let end = message
-      .find(')')
-      .expect("Address should end with ')' (non-standard)");
+    let start = message.find('(').expect("Address should start with '(' (non-standard)");
+    let end = message.find(')').expect("Address should end with ')' (non-standard)");
     let addr = message[start + 1..end].split(',').collect::<Vec<&str>>();
 
-    let mut ip = addr
-      .iter()
-      .copied()
-      .take(4)
-      .fold(String::with_capacity(16), |mut a, b| {
-        a.push_str(b);
-        a.push('.');
-        a
-      });
+    let mut ip = addr.iter().copied().take(4).fold(String::with_capacity(16), |mut a, b| {
+      a.push_str(b);
+      a.push('.');
+      a
+    });
     ip.pop(); // remove trailing dot
 
     let p1 = addr

@@ -1,12 +1,12 @@
 use std::collections::HashSet;
-use std::fs::{remove_dir_all, remove_file, OpenOptions as OpenOptionsStd};
+use std::fs::{OpenOptions as OpenOptionsStd, remove_dir_all, remove_file};
 use std::io;
 use std::io::Error;
 use std::iter::Iterator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -17,20 +17,20 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, KeyLogFile, ServerConfig, SignatureScheme};
+use s2n_quic::Client;
 use s2n_quic::provider::io::tokio::Builder as IoBuilder;
 use s2n_quic::provider::tls::rustls::Client as TlsClient;
-use s2n_quic::Client;
 use strum::IntoEnumIterator;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
+use tokio_rustls::client::TlsStream;
 use tokio_util::sync::CancellationToken;
 use tracing::Level;
 
@@ -69,10 +69,7 @@ impl TestReplySender {
 #[async_trait]
 impl ReplySend for TestReplySender {
   async fn send_control_message(&self, reply: Reply) {
-    println!(
-      "[TestReplySender] Received reply: {}",
-      reply.to_string().trim_end()
-    );
+    println!("[TestReplySender] Received reply: {}", reply.to_string().trim_end());
     self.tx.send(reply).await.unwrap();
   }
 
@@ -184,18 +181,9 @@ pub(crate) async fn receive_and_verify_reply_from_buf<T: AsyncRead + Unpin>(
   substring: Option<&str>,
 ) {
   let mut buffer = String::new();
-  match timeout(
-    Duration::from_secs(time),
-    client_reader.read_line(&mut buffer),
-  )
-  .await
-  {
+  match timeout(Duration::from_secs(time), client_reader.read_line(&mut buffer)).await {
     Ok(Ok(len)) => {
-      println!(
-        "Received reply from server!: {}. Length: {}",
-        buffer.trim(),
-        len
-      );
+      println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
       assert!(buffer.trim().starts_with(&(expected as u32).to_string()));
       assert!(buffer.trim().contains(substring.unwrap_or("")));
     }
@@ -248,9 +236,7 @@ impl ServerCertVerifier for NoCertificateVerification {
 
   fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
     if let Some(provider) = CryptoProvider::get_default() {
-      return provider
-        .signature_verification_algorithms
-        .supported_schemes();
+      return provider.signature_verification_algorithms.supported_schemes();
     }
     vec![SignatureScheme::ED25519]
   }
@@ -273,11 +259,7 @@ pub(crate) fn create_test_server_config() -> ServerConfig {
 pub(crate) const LOCALHOST: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
 
 pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcessor) -> TcpStream {
-  let addr = match command_processor
-    .data_wrapper
-    .open_data_stream(ProtMode::Clear)
-    .await
-  {
+  let addr = match command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await {
     Ok(addr) => addr,
     Err(_) => panic!("Failed to open passive data listener!"),
   };
@@ -297,11 +279,7 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
 pub(crate) async fn open_tls_data_channel(
   command_processor: &mut CommandProcessor,
 ) -> TlsStream<TcpStream> {
-  let addr = match command_processor
-    .data_wrapper
-    .open_data_stream(ProtMode::Private)
-    .await
-  {
+  let addr = match command_processor.data_wrapper.open_data_stream(ProtMode::Private).await {
     Ok(addr) => addr,
     Err(_) => panic!("Failed to open passive data listener!"),
   };
@@ -343,9 +321,7 @@ pub(crate) fn setup_test_command_processor_custom(
       &settings.label,
       settings.permissions.clone(),
     );
-    session_properties
-      .file_system_view_root
-      .set_views(vec![view.into()]);
+    session_properties.file_system_view_root.set_views(vec![view.into()]);
     session_properties.username.replace(username.clone());
   }
 
@@ -386,10 +362,7 @@ pub(crate) async fn run_quic_listener(
     let conn = listener.accept(ct.clone()).await.unwrap();
     let mut handler = QuicOnlyConnectionHandler::new(conn);
 
-    handler
-      .handle(ct)
-      .await
-      .expect("Handler should exit gracefully");
+    handler.handle(ct).await.expect("Handler should exit gracefully");
   });
   (handler_fut, addr)
 }
@@ -401,10 +374,7 @@ pub fn run_quinn_listener(token: CancellationToken) -> (JoinHandle<()>, SocketAd
     let conn = listener.accept(token.clone()).await;
     let mut handler = QuicQuinnConnectionHandler::new(conn.unwrap().await.unwrap());
 
-    handler
-      .handle(token.clone())
-      .await
-      .expect("Handler should exit gracefully")
+    handler.handle(token.clone()).await.expect("Handler should exit gracefully")
   });
   (handler_fut, addr)
 }
@@ -420,11 +390,7 @@ pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
 }
 
 pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
-  println!(
-    "Generating test file, size: {}B, path: {:?}",
-    amount,
-    output_file.as_os_str()
-  );
+  println!("Generating test file, size: {}B, path: {:?}", amount, output_file.as_os_str());
   const MAX_CHUNK_SIZE: usize = 32864;
   let file = OpenOptions::new()
     .create(true)
@@ -439,10 +405,7 @@ pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
   let mut remaining = amount;
   let chunk = vec![0u8; MAX_CHUNK_SIZE];
   while remaining > MAX_CHUNK_SIZE {
-    output_writer
-      .write_all(&chunk)
-      .await
-      .expect("Writing chunk to test file should succeed");
+    output_writer.write_all(&chunk).await.expect("Writing chunk to test file should succeed");
     remaining -= MAX_CHUNK_SIZE;
   }
 

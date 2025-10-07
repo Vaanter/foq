@@ -22,10 +22,7 @@ mod tests {
     let timeval = "20020717210715";
     let correct = Local
       .from_local_datetime(
-        &NaiveDate::from_ymd_opt(2002, 7, 17)
-          .unwrap()
-          .and_hms_opt(21, 7, 15)
-          .unwrap(),
+        &NaiveDate::from_ymd_opt(2002, 7, 17).unwrap().and_hms_opt(21, 7, 15).unwrap(),
       )
       .unwrap();
     let parsed = parse_timeval(timeval);
@@ -46,10 +43,7 @@ mod tests {
     let timeval = "20240214010203";
     let correct = Local
       .from_local_datetime(
-        &NaiveDate::from_ymd_opt(2024, 2, 14)
-          .unwrap()
-          .and_hms_opt(1, 2, 3)
-          .unwrap(),
+        &NaiveDate::from_ymd_opt(2024, 2, 14).unwrap().and_hms_opt(1, 2, 3).unwrap(),
       )
       .unwrap();
     let parsed = parse_timeval(timeval);

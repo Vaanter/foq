@@ -37,13 +37,9 @@ pub(crate) async fn mkd(
   }
 
   info!("Creating directory");
-  let result = session_properties
-    .file_system_view_root
-    .create_directory(&command.argument);
+  let result = session_properties.file_system_view_root.create_directory(&command.argument);
 
-  reply_sender
-    .send_control_message(get_create_directory_reply(result))
-    .await;
+  reply_sender.send_control_message(get_create_directory_reply(result)).await;
 }
 
 #[cfg(test)]
@@ -52,8 +48,8 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    DirCleanup, TestReplySender,
+    CommandProcessorSettingsBuilder, DirCleanup, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
   use std::env::temp_dir;
   use std::sync::Arc;
@@ -66,9 +62,8 @@ mod tests {
   async fn not_logged_in_test() {
     let command = Command::new(Commands::Mkd, "");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);

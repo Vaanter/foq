@@ -33,9 +33,7 @@ pub(crate) async fn cwd(
       .await;
   }
 
-  let result = session_properties
-    .file_system_view_root
-    .change_working_directory(new_path);
+  let result = session_properties.file_system_view_root.change_working_directory(new_path);
   let reply = get_change_directory_reply(result);
 
   reply_sender.send_control_message(reply).await;
@@ -53,8 +51,8 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
-    CommandProcessorSettingsBuilder, TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor, setup_test_command_processor_custom,
   };
 
   #[tokio::test]
@@ -117,9 +115,8 @@ mod tests {
   async fn not_logged_in_test() {
     let command = Command::new(Commands::Cwd, "/test");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
 
     let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
@@ -160,13 +157,7 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
     assert_eq!(
       command_processor
         .session_properties

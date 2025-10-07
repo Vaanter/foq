@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use s2n_quic::stream::{ReceiveStream, SendStream};
 use s2n_quic::Connection;
+use s2n_quic::stream::{ReceiveStream, SendStream};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
@@ -46,10 +46,8 @@ impl QuicOnlyConnectionHandler {
     let wrapper = Arc::new(QuicOnlyDataChannelWrapper::new(addr, connection.clone()));
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let command_processor = Arc::new(CommandProcessor::new(
-      session_properties.clone(),
-      wrapper.clone(),
-    ));
+    let command_processor =
+      Arc::new(CommandProcessor::new(session_properties.clone(), wrapper.clone()));
     let running_commands = Vec::with_capacity(10);
     QuicOnlyConnectionHandler {
       connection,
@@ -73,10 +71,8 @@ impl QuicOnlyConnectionHandler {
   ///
   #[tracing::instrument(skip(self))]
   pub(crate) async fn await_command(&mut self) -> Result<bool, anyhow::Error> {
-    let cc = self
-      .control_channel
-      .as_mut()
-      .expect("Control channel must be open to receive commands!");
+    let cc =
+      self.control_channel.as_mut().expect("Control channel must be open to receive commands!");
     let mut buf = String::new();
     debug!("[QUIC] Reading message from client.");
     match cc.read_line(&mut buf).await {
@@ -133,12 +129,7 @@ impl ConnectionHandler for QuicOnlyConnectionHandler {
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
     debug!("[QUIC] Sending hello to client.");
-    let _ = &mut self
-      .reply_sender
-      .as_mut()
-      .unwrap()
-      .send_control_message(hello)
-      .await;
+    let _ = &mut self.reply_sender.as_mut().unwrap().send_control_message(hello).await;
 
     loop {
       tokio::select! {
@@ -168,19 +159,10 @@ impl QuicOnlyConnectionHandler {
   async fn cleanup(&mut self) {
     info!("[QUIC] Shutdown received!");
     let commands_to_finish = join_all(std::mem::take(&mut self.running_commands));
-    if timeout(Duration::from_secs(5), commands_to_finish)
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(5), commands_to_finish).await.is_err() {
       warn!("[QUIC] Failed to finish processing running commands in time!");
     }
-    if timeout(
-      Duration::from_secs(2),
-      self.reply_sender.as_mut().unwrap().close(),
-    )
-    .await
-    .is_err()
-    {
+    if timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close()).await.is_err() {
       warn!("[QUIC] Failed to close command channel in time!");
     };
     let data_channel = self.data_channel_wrapper.clone();
@@ -188,10 +170,7 @@ impl QuicOnlyConnectionHandler {
       data_channel.abort();
       data_channel.close_data_stream().await;
     };
-    if timeout(Duration::from_secs(2), data_channel_cleanup)
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(2), data_channel_cleanup).await.is_err() {
       warn!("[QUIC] Failed to close data channel in time!")
     };
   }
@@ -208,9 +187,9 @@ impl Drop for QuicOnlyConnectionHandler {
 mod tests {
   use std::time::Duration;
 
+  use s2n_quic::Client;
   use s2n_quic::client::Connect;
   use s2n_quic::provider::tls::rustls::Client as TlsClient;
-  use s2n_quic::Client;
   use tokio::io::BufReader;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;

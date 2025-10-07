@@ -1,5 +1,5 @@
 use anyhow::bail;
-use async_channel::{unbounded, Receiver, Sender};
+use async_channel::{Receiver, Sender, unbounded};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +10,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn, Instrument, Span};
+use tracing::{Instrument, Span, debug, error, info, warn};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::data_channels::quinn_data_channel::QuinnDataChannel;
@@ -72,13 +72,9 @@ impl QuicQuinnDataChannelWrapper {
 
         match conn {
           Ok(Ok((send_stream, recv_stream))) => {
-            debug!(
-              "Passive listener connection successful! ID: {}.",
-              send_stream.id()
-            );
-            if let Err(mut e) = sender
-              .send(Box::new(QuinnDataChannel::new(send_stream, recv_stream)))
-              .await
+            debug!("Passive listener connection successful! ID: {}.", send_stream.id());
+            if let Err(mut e) =
+              sender.send(Box::new(QuinnDataChannel::new(send_stream, recv_stream))).await
             {
               error!("Failed to send new data channel downstream! {e}");
               if let Err(shutdown_error) = e.0.shutdown().await {

@@ -26,10 +26,8 @@ pub(crate) async fn acquire_data_channel(
   data_wrapper: Arc<dyn DataChannelWrapper>,
 ) -> Result<(DataChannel, CancellationToken), Reply> {
   debug!("Acquiring data stream!");
-  let error_reply = Reply::new(
-    ReplyCode::BadSequenceOfCommands,
-    "Data channel must be open first!",
-  );
+  let error_reply =
+    Reply::new(ReplyCode::BadSequenceOfCommands, "Data channel must be open first!");
 
   // we wait a bit so the data channel can open shortly after it's required
   match timeout(Duration::from_secs(ACQUIRE_TIMEOUT), data_wrapper.acquire()).await {
@@ -74,10 +72,7 @@ pub(crate) fn get_transfer_reply(success: &Result<(), io::Error>) -> Reply {
   if success.is_ok() {
     Reply::new(ReplyCode::ClosingDataConnection, "Transfer complete!")
   } else {
-    Reply::new(
-      ReplyCode::ConnectionClosedTransferAborted,
-      "Error occurred during transfer!",
-    )
+    Reply::new(ReplyCode::ConnectionClosedTransferAborted, "Error occurred during transfer!")
   }
 }
 
@@ -106,17 +101,15 @@ fn map_error_to_reply(error: IoError) -> Reply {
       ReplyCode::SyntaxErrorInParametersOrArguments,
       IoError::NotADirectoryError.to_string(),
     ),
-    IoError::PermissionError => Reply::new(
-      ReplyCode::FileUnavailable,
-      IoError::PermissionError.to_string(),
-    ),
+    IoError::PermissionError => {
+      Reply::new(ReplyCode::FileUnavailable, IoError::PermissionError.to_string())
+    }
     IoError::NotFoundError(message) | IoError::InvalidPathError(message) => {
       Reply::new(ReplyCode::FileUnavailable, message)
     }
-    IoError::NotAFileError => Reply::new(
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      IoError::NotAFileError.to_string(),
-    ),
+    IoError::NotAFileError => {
+      Reply::new(ReplyCode::SyntaxErrorInParametersOrArguments, IoError::NotAFileError.to_string())
+    }
   }
 }
 
@@ -149,10 +142,9 @@ pub(crate) fn get_modify_time_reply(
   path: &str,
 ) -> Reply {
   match modify_result {
-    Ok(_) => Reply::new(
-      ReplyCode::FileStatus,
-      format!("Modify={}; {}", format_timeval(timeval), path),
-    ),
+    Ok(_) => {
+      Reply::new(ReplyCode::FileStatus, format!("Modify={}; {}", format_timeval(timeval), path))
+    }
     Err(e) => map_error_to_reply(e),
   }
 }

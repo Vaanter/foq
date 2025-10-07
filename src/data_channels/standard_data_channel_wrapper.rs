@@ -1,5 +1,5 @@
 use anyhow::bail;
-use async_channel::{unbounded, Receiver, Sender};
+use async_channel::{Receiver, Sender, unbounded};
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -9,7 +9,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn, Instrument, Span};
+use tracing::{Instrument, Span, debug, error, info, trace, warn};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::data_channels::tcp_data_channel::TcpDataChannel;
@@ -70,9 +70,7 @@ impl StandardDataChannelWrapper {
   #[tracing::instrument(skip(self))]
   async fn create_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, anyhow::Error> {
     debug!("Creating passive listener");
-    let listener = TcpListener::bind(self.addr)
-      .await
-      .expect("Implement passive port search!");
+    let listener = TcpListener::bind(self.addr).await.expect("Implement passive port search!");
     let port = listener.local_addr()?.port();
     let sender = self.channel_sender.clone();
     let span = Span::current();
@@ -108,9 +106,7 @@ impl StandardDataChannelWrapper {
     prot_mode: ProtMode,
     sender: Sender<DataChannel>,
   ) {
-    let peer = stream
-      .peer_addr()
-      .expect("Data channel should have peer address");
+    let peer = stream.peer_addr().expect("Data channel should have peer address");
     info!("Passive connection created! Remote address: {:?}", peer);
     let tls = TLS_CONFIG.clone().map(TlsAcceptor::from);
     let data_channel = match prot_mode {

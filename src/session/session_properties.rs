@@ -53,9 +53,7 @@ impl SessionProperties {
       None => return false,
     };
     self.username.replace(user_data.username);
-    self
-      .file_system_view_root
-      .set_views(user_data.file_system_views);
+    self.file_system_view_root.set_views(user_data.file_system_views);
     true
   }
 }

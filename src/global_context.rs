@@ -32,31 +32,23 @@ pub(crate) static CONFIG: Lazy<Config> = Lazy::new(|| {
 /// The certificates loaded from a file
 pub(crate) static CERTS: Lazy<Vec<CertificateDer>> = Lazy::new(|| {
   load_certs(Path::new(
-    &CONFIG
-      .get_string("certificate_file")
-      .expect("Certificate must be supplied in config!"),
+    &CONFIG.get_string("certificate_file").expect("Certificate must be supplied in config!"),
   ))
   .expect("Unable to load certificates! Cannot start.")
 });
 
 /// The key loaded from a file
 pub(crate) static KEY: Lazy<PrivateKeyDer> = Lazy::new(|| {
-  load_keys(Path::new(
-    &CONFIG
-      .get_string("key_file")
-      .expect("Key must be supplied in config!"),
-  ))
-  .expect("Unable to load keys! Cannot start.")
-  .first()
-  .expect("At least one key expected")
-  .clone_key()
+  load_keys(Path::new(&CONFIG.get_string("key_file").expect("Key must be supplied in config!")))
+    .expect("Unable to load keys! Cannot start.")
+    .first()
+    .expect("At least one key expected")
+    .clone_key()
 });
 
 /// The SQLite connection
 pub(crate) static DB_LAZY: Lazy<SqlitePool> = Lazy::new(|| {
-  let db_url = CONFIG
-    .get_string("DATABASE_URL")
-    .expect("DATABASE_URL must be set!");
+  let db_url = CONFIG.get_string("DATABASE_URL").expect("DATABASE_URL must be set!");
   info!("DATABASE_URL: {db_url}");
   SqlitePool::connect_lazy(&db_url).unwrap()
 });

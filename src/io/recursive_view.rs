@@ -112,9 +112,7 @@ impl View for RecursiveView {
   }
 
   fn create_directory(&self, _path: &str) -> Result<String, IoError> {
-    Err(IoError::InvalidPathError(
-      "Directory can't be created here".to_string(),
-    ))
+    Err(IoError::InvalidPathError("Directory can't be created here".to_string()))
   }
 
   async fn delete_file(&self, path: &str) -> Result<(), IoError> {
@@ -142,27 +140,21 @@ impl View for RecursiveView {
       return Err(IoError::PermissionError);
     }
 
-    if let Ok(entries) = &self.cached_entries.try_lock() {
-      if let Some(entries) = entries.as_ref() {
-        if entries.created.elapsed().as_secs() < 300 {
-          debug!(
-            "Using cached entries, elapsed: {:?}",
-            entries.created.elapsed()
-          );
-          // TODO optimize
-          return Ok(
-            entries
-              .entries
-              .iter()
-              .filter_map(|entry| self.map_entries_to_entry_data(entry))
-              .collect(),
-          );
-        } else {
-          debug!(
-            "Cache miss, entries too old: {:?}",
-            entries.created.elapsed()
-          );
-        }
+    if let Ok(entries) = &self.cached_entries.try_lock()
+      && let Some(entries) = entries.as_ref()
+    {
+      if entries.created.elapsed().as_secs() < 300 {
+        debug!("Using cached entries, elapsed: {:?}", entries.created.elapsed());
+        // TODO optimize
+        return Ok(
+          entries
+            .entries
+            .iter()
+            .filter_map(|entry| self.map_entries_to_entry_data(entry))
+            .collect(),
+        );
+      } else {
+        debug!("Cache miss, entries too old: {:?}", entries.created.elapsed());
       }
     }
 
@@ -210,7 +202,7 @@ impl View for RecursiveView {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::utils::test_utils::{create_dir, touch, DirCleanup};
+  use crate::utils::test_utils::{DirCleanup, create_dir, touch};
   use std::env::{current_dir, temp_dir};
   use uuid::Uuid;
 
@@ -245,10 +237,7 @@ mod tests {
     let listing = view.list_dir("test");
     let cached = view.cached_entries.try_lock().unwrap();
     assert!(cached.is_some());
-    assert_eq!(
-      listing.unwrap().len(),
-      cached.as_ref().unwrap().entries.len()
-    );
+    assert_eq!(listing.unwrap().len(), cached.as_ref().unwrap().entries.len());
   }
 
   #[test]
@@ -263,19 +252,15 @@ mod tests {
     let sub_path = dir_path.join(same_component).join(same_component);
     create_dir(&sub_path).unwrap();
 
-    let files = (1..5)
-      .map(|_| Uuid::new_v4().as_hyphenated().to_string())
-      .collect::<Vec<_>>();
+    let files = (1..5).map(|_| Uuid::new_v4().as_hyphenated().to_string()).collect::<Vec<_>>();
     for file in files.iter() {
       touch(&sub_path.join(file)).expect("Test file should exist");
     }
 
     let label = "test";
     let view = RecursiveView::new(dir_path.clone(), label, permissions);
-    let listing: Vec<DirEntry> = WalkDir::new(&sub_path)
-      .into_iter()
-      .filter_map(|e| e.ok())
-      .collect();
+    let listing: Vec<DirEntry> =
+      WalkDir::new(&sub_path).into_iter().filter_map(|e| e.ok()).collect();
     for entry in &listing {
       let entry_data = view.map_entries_to_entry_data(entry).unwrap();
       let name = entry_data.name().to_string();

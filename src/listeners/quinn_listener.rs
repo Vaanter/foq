@@ -1,5 +1,5 @@
 use crate::global_context::TLS_CONFIG;
-use anyhow::{bail, Error};
+use anyhow::{Error, bail};
 use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Endpoint, Incoming, ServerConfig, TransportConfig};
 use std::net::SocketAddr;

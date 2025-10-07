@@ -1,5 +1,5 @@
 use anyhow::bail;
-use async_channel::{unbounded, Receiver, Sender};
+use async_channel::{Receiver, Sender, unbounded};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +10,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn, Instrument, Span};
+use tracing::{Instrument, Span, debug, error, info, warn};
 
 use crate::data_channels::data_channel_wrapper::{DataChannel, DataChannelWrapper};
 use crate::data_channels::quic_data_channel::QuicDataChannel;
@@ -71,16 +71,11 @@ impl QuicOnlyDataChannelWrapper {
       async move {
         debug!("Awaiting passive connection");
         if let Ok(mut conn_lock) = timeout(Duration::from_secs(3), conn.lock()).await {
-          let conn = timeout(Duration::from_secs(20), {
-            conn_lock.accept_bidirectional_stream()
-          })
-          .await;
+          let conn =
+            timeout(Duration::from_secs(20), conn_lock.accept_bidirectional_stream()).await;
           match conn {
             Ok(Ok(Some(stream))) => {
-              debug!(
-                "Passive listener connection successful! ID: {}.",
-                stream.id()
-              );
+              debug!("Passive listener connection successful! ID: {}.", stream.id());
               if let Err(mut e) = sender.send(Box::new(QuicDataChannel::new(stream))).await {
                 error!("Failed to send new data channel downstream! {e}");
                 if let Err(shutdown_error) = e.0.shutdown().await {

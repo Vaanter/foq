@@ -34,7 +34,7 @@ mod tests {
 
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
-  use crate::commands::r#impl::feat::{feat, LINES};
+  use crate::commands::r#impl::feat::{LINES, feat};
   use crate::utils::test_utils::TestReplySender;
 
   #[tokio::test]
@@ -46,11 +46,9 @@ mod tests {
   #[tokio::test]
   async fn full_reply_test() {
     #[cfg(not(windows))]
-    const EXPECTED: &str =
-      "211-Supported features:\r\n MLSD\r\n MFMT\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
+    const EXPECTED: &str = "211-Supported features:\r\n MLSD\r\n MFMT\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
     #[cfg(windows)]
-    const EXPECTED: &str =
-      "211-Supported features:\r\n MLSD\r\n MFMT\r\n MFCT\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
+    const EXPECTED: &str = "211-Supported features:\r\n MLSD\r\n MFMT\r\n MFCT\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     let command = Command::new(Commands::Feat, "");

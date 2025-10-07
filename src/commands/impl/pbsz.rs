@@ -51,8 +51,8 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
   use std::sync::Arc;
   use std::time::Duration;
@@ -63,9 +63,8 @@ mod tests {
   async fn zero_argument_test() {
     let command = Command::new(Commands::Pbsz, "0");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
 
     let command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
@@ -87,9 +86,8 @@ mod tests {
   async fn non_zero_argument_test() {
     let command = Command::new(Commands::Pbsz, "10");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
 
     let command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
@@ -111,9 +109,8 @@ mod tests {
   async fn non_integer_argument_test() {
     let command = Command::new(Commands::Pbsz, "value");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
 
     let command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
@@ -128,22 +125,15 @@ mod tests {
       panic!("Command timeout!");
     };
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]
   async fn empty_argument_test() {
     let command = Command::new(Commands::Pbsz, "");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
 
     let command_processor = setup_test_command_processor_custom(&settings);
     let (tx, mut rx) = mpsc::channel(1024);
@@ -158,12 +148,6 @@ mod tests {
       panic!("Command timeout!");
     };
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 }

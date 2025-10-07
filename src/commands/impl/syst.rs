@@ -8,9 +8,7 @@ use std::sync::Arc;
 #[tracing::instrument(skip(reply_sender))]
 pub(crate) async fn syst(command: &Command, reply_sender: Arc<impl ReplySend>) {
   debug_assert_eq!(command.command, Commands::Syst);
-  reply_sender
-    .send_control_message(Reply::new(ReplyCode::NameSystemType, "UNIX Type: L8"))
-    .await;
+  reply_sender.send_control_message(Reply::new(ReplyCode::NameSystemType, "UNIX Type: L8")).await;
 }
 
 #[cfg(test)]
@@ -26,8 +24,8 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
 
   #[tokio::test]

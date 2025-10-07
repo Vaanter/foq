@@ -36,10 +36,7 @@ pub(crate) async fn opts(
     "UTF8 ON" => {
       session_properties.utf8 = true;
       reply_sender
-        .send_control_message(Reply::new(
-          ReplyCode::CommandOkay,
-          "UTF8 is always enabled.",
-        ))
+        .send_control_message(Reply::new(ReplyCode::CommandOkay, "UTF8 is always enabled."))
         .await
     }
     _ => {
@@ -61,7 +58,7 @@ mod tests {
   use tokio::time::timeout;
 
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor, TestReplySender,
+    TestReplySender, receive_and_verify_reply, setup_test_command_processor,
   };
 
   use super::*;

@@ -1,7 +1,7 @@
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::str::FromStr;
-use tracing::{debug, trace, Level};
+use tracing::{Level, debug, trace};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
@@ -35,9 +35,7 @@ fn main() {
   let log_file_name = format_log_file_name();
   let mut log_file_options = OpenOptions::new();
   log_file_options.write(true).truncate(true).create(true);
-  let log_file = log_file_options
-    .open(log_file_name)
-    .expect("Log file should be accessible");
+  let log_file = log_file_options.open(log_file_name).expect("Log file should be accessible");
   let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
   let log_filter = CONFIG.get_string("log_filter").unwrap_or_else(|_| {
     let log_level =
@@ -55,9 +53,7 @@ fn main() {
   Registry::default().with(fmt_layer).init();
 
   let threads: i64 = CONFIG.get_int("threads").unwrap_or_else(|_| {
-    std::thread::available_parallelism()
-      .map(|p| p.get())
-      .unwrap_or(1usize) as i64
+    std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1usize) as i64
   });
   debug!("Using {} threads", threads);
 
@@ -78,9 +74,7 @@ fn main() {
 }
 
 fn format_log_file_name() -> String {
-  let name = CONFIG
-    .get_string("logfile")
-    .unwrap_or(String::from("foq-%Y%m%d%H%M.log"));
+  let name = CONFIG.get_string("logfile").unwrap_or(String::from("foq-%Y%m%d%H%M.log"));
   let current_time = Local::now();
   current_time.format(&name).to_string()
 }

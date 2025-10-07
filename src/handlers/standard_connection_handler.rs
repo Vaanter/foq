@@ -43,17 +43,13 @@ impl StandardConnectionHandler {
   /// construct [`ReplySender`], the reader will be used to read messages from client.
   ///
   pub(crate) fn new(stream: TcpStream) -> Self {
-    let wrapper = Arc::new(StandardDataChannelWrapper::new(
-      stream.local_addr().unwrap(),
-    ));
+    let wrapper = Arc::new(StandardDataChannelWrapper::new(stream.local_addr().unwrap()));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
     let reply_sender = Arc::new(ReplySender::new(stream_halves.1));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let command_processor = Arc::new(CommandProcessor::new(
-      session_properties.clone(),
-      wrapper.clone(),
-    ));
+    let command_processor =
+      Arc::new(CommandProcessor::new(session_properties.clone(), wrapper.clone()));
     let running_commands = Vec::with_capacity(10);
     StandardConnectionHandler {
       data_channel_wrapper: wrapper,
@@ -142,18 +138,12 @@ impl StandardConnectionHandler {
     let mut commands_to_finish = std::mem::take(&mut self.running_commands);
     commands_to_finish.retain(|t| !t.is_finished());
     debug!("[TCP] Commands to finish: {:?}", commands_to_finish);
-    if timeout(Duration::from_secs(5), join_all(commands_to_finish))
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(5), join_all(commands_to_finish)).await.is_err() {
       warn!("[TCP] Failed to finish processing running commands in time!");
     } else {
       debug!("[TCP] Finished processing running tasks");
     }
-    if timeout(Duration::from_secs(5), self.reply_sender.close())
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(5), self.reply_sender.close()).await.is_err() {
       warn!("[TCP] Failed to close command channel in time!");
     } else {
       debug!("[TCP] Closed command channel")
@@ -164,10 +154,7 @@ impl StandardConnectionHandler {
       debug!("[TCP] Closing data channel");
       self.data_channel_wrapper.close_data_stream().await;
     };
-    if timeout(Duration::from_secs(5), data_channel_cleanup)
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(5), data_channel_cleanup).await.is_err() {
       warn!("[TCP] Failed to close data channel in time!")
     } else {
       debug!("[TCP] Closed data channel")
@@ -207,29 +194,18 @@ mod tests {
       let (server_cc, _) = listener.accept(ct.clone()).await.unwrap();
       let mut handler = StandardConnectionHandler::new(server_cc);
 
-      handler
-        .handle(ct)
-        .await
-        .expect("Handler should exit gracefully");
+      handler.handle(ct).await.expect("Handler should exit gracefully");
     });
 
-    let client_cc = timeout(Duration::from_secs(2), TcpStream::connect(addr))
-      .await
-      .unwrap()
-      .unwrap();
+    let client_cc =
+      timeout(Duration::from_secs(2), TcpStream::connect(addr)).await.unwrap().unwrap();
     let (reader, _) = tokio::io::split(client_cc);
     let mut client_reader = BufReader::new(reader);
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
       Ok(Ok(len)) => {
-        println!(
-          "Received reply from server!: {}. Length: {}",
-          buffer.trim(),
-          len
-        );
-        assert!(buffer
-          .trim()
-          .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
+        println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
+        assert!(buffer.trim().starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
         assert!(buffer.trim().contains("Hello"));
         buffer.clear();
       }

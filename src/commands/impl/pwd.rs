@@ -31,15 +31,9 @@ pub(crate) async fn pwd(
       .await;
   }
 
-  let reply_message = format!(
-    "\"{}\"",
-    session_properties
-      .file_system_view_root
-      .get_current_working_directory()
-  );
-  reply_sender
-    .send_control_message(Reply::new(ReplyCode::PathnameCreated, reply_message))
-    .await;
+  let reply_message =
+    format!("\"{}\"", session_properties.file_system_view_root.get_current_working_directory());
+  reply_sender.send_control_message(Reply::new(ReplyCode::PathnameCreated, reply_message)).await;
 }
 
 #[cfg(test)]
@@ -55,8 +49,8 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
 
   #[tokio::test]
@@ -83,22 +77,15 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]
   async fn not_logged_in_test() {
     let command = Command::new(Commands::Pwd, "");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);

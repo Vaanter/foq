@@ -4,8 +4,8 @@ use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
 use crate::handlers::reply_sender::ReplySend;
 use crate::session::command_processor::CommandProcessor;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 #[tracing::instrument(skip(command_processor, reply_sender))]
 pub(crate) async fn rest(
@@ -50,18 +50,15 @@ pub(crate) async fn rest(
   reply_sender
     .send_control_message(Reply::new(
       ReplyCode::RequestedFileActionPendingFurtherInformation,
-      format!(
-        "Restarting at {}",
-        session_properties.offset.load(Ordering::Relaxed)
-      ),
+      format!("Restarting at {}", session_properties.offset.load(Ordering::Relaxed)),
     ))
     .await;
 }
 
 #[cfg(test)]
 mod tests {
-  use std::sync::atomic::Ordering;
   use std::sync::Arc;
+  use std::sync::atomic::Ordering;
   use std::time::Duration;
 
   use tokio::sync::mpsc::channel;
@@ -71,7 +68,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor, TestReplySender,
+    TestReplySender, receive_and_verify_reply, setup_test_command_processor,
   };
 
   #[tokio::test]
@@ -99,12 +96,7 @@ mod tests {
     .await;
     assert_eq!(
       123,
-      command_processor
-        .session_properties
-        .read()
-        .await
-        .offset
-        .load(Ordering::Relaxed)
+      command_processor.session_properties.read().await.offset.load(Ordering::Relaxed)
     );
   }
 
@@ -127,15 +119,7 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::NotLoggedIn, None).await;
-    assert_eq!(
-      0,
-      command_processor
-        .session_properties
-        .read()
-        .await
-        .offset
-        .load(Ordering::Relaxed)
-    );
+    assert_eq!(0, command_processor.session_properties.read().await.offset.load(Ordering::Relaxed));
   }
 
   #[tokio::test]
@@ -154,22 +138,8 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
-    assert_eq!(
-      0,
-      command_processor
-        .session_properties
-        .read()
-        .await
-        .offset
-        .load(Ordering::Relaxed)
-    );
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    assert_eq!(0, command_processor.session_properties.read().await.offset.load(Ordering::Relaxed));
   }
 
   #[tokio::test]
@@ -188,21 +158,7 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
-    assert_eq!(
-      0,
-      command_processor
-        .session_properties
-        .read()
-        .await
-        .offset
-        .load(Ordering::Relaxed)
-    );
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
+    assert_eq!(0, command_processor.session_properties.read().await.offset.load(Ordering::Relaxed));
   }
 }

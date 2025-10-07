@@ -25,16 +25,10 @@ pub(crate) async fn user(
   }
 
   let mut session_properties = command_processor.session_properties.write().await;
-  session_properties
-    .login_form
-    .username
-    .replace(command.argument.clone());
+  session_properties.login_form.username.replace(command.argument.clone());
 
   reply_sender
-    .send_control_message(Reply::new(
-      ReplyCode::UserNameOkay,
-      "User name okay, need password.",
-    ))
+    .send_control_message(Reply::new(ReplyCode::UserNameOkay, "User name okay, need password."))
     .await;
 }
 
@@ -50,8 +44,8 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
 
   #[tokio::test]
@@ -59,9 +53,8 @@ mod tests {
     let name = String::from("test");
     let command = Command::new(Commands::User, name.clone());
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = Arc::new(setup_test_command_processor_custom(&settings));
 
     let (tx, mut rx) = channel(1024);
@@ -74,24 +67,15 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::UserNameOkay, None).await;
-    assert_eq!(
-      command_processor
-        .session_properties
-        .read()
-        .await
-        .login_form
-        .username,
-      Some(name)
-    );
+    assert_eq!(command_processor.session_properties.read().await.login_form.username, Some(name));
   }
 
   #[tokio::test]
   async fn empty_username_test() {
     let command = Command::new(Commands::User, "");
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
@@ -103,12 +87,6 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 }

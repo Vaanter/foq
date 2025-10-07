@@ -30,14 +30,10 @@ pub(crate) async fn rmda(
     &command.argument
   );
 
-  let result = session_properties
-    .file_system_view_root
-    .delete_folder_recursive(&command.argument)
-    .await;
+  let result =
+    session_properties.file_system_view_root.delete_folder_recursive(&command.argument).await;
 
-  reply_sender
-    .send_control_message(get_delete_reply(result, true))
-    .await;
+  reply_sender.send_control_message(get_delete_reply(result, true)).await;
 }
 
 #[cfg(test)]
@@ -211,13 +207,7 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
     assert!(file_path.exists());
   }
 }

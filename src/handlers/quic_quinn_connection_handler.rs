@@ -46,10 +46,8 @@ impl QuicQuinnConnectionHandler {
     let wrapper = Arc::new(QuicQuinnDataChannelWrapper::new(addr, connection.clone()));
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let command_processor = Arc::new(CommandProcessor::new(
-      session_properties.clone(),
-      wrapper.clone(),
-    ));
+    let command_processor =
+      Arc::new(CommandProcessor::new(session_properties.clone(), wrapper.clone()));
     let running_commands = Vec::with_capacity(10);
     QuicQuinnConnectionHandler {
       connection,
@@ -73,10 +71,8 @@ impl QuicQuinnConnectionHandler {
   ///
   #[tracing::instrument(skip(self))]
   pub(crate) async fn await_command(&mut self) -> Result<bool, anyhow::Error> {
-    let cc = self
-      .control_channel
-      .as_mut()
-      .expect("Control channel must be open to receive commands!");
+    let cc =
+      self.control_channel.as_mut().expect("Control channel must be open to receive commands!");
     let mut buf = String::new();
     debug!("[QUINN] Reading message from client.");
     match cc.read_line(&mut buf).await {
@@ -132,12 +128,7 @@ impl ConnectionHandler for QuicQuinnConnectionHandler {
 
     let hello = Reply::new(ReplyCode::ServiceReady, "Hello");
     debug!("[QUINN] Sending hello to client.");
-    let _ = &mut self
-      .reply_sender
-      .as_mut()
-      .unwrap()
-      .send_control_message(hello)
-      .await;
+    let _ = &mut self.reply_sender.as_mut().unwrap().send_control_message(hello).await;
 
     loop {
       tokio::select! {
@@ -167,19 +158,10 @@ impl QuicQuinnConnectionHandler {
   async fn cleanup(&mut self) {
     info!("[QUINN] Shutdown received!");
     let commands_to_finish = join_all(std::mem::take(&mut self.running_commands));
-    if timeout(Duration::from_secs(5), commands_to_finish)
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(5), commands_to_finish).await.is_err() {
       warn!("[QUINN] Failed to finish processing running commands in time!");
     }
-    if timeout(
-      Duration::from_secs(2),
-      self.reply_sender.as_mut().unwrap().close(),
-    )
-    .await
-    .is_err()
-    {
+    if timeout(Duration::from_secs(2), self.reply_sender.as_mut().unwrap().close()).await.is_err() {
       warn!("[QUINN] Failed to close command channel in time!");
     };
     let data_channel = self.data_channel_wrapper.clone();
@@ -187,10 +169,7 @@ impl QuicQuinnConnectionHandler {
       data_channel.abort();
       data_channel.close_data_stream().await;
     };
-    if timeout(Duration::from_secs(2), data_channel_cleanup)
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(2), data_channel_cleanup).await.is_err() {
       warn!("[QUINN] Failed to close data channel in time!")
     };
   }

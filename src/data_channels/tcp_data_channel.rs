@@ -41,11 +41,7 @@ impl AsyncWrite for TcpDataChannel {
     if poll_state.is_ready() {
       debug!(
         "Shutting down connection from {}",
-        self
-          .0
-          .peer_addr()
-          .map(|x| x.to_string())
-          .unwrap_or(String::from("UNKNOWN"))
+        self.0.peer_addr().map(|x| x.to_string()).unwrap_or(String::from("UNKNOWN"))
       );
     }
     poll_state

@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::r#impl::shared::{
-  acquire_data_channel, copy_data, get_open_file_result, get_transfer_reply, TRANSFER_BUFFER_SIZE,
+  TRANSFER_BUFFER_SIZE, acquire_data_channel, copy_data, get_open_file_result, get_transfer_reply,
 };
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -51,21 +51,14 @@ pub(crate) async fn stor(
     }
   };
 
-  let options = OpenOptionsWrapperBuilder::default()
-    .write(true)
-    .truncate(true)
-    .create(true)
-    .build()
-    .unwrap();
+  let options =
+    OpenOptionsWrapperBuilder::default().write(true).truncate(true).create(true).build().unwrap();
   info!(
     "User '{}' opening file '{}'.",
     session_properties.username.as_ref().unwrap(),
     &command.argument
   );
-  let file = session_properties
-    .file_system_view_root
-    .open_file(&command.argument, options)
-    .await;
+  let file = session_properties.file_system_view_root.open_file(&command.argument, options).await;
 
   let mut file = match get_open_file_result(file) {
     Ok(f) => f,
@@ -76,10 +69,7 @@ pub(crate) async fn stor(
   };
 
   reply_sender
-    .send_control_message(Reply::new(
-      ReplyCode::FileStatusOkay,
-      "Starting file transfer!",
-    ))
+    .send_control_message(Reply::new(ReplyCode::FileStatusOkay, "Starting file transfer!"))
     .await;
 
   debug!("Receiving file data!");
@@ -98,14 +88,12 @@ pub(crate) async fn stor(
     warn!("Failed to sync file data! {e}");
   };
 
-  reply_sender
-    .send_control_message(get_transfer_reply(&success))
-    .await;
+  reply_sender.send_control_message(get_transfer_reply(&success)).await;
 
-  if success.is_ok() {
-    if let Err(e) = data_channel.shutdown().await {
-      warn!("Failed to shutdown data channel after writing! {e}");
-    }
+  if success.is_ok()
+    && let Err(e) = data_channel.shutdown().await
+  {
+    warn!("Failed to shutdown data channel after writing! {e}");
   }
 }
 
@@ -144,10 +132,7 @@ mod tests {
   const TIMEOUT_SECS: u64 = 600;
 
   async fn common(local_file: &Path, remote_file: &str) {
-    assert!(
-      local_file.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -170,13 +155,7 @@ mod tests {
 
     let mut client_dc = open_tcp_data_channel(&mut command_processor).await;
 
-    let transfer = transfer(
-      local_file,
-      remote_file,
-      command,
-      command_processor,
-      &mut client_dc,
-    );
+    let transfer = transfer(local_file, remote_file, command, command_processor, &mut client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
       Ok(()) => println!("Transfer complete!"),
@@ -185,10 +164,7 @@ mod tests {
   }
 
   async fn common_quic(local_file: &Path, remote_file: &str) {
-    assert!(
-      local_file.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -223,24 +199,14 @@ mod tests {
       Err(_) => panic!("Connection setup failed!"),
     };
 
-    let _ = command_processor
-      .data_wrapper
-      .open_data_stream(ProtMode::Clear)
-      .await
-      .unwrap();
+    let _ = command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await.unwrap();
 
     let client_dc = match client_connection.open_bidirectional_stream().await {
       Ok(client_dc) => client_dc,
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
 
-    let transfer = transfer(
-      local_file,
-      remote_file,
-      command,
-      command_processor,
-      client_dc,
-    );
+    let transfer = transfer(local_file, remote_file, command, command_processor, client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
       Ok(()) => println!("Transfer complete!"),
@@ -249,10 +215,7 @@ mod tests {
   }
 
   async fn common_quic_quinn(local_file: &Path, remote_file: &str) {
-    assert!(
-      local_file.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -285,33 +248,19 @@ mod tests {
       Err(_) => panic!("Connection setup failed!"),
     };
 
-    let _ = command_processor
-      .data_wrapper
-      .open_data_stream(ProtMode::Clear)
-      .await
-      .unwrap();
+    let _ = command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await.unwrap();
 
     let (client_dc_send, _) = match connection.open_bi().await {
       Ok(client_dc) => client_dc,
       Err(e) => panic!("Failed to open data channel! Error: {}", e),
     };
 
-    transfer(
-      local_file,
-      remote_file,
-      command,
-      command_processor,
-      client_dc_send,
-    )
-    .await;
+    transfer(local_file, remote_file, command, command_processor, client_dc_send).await;
     //println!("stats: {:#?}", connection);
   }
 
   async fn common_quinn_quinn(local_file: &Path, remote_file: &str) {
-    assert!(
-      local_file.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
     println!("Remote file: {:?}", &remote_file_path);
@@ -323,14 +272,10 @@ mod tests {
     let command = Command::new(Commands::Stor, remote_file);
     let token = CancellationToken::new();
     let test_handle = tokio::spawn(async move {
-      let connection = Arc::new(Mutex::new(
-        listener.accept(token.clone()).await.unwrap().await.unwrap(),
-      ));
+      let connection =
+        Arc::new(Mutex::new(listener.accept(token.clone()).await.unwrap().await.unwrap()));
       let wrapper = QuicQuinnDataChannelWrapper::new(LOCALHOST, connection.clone());
-      (
-        setup_transfer_command_processor(wrapper, temp_dir()),
-        connection,
-      )
+      (setup_transfer_command_processor(wrapper, temp_dir()), connection)
     });
 
     let tls_config = create_tls_client_config("ftpoq-1");
@@ -350,11 +295,7 @@ mod tests {
         Err(_) => panic!("Connection setup failed!"),
       };
 
-    let _ = command_processor
-      .data_wrapper
-      .open_data_stream(ProtMode::Clear)
-      .await
-      .unwrap();
+    let _ = command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await.unwrap();
 
     let (mut send_stream, _) = match connection.open_bi().await {
       Ok(client_dc) => client_dc,
@@ -363,18 +304,8 @@ mod tests {
     // Required to actually open the stream
     send_stream.write("".as_bytes()).await.unwrap();
 
-    transfer(
-      local_file,
-      remote_file,
-      command,
-      command_processor,
-      send_stream,
-    )
-    .await;
-    server_connection
-      .lock()
-      .await
-      .close(VarInt::from_u32(0), "Test end".as_bytes());
+    transfer(local_file, remote_file, command, command_processor, send_stream).await;
+    server_connection.lock().await.close(VarInt::from_u32(0), "Test end".as_bytes());
   }
 
   async fn transfer<T: AsyncWrite + Unpin>(
@@ -420,11 +351,8 @@ mod tests {
     sender_file_hasher: &mut Hasher,
   ) -> usize {
     let mut sends = 0;
-    let mut send_file = OpenOptions::new()
-      .read(true)
-      .open(send_file)
-      .await
-      .expect("Send test file must exist!");
+    let mut send_file =
+      OpenOptions::new().read(true).open(send_file).await.expect("Send test file must exist!");
 
     const SENDER_BUFFER_SIZE: usize = 16384;
     let mut sender_buffer = [0; SENDER_BUFFER_SIZE];
@@ -465,11 +393,8 @@ mod tests {
     let mut receiver_buffer = [0; RECEIVER_BUFFER_SIZE];
 
     let remote = temp_dir().join(remote_file);
-    let mut remote_file = OpenOptions::new()
-      .read(true)
-      .open(remote)
-      .await
-      .expect("Remote test file must exist!");
+    let mut remote_file =
+      OpenOptions::new().read(true).open(remote).await.expect("Remote test file must exist!");
 
     loop {
       let received_bytes = match remote_file.read(&mut receiver_buffer).await {
@@ -710,12 +635,6 @@ mod tests {
     .await
     .expect("Command timed out!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 }

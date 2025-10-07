@@ -33,18 +33,12 @@ impl Display for Reply {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut buffer;
     if self.lines.len() < 2 {
-      buffer = format!(
-        "{} {}\r\n",
-        self.code as u16,
-        self.lines.first().unwrap_or(&String::new())
-      );
+      buffer = format!("{} {}\r\n", self.code as u16, self.lines.first().unwrap_or(&String::new()));
       return write!(f, "{}", buffer);
     }
     buffer = format!("{}-{}\r\n", self.code as u16, self.lines.first().unwrap());
     let end = self.lines.len() - 1;
-    self.lines[1..end]
-      .iter()
-      .for_each(|l| buffer.push_str(&format!("{}\r\n", l)));
+    self.lines[1..end].iter().for_each(|l| buffer.push_str(&format!("{}\r\n", l)));
     buffer.push_str(&format!(
       "{} {}\r\n",
       self.code as u16,

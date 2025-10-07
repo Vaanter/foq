@@ -43,17 +43,14 @@ impl StandardTlsConnectionHandler {
   /// construct [`ReplySender`], the reader will be used to read messages from client.
   ///
   pub(crate) fn new(stream: TlsStream<TcpStream>) -> Self {
-    let wrapper = Arc::new(StandardDataChannelWrapper::new(
-      stream.get_ref().0.local_addr().unwrap(),
-    ));
+    let wrapper =
+      Arc::new(StandardDataChannelWrapper::new(stream.get_ref().0.local_addr().unwrap()));
     let stream_halves = tokio::io::split(stream);
     let control_channel = BufReader::new(stream_halves.0);
     let reply_sender = Arc::new(ReplySender::new(stream_halves.1));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    let command_processor = Arc::new(CommandProcessor::new(
-      session_properties.clone(),
-      wrapper.clone(),
-    ));
+    let command_processor =
+      Arc::new(CommandProcessor::new(session_properties.clone(), wrapper.clone()));
     let running_commands = Vec::with_capacity(10);
     StandardTlsConnectionHandler {
       data_channel_wrapper: wrapper,
@@ -143,16 +140,10 @@ impl StandardTlsConnectionHandler {
     info!("[TCP+TLS] Shutdown received!");
     let mut commands_to_finish = std::mem::take(&mut self.running_commands);
     commands_to_finish.retain(|t| !t.is_finished());
-    if timeout(Duration::from_secs(5), join_all(commands_to_finish))
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(5), join_all(commands_to_finish)).await.is_err() {
       warn!("[TCP+TLS] Failed to finish processing running commands in time!");
     }
-    if timeout(Duration::from_secs(2), self.reply_sender.close())
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(2), self.reply_sender.close()).await.is_err() {
       warn!("[TCP+TLS] Failed to close command channel in time!");
     };
     let data_channel = self.data_channel_wrapper.clone();
@@ -160,10 +151,7 @@ impl StandardTlsConnectionHandler {
       data_channel.abort();
       data_channel.close_data_stream().await;
     };
-    if timeout(Duration::from_secs(2), data_channel_cleanup)
-      .await
-      .is_err()
-    {
+    if timeout(Duration::from_secs(2), data_channel_cleanup).await.is_err() {
       warn!("[TCP+TLS] Failed to close data channel in time!")
     };
   }
@@ -171,10 +159,7 @@ impl StandardTlsConnectionHandler {
 
 impl Drop for StandardTlsConnectionHandler {
   fn drop(&mut self) {
-    debug!(
-      "[TCP+TLS] aborting {} commands",
-      self.running_commands.len()
-    );
+    debug!("[TCP+TLS] aborting {} commands", self.running_commands.len());
     self.running_commands.iter().for_each(|c| c.abort());
   }
 }
@@ -195,7 +180,7 @@ mod tests {
   use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::standard_tls_connection_handler::StandardTlsConnectionHandler;
   use crate::listeners::standard_listener::StandardListener;
-  use crate::utils::test_utils::{create_test_client_config, create_test_server_config, LOCALHOST};
+  use crate::utils::test_utils::{LOCALHOST, create_test_client_config, create_test_server_config};
 
   #[tokio::test]
   async fn server_hello_test() {
@@ -209,40 +194,26 @@ mod tests {
       let server_cc = server_acceptor.accept(server_stream).await.unwrap();
       let mut handler = StandardTlsConnectionHandler::new(server_cc);
 
-      handler
-        .handle(ct)
-        .await
-        .expect("Handler should exit gracefully");
+      handler.handle(ct).await.expect("Handler should exit gracefully");
     });
 
-    let client_stream = timeout(Duration::from_secs(2), TcpStream::connect(addr))
-      .await
-      .unwrap()
-      .unwrap();
+    let client_stream =
+      timeout(Duration::from_secs(2), TcpStream::connect(addr)).await.unwrap().unwrap();
     let client_tls_config = create_test_client_config();
     let connector = TlsConnector::from(Arc::new(client_tls_config));
     let domain = ServerName::try_from("localhost").unwrap();
-    let client_cc = timeout(
-      Duration::from_secs(2),
-      connector.connect(domain, client_stream),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let client_cc = timeout(Duration::from_secs(2), connector.connect(domain, client_stream))
+      .await
+      .unwrap()
+      .unwrap();
 
     let (reader, _) = tokio::io::split(client_cc);
     let mut client_reader = BufReader::new(reader);
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
       Ok(Ok(len)) => {
-        println!(
-          "Received reply from server!: {}. Length: {}.",
-          buffer.trim(),
-          len
-        );
-        assert!(buffer
-          .trim()
-          .starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
+        println!("Received reply from server!: {}. Length: {}.", buffer.trim(), len);
+        assert!(buffer.trim().starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
         assert!(buffer.trim().contains("Hello"));
         buffer.clear();
       }

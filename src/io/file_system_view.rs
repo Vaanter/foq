@@ -5,7 +5,7 @@
 use async_trait::async_trait;
 use path_clean::PathClean;
 use std::collections::HashSet;
-use std::fs::{create_dir_all, FileTimes, ReadDir};
+use std::fs::{FileTimes, ReadDir, create_dir_all};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use tracing::debug;
@@ -183,9 +183,7 @@ impl View for FileSystemView {
       return Ok(false);
     } else if path == ".." {
       if self.current_path == self.root {
-        return Err(IoError::InvalidPathError(String::from(
-          "Cannot change to parent from root!",
-        )));
+        return Err(IoError::InvalidPathError(String::from("Cannot change to parent from root!")));
       }
       self.current_path.pop();
       if self.display_path != "/" {
@@ -259,9 +257,7 @@ impl View for FileSystemView {
 
     virtual_path.push_str(&path);
 
-    create_dir_all(&new_directory_path)
-      .map(|_| virtual_path)
-      .map_err(IoError::map_io_error)
+    create_dir_all(&new_directory_path).map(|_| virtual_path).map_err(IoError::map_io_error)
   }
 
   async fn delete_file(&self, path: &str) -> Result<(), IoError> {
@@ -350,13 +346,7 @@ impl View for FileSystemView {
     }
 
     self
-      .open_file(
-        path,
-        OpenOptionsWrapperBuilder::default()
-          .write(true)
-          .build()
-          .unwrap(),
-      )
+      .open_file(path, OpenOptionsWrapperBuilder::default().write(true).build().unwrap())
       .await?
       .into_std()
       .await
@@ -377,24 +367,14 @@ impl View for FileSystemView {
         panic!("Current path should always exist!");
       }
 
-      let read_dir = current.read_dir();
-      if let Err(e) = read_dir {
-        // IO Error
-        return Err(IoError::OsError(e));
-      }
+      let read_dir = match current.read_dir() {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(IoError::OsError(e)), // IO Error
+      };
 
-      let name = self
-        .display_path
-        .rsplit_once('/')
-        .unwrap_or(("", &self.label))
-        .1;
+      let name = self.display_path.rsplit_once('/').unwrap_or(("", &self.label)).1;
 
-      Ok(Self::create_listing(
-        name,
-        current,
-        read_dir.unwrap(),
-        &self.permissions,
-      ))
+      Ok(Self::create_listing(name, current, read_dir, &self.permissions))
     } else if path == ".." {
       if self.root == self.current_path {
         // Cannot list before root
@@ -409,23 +389,14 @@ impl View for FileSystemView {
       }
       let parent = parent.unwrap();
 
-      let read_dir = parent.read_dir();
-      if let Err(e) = read_dir {
-        // IO Error
-        return Err(IoError::OsError(e));
-      }
+      let read_dir = match parent.read_dir() {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(IoError::OsError(e)), // IO Error
+      };
 
-      let parent_name = parent
-        .file_name()
-        .map(|n| n.to_str().unwrap())
-        .unwrap_or("");
+      let parent_name = parent.file_name().map(|n| n.to_str().unwrap()).unwrap_or("");
 
-      Ok(Self::create_listing(
-        parent_name,
-        parent,
-        read_dir.unwrap(),
-        &self.permissions,
-      ))
+      Ok(Self::create_listing(parent_name, parent, read_dir, &self.permissions))
     } else if path == "/" || path == "~" {
       // List root
       if !self.root.exists() {
@@ -433,18 +404,12 @@ impl View for FileSystemView {
         panic!("View root should always exist!");
       }
 
-      let read_dir = self.root.read_dir();
-      if let Err(e) = read_dir {
-        // IO Error
-        return Err(IoError::OsError(e));
-      }
+      let read_dir = match self.root.read_dir() {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(IoError::OsError(e)), // IO Error
+      };
 
-      Ok(Self::create_listing(
-        &self.label,
-        self.root.clone(),
-        read_dir.unwrap(),
-        &self.permissions,
-      ))
+      Ok(Self::create_listing(&self.label, self.root.clone(), read_dir, &self.permissions))
     } else if let Some(stripped) = path.strip_prefix('/') {
       let absolute = match self.root.join(stripped).canonicalize() {
         Ok(absolute) => absolute,
@@ -460,20 +425,19 @@ impl View for FileSystemView {
         }
       };
 
-      let read_dir = absolute.read_dir();
-      if let Err(e) = read_dir {
-        // IO Error
-        return Err(IoError::OsError(e));
-      }
+      let read_dir = match absolute.read_dir() {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(IoError::OsError(e)), // IO Error
+      };
 
       Ok(Self::create_listing(
         path.rsplit_once('/').unwrap().1,
         absolute,
-        read_dir.unwrap(),
+        read_dir,
         &self.permissions,
       ))
     } else {
-      let relative = self.current_path.join(&path);
+      let relative = self.current_path.join(path);
       if !relative.exists() {
         // Path doesn't exist! Nothing to list
         return Err(IoError::NotFoundError(String::from("Directory not found!")));
@@ -484,16 +448,15 @@ impl View for FileSystemView {
         return Err(IoError::NotADirectoryError);
       }
 
-      let read_dir = relative.read_dir();
-      if let Err(e) = read_dir {
-        // IO Error
-        return Err(IoError::OsError(e));
-      }
+      let read_dir = match relative.read_dir() {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(IoError::OsError(e)), // IO Error
+      };
 
       Ok(Self::create_listing(
-        path.rsplit_once('/').unwrap_or(("", &path)).1,
+        path.rsplit_once('/').unwrap_or(("", path)).1,
         relative,
-        read_dir.unwrap(),
+        read_dir,
         &self.permissions,
       ))
     }
@@ -558,10 +521,7 @@ pub(crate) mod tests {
 
     assert!(view.change_working_directory("test_files").unwrap());
     assert_eq!(format!("/{label}/test_files"), view.display_path);
-    assert_eq!(
-      root.join("test_files").canonicalize().unwrap(),
-      view.current_path
-    );
+    assert_eq!(root.join("test_files").canonicalize().unwrap(), view.current_path);
     assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
@@ -606,10 +566,7 @@ pub(crate) mod tests {
 
     assert!(view.change_working_directory("/test_files").unwrap());
     assert_eq!(format!("/{label}/test_files"), view.display_path);
-    assert_eq!(
-      root.join("test_files").canonicalize().unwrap(),
-      view.current_path
-    );
+    assert_eq!(root.join("test_files").canonicalize().unwrap(), view.current_path);
     assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
@@ -620,14 +577,9 @@ pub(crate) mod tests {
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label, permissions);
 
-    assert!(view
-      .change_working_directory("/test_files/subfolder")
-      .unwrap());
+    assert!(view.change_working_directory("/test_files/subfolder").unwrap());
     assert_eq!(format!("/{label}/test_files/subfolder"), view.display_path);
-    assert_eq!(
-      root.join("test_files/subfolder").canonicalize().unwrap(),
-      view.current_path
-    );
+    assert_eq!(root.join("test_files/subfolder").canonicalize().unwrap(), view.current_path);
     assert_eq!(root.canonicalize().unwrap(), view.root);
   }
 
@@ -697,10 +649,7 @@ pub(crate) mod tests {
     let mut view = FileSystemView::new(root.clone(), label, permissions);
 
     assert!(view.change_working_directory("test_files").unwrap());
-    let options = OpenOptionsWrapperBuilder::default()
-      .read(true)
-      .build()
-      .unwrap();
+    let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
     let file_path = view.open_file("1MiB.txt", options).await;
     assert!(file_path.is_ok());
   }
@@ -712,10 +661,7 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions);
 
-    let options = OpenOptionsWrapperBuilder::default()
-      .read(true)
-      .build()
-      .unwrap();
+    let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
     let file_path = view.open_file("test_files/1MiB.txt", options).await;
     assert!(file_path.is_ok());
   }
@@ -727,10 +673,7 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions);
 
-    let options = OpenOptionsWrapperBuilder::default()
-      .read(true)
-      .build()
-      .unwrap();
+    let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
     let file = view.open_file("/test_files/1MiB.txt", options).await;
     assert!(file.is_ok());
   }
@@ -741,10 +684,7 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, HashSet::new());
 
-    let options = OpenOptionsWrapperBuilder::default()
-      .read(true)
-      .build()
-      .unwrap();
+    let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
     let file = view.open_file("/test_files/1MiB.txt", options).await;
     let Err(IoError::PermissionError) = file else {
       panic!("Expected Permission error, got: {:?}", file);
@@ -758,10 +698,7 @@ pub(crate) mod tests {
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
-    let options = OpenOptionsWrapperBuilder::default()
-      .read(true)
-      .build()
-      .unwrap();
+    let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
     let file = view.open_file("/test_files/subfolder", options).await;
     let Err(IoError::NotAFileError) = file else {
       panic!("Expected NotAFile error, got: {:?}", file);
@@ -1077,19 +1014,12 @@ pub(crate) mod tests {
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
-    let result = view
-      .change_file_times(new_time, &format!("/{label}/{file_name}"))
-      .await;
+    let result = view.change_file_times(new_time, &format!("/{label}/{file_name}")).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
-    let modification_time: DateTime<Local> = File::open(&file_path)
-      .unwrap()
-      .metadata()
-      .unwrap()
-      .modified()
-      .unwrap()
-      .into();
+    let modification_time: DateTime<Local> =
+      File::open(&file_path).unwrap().metadata().unwrap().modified().unwrap().into();
     assert_eq!(timeval, modification_time);
   }
 
@@ -1112,13 +1042,8 @@ pub(crate) mod tests {
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
-    let modification_time: DateTime<Local> = File::open(&file_path)
-      .unwrap()
-      .metadata()
-      .unwrap()
-      .modified()
-      .unwrap()
-      .into();
+    let modification_time: DateTime<Local> =
+      File::open(&file_path).unwrap().metadata().unwrap().modified().unwrap().into();
     assert_eq!(timeval, modification_time);
   }
 
@@ -1247,12 +1172,7 @@ pub(crate) mod tests {
   #[test]
   fn list_dir_fs_root_test() {
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
-    let root = current_dir()
-      .unwrap()
-      .ancestors()
-      .last()
-      .unwrap()
-      .to_path_buf();
+    let root = current_dir().unwrap().ancestors().last().unwrap().to_path_buf();
     let label = "test";
     let view = FileSystemView::new(root.clone(), label, permissions.clone());
 
@@ -1266,9 +1186,7 @@ pub(crate) mod tests {
     let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label, permissions.clone());
-    view
-      .change_working_directory("test_files/subfolder")
-      .unwrap();
+    view.change_working_directory("test_files/subfolder").unwrap();
 
     let listing = view.list_dir("..").unwrap();
 
@@ -1294,9 +1212,7 @@ pub(crate) mod tests {
     let root = current_dir().unwrap();
     let label = "test";
     let mut view = FileSystemView::new(root.clone(), label, permissions.clone());
-    view
-      .change_working_directory("test_files/subfolder")
-      .unwrap();
+    view.change_working_directory("test_files/subfolder").unwrap();
 
     let listing = view.list_dir("/").unwrap();
 

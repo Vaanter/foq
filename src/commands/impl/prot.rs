@@ -24,10 +24,9 @@ pub(crate) async fn prot(
       properties.prot_mode = ProtMode::Clear;
       Reply::new(ReplyCode::CommandOkay, "Protection level set")
     }
-    Ok(ProtMode::Safe) | Ok(ProtMode::Confidential) => Reply::new(
-      ReplyCode::ProtectionLevelNotSupported,
-      "Protection mode not available",
-    ),
+    Ok(ProtMode::Safe) | Ok(ProtMode::Confidential) => {
+      Reply::new(ReplyCode::ProtectionLevelNotSupported, "Protection mode not available")
+    }
     Ok(ProtMode::Private) => {
       if TLS_CONFIG.clone().is_some() {
         properties.prot_mode = ProtMode::Private;
@@ -36,10 +35,9 @@ pub(crate) async fn prot(
         Reply::new(ReplyCode::AuthNotAvailable, "Protection not available")
       }
     }
-    Err(_) => Reply::new(
-      ReplyCode::CommandNotImplementedForThatParameter,
-      "Unknown protection mode",
-    ),
+    Err(_) => {
+      Reply::new(ReplyCode::CommandNotImplementedForThatParameter, "Unknown protection mode")
+    }
   };
 
   reply_sender.send_control_message(reply).await;
@@ -52,8 +50,8 @@ mod tests {
   use crate::commands::reply_code::ReplyCode;
   use crate::session::protection_mode::ProtMode;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor_custom, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor_custom,
   };
   use std::sync::Arc;
   use std::time::Duration;
@@ -80,13 +78,8 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::CommandNotImplementedForThatParameter,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::CommandNotImplementedForThatParameter, None)
+      .await;
   }
 
   #[tokio::test]
@@ -110,10 +103,7 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
-    assert_eq!(
-      ProtMode::Private,
-      command_processor.session_properties.read().await.prot_mode
-    );
+    assert_eq!(ProtMode::Private, command_processor.session_properties.read().await.prot_mode);
   }
 
   #[tokio::test]
@@ -138,10 +128,7 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::CommandOkay, None).await;
-    assert_eq!(
-      ProtMode::Clear,
-      command_processor.session_properties.read().await.prot_mode
-    );
+    assert_eq!(ProtMode::Clear, command_processor.session_properties.read().await.prot_mode);
   }
 
   #[tokio::test]
@@ -165,9 +152,6 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::ProtectionLevelNotSupported, None).await;
-    assert_eq!(
-      ProtMode::Clear,
-      command_processor.session_properties.read().await.prot_mode
-    );
+    assert_eq!(ProtMode::Clear, command_processor.session_properties.read().await.prot_mode);
   }
 }

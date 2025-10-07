@@ -36,17 +36,15 @@ pub(crate) async fn mfct(
     .change_file_times(FileTimes::new().set_created(timeval.into()), path)
     .await;
 
-  reply_sender
-    .send_control_message(get_modify_time_reply(result, &timeval, path))
-    .await;
+  reply_sender.send_control_message(get_modify_time_reply(result, &timeval, path)).await;
 }
 
 #[cfg(test)]
 mod tests {
   use crate::io::timeval::format_timeval;
   use crate::utils::test_utils::{
-    receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
-    touch, CommandProcessorSettingsBuilder, FileCleanup, TestReplySender,
+    CommandProcessorSettingsBuilder, FileCleanup, TestReplySender, receive_and_verify_reply,
+    setup_test_command_processor, setup_test_command_processor_custom, touch,
   };
   use chrono::{DateTime, Local, TimeDelta, Timelike};
   use std::env::temp_dir;
@@ -91,13 +89,7 @@ mod tests {
     .await
     .expect("Command timeout!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]
@@ -108,10 +100,7 @@ mod tests {
     let file_path = root.join(&file_name);
     touch(&file_path).expect("Test file must exist");
     let _cleanup = FileCleanup::new(&file_path);
-    let timeval = Local::now()
-      .sub(TimeDelta::hours(4))
-      .with_nanosecond(0u32)
-      .unwrap();
+    let timeval = Local::now().sub(TimeDelta::hours(4)).with_nanosecond(0u32).unwrap();
     let command = Command::new(
       Commands::Mfct,
       format!("{} /{}/{}", format_timeval(&timeval), label, file_name),
@@ -136,13 +125,8 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatus, None).await;
-    let modification_time: DateTime<Local> = File::open(&file_path)
-      .unwrap()
-      .metadata()
-      .unwrap()
-      .created()
-      .unwrap()
-      .into();
+    let modification_time: DateTime<Local> =
+      File::open(&file_path).unwrap().metadata().unwrap().created().unwrap().into();
     assert_eq!(timeval, modification_time);
   }
 
@@ -154,14 +138,9 @@ mod tests {
     let file_path = root.join(&file_name);
     touch(&file_path).expect("Test file must exist");
     let _cleanup = FileCleanup::new(&file_path);
-    let timeval = Local::now()
-      .sub(TimeDelta::hours(4))
-      .with_nanosecond(0u32)
-      .unwrap();
-    let command = Command::new(
-      Commands::Mfct,
-      format!("{} {}/{}", format_timeval(&timeval), label, file_name),
-    );
+    let timeval = Local::now().sub(TimeDelta::hours(4)).with_nanosecond(0u32).unwrap();
+    let command =
+      Command::new(Commands::Mfct, format!("{} {}/{}", format_timeval(&timeval), label, file_name));
 
     let settings = CommandProcessorSettingsBuilder::default()
       .label(label.to_string())
@@ -182,13 +161,8 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatus, None).await;
-    let modification_time: DateTime<Local> = File::open(&file_path)
-      .unwrap()
-      .metadata()
-      .unwrap()
-      .created()
-      .unwrap()
-      .into();
+    let modification_time: DateTime<Local> =
+      File::open(&file_path).unwrap().metadata().unwrap().created().unwrap().into();
     assert_eq!(timeval, modification_time);
   }
 
@@ -200,14 +174,9 @@ mod tests {
     let file_path = root.join(&file_name);
     touch(&file_path).expect("Test file must exist");
     let _cleanup = FileCleanup::new(&file_path);
-    let timeval = Local::now()
-      .sub(TimeDelta::hours(4))
-      .with_nanosecond(0u32)
-      .unwrap();
-    let command = Command::new(
-      Commands::Mfct,
-      format!("{} {}", format_timeval(&timeval), &file_name),
-    );
+    let timeval = Local::now().sub(TimeDelta::hours(4)).with_nanosecond(0u32).unwrap();
+    let command =
+      Command::new(Commands::Mfct, format!("{} {}", format_timeval(&timeval), &file_name));
 
     let settings = CommandProcessorSettingsBuilder::default()
       .label(label.to_string())
@@ -229,13 +198,8 @@ mod tests {
     .expect("Command timeout!");
 
     receive_and_verify_reply(2, &mut rx, ReplyCode::FileStatus, None).await;
-    let modification_time: DateTime<Local> = File::open(&file_path)
-      .unwrap()
-      .metadata()
-      .unwrap()
-      .created()
-      .unwrap()
-      .into();
+    let modification_time: DateTime<Local> =
+      File::open(&file_path).unwrap().metadata().unwrap().created().unwrap().into();
     assert_eq!(timeval, modification_time);
   }
 }

@@ -1,6 +1,6 @@
 use std::io::{ErrorKind, SeekFrom};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufReader};
 use tokio::select;
 use tracing::{debug, info, warn};
@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use crate::commands::command::Command;
 use crate::commands::commands::Commands;
 use crate::commands::r#impl::shared::{
-  acquire_data_channel, copy_data, get_open_file_result, get_transfer_reply, TRANSFER_BUFFER_SIZE,
+  TRANSFER_BUFFER_SIZE, acquire_data_channel, copy_data, get_open_file_result, get_transfer_reply,
 };
 use crate::commands::reply::Reply;
 use crate::commands::reply_code::ReplyCode;
@@ -49,14 +49,8 @@ pub(crate) async fn retr(
     }
   };
 
-  let options = OpenOptionsWrapperBuilder::default()
-    .read(true)
-    .build()
-    .unwrap();
-  let file = session_properties
-    .file_system_view_root
-    .open_file(&command.argument, options)
-    .await;
+  let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
+  let file = session_properties.file_system_view_root.open_file(&command.argument, options).await;
   info!(
     "User '{}' opening file '{}'.",
     session_properties.username.as_ref().unwrap(),
@@ -72,20 +66,14 @@ pub(crate) async fn retr(
   debug!("File opened successfully.");
 
   reply_sender
-    .send_control_message(Reply::new(
-      ReplyCode::FileStatusOkay,
-      "Starting file transfer!",
-    ))
+    .send_control_message(Reply::new(ReplyCode::FileStatusOkay, "Starting file transfer!"))
     .await;
 
   let offset = session_properties.offset.swap(0, Ordering::SeqCst);
   if offset > 0 {
     debug!("Setting cursor to offset: {}", offset);
     if let Err(e) = file.seek(SeekFrom::Start(offset)).await {
-      warn!(
-        "Failed to seek file {} to offset {}. Error: {}",
-        &command.argument, offset, e
-      );
+      warn!("Failed to seek file {} to offset {}. Error: {}", &command.argument, offset, e);
     };
   }
 
@@ -102,14 +90,12 @@ pub(crate) async fn retr(
     }
   };
 
-  reply_sender
-    .send_control_message(get_transfer_reply(&success))
-    .await;
+  reply_sender.send_control_message(get_transfer_reply(&success)).await;
 
-  if success.is_ok() {
-    if let Err(e) = data_channel.shutdown().await {
-      warn!("Failed to shutdown data channel after writing! {e}");
-    }
+  if success.is_ok()
+    && let Err(e) = data_channel.shutdown().await
+  {
+    warn!("Failed to shutdown data channel after writing! {e}");
   }
 }
 
@@ -126,8 +112,8 @@ mod tests {
   use s2n_quic::client::Connect;
   use tokio::fs::OpenOptions;
   use tokio::io::{AsyncRead, AsyncReadExt};
-  use tokio::sync::mpsc::channel;
   use tokio::sync::Mutex;
+  use tokio::sync::mpsc::channel;
   use tokio::time::timeout;
   use tokio_util::sync::CancellationToken;
   use uuid::Uuid;
@@ -147,10 +133,7 @@ mod tests {
 
   async fn common_tcp(root: PathBuf, argument: &str) {
     let file_path = root.join(argument);
-    assert!(
-      file_path.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
     let command = Command::new(Commands::Retr, argument);
 
@@ -162,10 +145,7 @@ mod tests {
 
   async fn common_quic(root: PathBuf, argument: &str) {
     let file_path = root.join(argument);
-    assert!(
-      file_path.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
@@ -195,11 +175,7 @@ mod tests {
       Err(_) => panic!("Connection setup failed!"),
     };
 
-    let _ = command_processor
-      .data_wrapper
-      .open_data_stream(ProtMode::Clear)
-      .await
-      .unwrap();
+    let _ = command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await.unwrap();
 
     let client_dc = match client_connection.open_bidirectional_stream().await {
       Ok(client_dc) => client_dc,
@@ -211,19 +187,15 @@ mod tests {
 
   async fn common_quinn_quinn(root: PathBuf, argument: &str) {
     let file_path = root.join(argument);
-    assert!(
-      file_path.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
     let listener = QuinnListener::new(LOCALHOST).unwrap();
     let addr = listener.listener.local_addr().unwrap();
     let command = Command::new(Commands::Retr, argument);
     let token = CancellationToken::new();
     let test_handle = tokio::spawn(async move {
-      let connection = Arc::new(Mutex::new(
-        listener.accept(token.clone()).await.unwrap().await.unwrap(),
-      ));
+      let connection =
+        Arc::new(Mutex::new(listener.accept(token.clone()).await.unwrap().await.unwrap()));
       let wrapper = QuicQuinnDataChannelWrapper::new(LOCALHOST, connection.clone());
       (setup_transfer_command_processor(wrapper, root), connection)
     });
@@ -245,11 +217,7 @@ mod tests {
         Err(_) => panic!("Connection setup failed!"),
       };
 
-    let _ = command_processor
-      .data_wrapper
-      .open_data_stream(ProtMode::Clear)
-      .await
-      .unwrap();
+    let _ = command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await.unwrap();
 
     let (mut send_stream, cliend_dc_recv) = match connection.open_bi().await {
       Ok(client_dc) => client_dc,
@@ -259,18 +227,12 @@ mod tests {
     send_stream.write("".as_bytes()).await.unwrap();
 
     transfer(file_path, command, command_processor, cliend_dc_recv).await;
-    server_connection
-      .lock()
-      .await
-      .close(VarInt::from_u32(0), "Test end".as_bytes());
+    server_connection.lock().await.close(VarInt::from_u32(0), "Test end".as_bytes());
   }
 
   async fn common_quic_quinn(root: PathBuf, argument: &str) {
     let file_path = root.join(argument);
-    assert!(
-      file_path.exists(),
-      "Test file does not exist! Cannot proceed!"
-    );
+    assert!(file_path.exists(), "Test file does not exist! Cannot proceed!");
 
     let mut listener = QuicOnlyListener::new(LOCALHOST).unwrap();
     let addr = listener.server.local_addr().unwrap();
@@ -299,11 +261,7 @@ mod tests {
         Err(_) => panic!("Connection setup failed!"),
       };
 
-    let _ = command_processor
-      .data_wrapper
-      .open_data_stream(ProtMode::Clear)
-      .await
-      .unwrap();
+    let _ = command_processor.data_wrapper.open_data_stream(ProtMode::Clear).await.unwrap();
 
     let (_, cliend_dc_recv) = match connection.open_bi().await {
       Ok(client_dc) => client_dc,
@@ -354,11 +312,8 @@ mod tests {
     let mut local_file_hasher = Hasher::new();
     let mut sent_file_hasher = Hasher::new();
 
-    let mut local_file = OpenOptions::new()
-      .read(true)
-      .open(file_path)
-      .await
-      .expect("Test file must exist!");
+    let mut local_file =
+      OpenOptions::new().read(true).open(file_path).await.expect("Test file must exist!");
 
     const BUFFER_MAX: usize = 8096;
     let mut transfer_buffer = [0; BUFFER_MAX];
@@ -599,10 +554,8 @@ mod tests {
   async fn data_channel_not_open_test() {
     let (settings, command_processor) = setup_test_command_processor();
 
-    let command = Command::new(
-      Commands::Retr,
-      format!("{}/test_files/1MiB.txt", settings.label.clone()),
-    );
+    let command =
+      Command::new(Commands::Retr, format!("{}/test_files/1MiB.txt", settings.label.clone()));
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     timeout(
@@ -630,13 +583,7 @@ mod tests {
     .await
     .expect("Command timed out!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]
@@ -644,10 +591,8 @@ mod tests {
     let (settings, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
-    let command = Command::new(
-      Commands::Retr,
-      format!("{}/test_files/NONEXISTENT", settings.label.clone()),
-    );
+    let command =
+      Command::new(Commands::Retr, format!("{}/test_files/NONEXISTENT", settings.label.clone()));
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     timeout(
@@ -675,10 +620,8 @@ mod tests {
     let mut command_processor = setup_test_command_processor_custom(&settings);
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
-    let command = Command::new(
-      Commands::Retr,
-      format!("{}/test_files/2KiB.txt", settings.label.clone()),
-    );
+    let command =
+      Command::new(Commands::Retr, format!("{}/test_files/2KiB.txt", settings.label.clone()));
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     timeout(
@@ -696,10 +639,7 @@ mod tests {
     let (settings, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
-    let command = Command::new(
-      Commands::Retr,
-      format!("{}/test_files", settings.label.clone()),
-    );
+    let command = Command::new(Commands::Retr, format!("{}/test_files", settings.label.clone()));
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
     timeout(
@@ -709,12 +649,6 @@ mod tests {
     .await
     .expect("Command timed out!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 }

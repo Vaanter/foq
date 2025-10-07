@@ -70,10 +70,7 @@ pub(crate) async fn list(
     .filter(|l| l.entry_type() != EntryType::Cdir)
     .map(|l| l.to_list_string())
     .collect::<String>();
-  trace!(
-    "Sending listing to client:\n{}",
-    mem.replace("\r\n", "\\r\\n")
-  );
+  trace!("Sending listing to client:\n{}", mem.replace("\r\n", "\\r\\n"));
 
   let mut buf = BufReader::new(mem.as_bytes());
   let transfer = copy_data(&mut buf, &mut data_channel);
@@ -139,11 +136,8 @@ mod tests {
         let msg = String::from_utf8_lossy(&buffer[..len]);
         assert!(!msg.is_empty());
 
-        let file_count = settings
-          .view_root
-          .read_dir()
-          .expect("Failed to read current path!")
-          .count();
+        let file_count =
+          settings.view_root.read_dir().expect("Failed to read current path!").count();
 
         println!("Message:\n{}", msg);
 
@@ -237,9 +231,8 @@ mod tests {
   async fn not_logged_in_test() {
     let command = Command::new(Commands::List, String::new());
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);
@@ -278,13 +271,7 @@ mod tests {
     .await
     .expect("Command should finish before timeout");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]

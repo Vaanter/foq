@@ -32,9 +32,7 @@ pub(crate) async fn cdup(
       .await;
   }
 
-  let result = session_properties
-    .file_system_view_root
-    .change_working_directory_up();
+  let result = session_properties.file_system_view_root.change_working_directory_up();
   let reply = get_change_directory_reply(result);
 
   reply_sender.send_control_message(reply).await;
@@ -55,8 +53,8 @@ mod tests {
   use crate::commands::reply_code::ReplyCode;
   use crate::io::view::View;
   use crate::utils::test_utils::{
-    setup_test_command_processor_custom, CommandProcessorSettings, CommandProcessorSettingsBuilder,
-    TestReplySender,
+    CommandProcessorSettings, CommandProcessorSettingsBuilder, TestReplySender,
+    setup_test_command_processor_custom,
   };
 
   async fn common(
@@ -69,23 +67,13 @@ mod tests {
     let command_processor = Arc::new(setup_test_command_processor_custom(settings));
     let (tx, mut rx) = mpsc::channel(1024);
     let reply_sender = TestReplySender::new(tx);
-    command
-      .execute(command_processor.clone(), Arc::new(reply_sender))
-      .await;
+    command.execute(command_processor.clone(), Arc::new(reply_sender)).await;
     match timeout(Duration::from_secs(2), rx.recv()).await {
       Ok(Some(result)) => {
         assert_eq!(result.code, reply_code);
         if reply_code != ReplyCode::NotLoggedIn {
-          let root = &command_processor
-            .session_properties
-            .read()
-            .await
-            .file_system_view_root;
-          let view = root
-            .file_system_views
-            .as_ref()
-            .unwrap()
-            .get(&settings.label.clone());
+          let root = &command_processor.session_properties.read().await.file_system_view_root;
+          let view = root.file_system_views.as_ref().unwrap().get(&settings.label.clone());
           assert!(view.is_some());
           assert_eq!(view.unwrap().get_current_path(), expected_path);
           assert_eq!(root.get_current_working_directory(), expected_display_path);
@@ -174,19 +162,12 @@ mod tests {
   async fn cdup_not_logged_in_should_reply_530() {
     let path = current_dir().unwrap();
 
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
 
     let command = Command::new(Commands::Cdup, "");
 
-    common(
-      &settings,
-      command,
-      ReplyCode::NotLoggedIn,
-      path.clone().canonicalize().unwrap(),
-      "/",
-    )
-    .await;
+    common(&settings, command, ReplyCode::NotLoggedIn, path.clone().canonicalize().unwrap(), "/")
+      .await;
   }
 }

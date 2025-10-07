@@ -29,13 +29,7 @@ pub(crate) async fn pass(
 
   let session_properties = command_processor.session_properties.clone();
 
-  if session_properties
-    .read()
-    .await
-    .login_form
-    .username
-    .is_none()
-  {
+  if session_properties.read().await.login_form.username.is_none() {
     return reply_sender
       .send_control_message(Reply::new(
         ReplyCode::BadSequenceOfCommands,
@@ -81,8 +75,8 @@ mod tests {
   use std::sync::Arc;
   use std::time::Duration;
 
-  use tokio::sync::mpsc::channel;
   use tokio::sync::RwLock;
+  use tokio::sync::mpsc::channel;
   use tokio::time::timeout;
 
   use crate::auth::user_data::UserData;
@@ -94,16 +88,13 @@ mod tests {
   use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::{
-    create_test_auth_provider, receive_and_verify_reply, TestReplySender, LOCALHOST,
+    LOCALHOST, TestReplySender, create_test_auth_provider, receive_and_verify_reply,
   };
 
   #[tokio::test]
   async fn login_successful_test() {
     let mut session_properties = SessionProperties::new();
-    let _ = session_properties
-      .login_form
-      .username
-      .insert("test".to_string());
+    let _ = session_properties.login_form.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
@@ -112,9 +103,7 @@ mod tests {
     let command = Command::new(Commands::Pass, "test");
 
     let users = vec![UserData::new("test", "test")];
-    AUTH_PROVIDER
-      .get_or_init(|| async { create_test_auth_provider(users) })
-      .await;
+    AUTH_PROVIDER.get_or_init(|| async { create_test_auth_provider(users) }).await;
 
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
@@ -131,10 +120,7 @@ mod tests {
   #[tokio::test]
   async fn incorrect_password_test() {
     let mut session_properties = SessionProperties::new();
-    let _ = session_properties
-      .login_form
-      .username
-      .insert("test".to_string());
+    let _ = session_properties.login_form.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
@@ -143,9 +129,7 @@ mod tests {
     let command = Command::new(Commands::Pass, "INVALID");
 
     let users = vec![UserData::new("test", "test")];
-    AUTH_PROVIDER
-      .get_or_init(|| async { create_test_auth_provider(users) })
-      .await;
+    AUTH_PROVIDER.get_or_init(|| async { create_test_auth_provider(users) }).await;
 
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
@@ -168,9 +152,7 @@ mod tests {
     let command = Command::new(Commands::Pass, "test");
 
     let users = vec![UserData::new("test", "test")];
-    AUTH_PROVIDER
-      .get_or_init(|| async { create_test_auth_provider(users) })
-      .await;
+    AUTH_PROVIDER.get_or_init(|| async { create_test_auth_provider(users) }).await;
 
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
@@ -187,10 +169,7 @@ mod tests {
   #[tokio::test]
   async fn no_password_test() {
     let mut session_properties = SessionProperties::new();
-    let _ = session_properties
-      .login_form
-      .username
-      .insert("test".to_string());
+    let _ = session_properties.login_form.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
@@ -199,9 +178,7 @@ mod tests {
     let command = Command::new(Commands::Pass, "");
 
     let users = vec![UserData::new("test", "test")];
-    AUTH_PROVIDER
-      .get_or_init(|| async { create_test_auth_provider(users) })
-      .await;
+    AUTH_PROVIDER.get_or_init(|| async { create_test_auth_provider(users) }).await;
 
     let (tx, mut rx) = channel(1024);
     let reply_sender = TestReplySender::new(tx);
@@ -212,23 +189,14 @@ mod tests {
     .await
     .expect("Command timed out!");
 
-    receive_and_verify_reply(
-      2,
-      &mut rx,
-      ReplyCode::SyntaxErrorInParametersOrArguments,
-      None,
-    )
-    .await;
+    receive_and_verify_reply(2, &mut rx, ReplyCode::SyntaxErrorInParametersOrArguments, None).await;
   }
 
   #[tokio::test]
   #[ignore] // Requires other tests that initialize DB to not run
   async fn database_not_setup_test() {
     let mut session_properties = SessionProperties::new();
-    let _ = session_properties
-      .login_form
-      .username
-      .insert("test".to_string());
+    let _ = session_properties.login_form.username.insert("test".to_string());
 
     let session_properties = Arc::new(RwLock::new(session_properties));
     let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));

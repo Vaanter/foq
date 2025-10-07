@@ -32,9 +32,7 @@ pub(crate) async fn nlst(
     return;
   }
 
-  let listing = session_properties
-    .file_system_view_root
-    .list_dir(&command.argument);
+  let listing = session_properties.file_system_view_root.list_dir(&command.argument);
 
   let listing = match get_listing_or_error_reply(listing) {
     Ok(l) => l,
@@ -55,13 +53,13 @@ pub(crate) async fn nlst(
       "Transferring directory information!",
     ))
     .await;
-  let mem = listing
-    .iter()
-    .filter(|l| l.entry_type() != EntryType::Cdir)
-    .fold(String::with_capacity(listing.len() * 32), |mut acc, e| {
+  let mem = listing.iter().filter(|l| l.entry_type() != EntryType::Cdir).fold(
+    String::with_capacity(listing.len() * 32),
+    |mut acc, e| {
       acc.push_str(&format!(" {}\r\n", e.name()));
       acc
-    });
+    },
+  );
   trace!("Sending listing to client:\n{}", mem);
 
   let mut buf = BufReader::new(mem.as_bytes());
@@ -102,8 +100,8 @@ mod tests {
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
   use crate::utils::test_utils::{
-    open_tcp_data_channel, receive_and_verify_reply, setup_test_command_processor,
-    setup_test_command_processor_custom, CommandProcessorSettingsBuilder, TestReplySender,
+    CommandProcessorSettingsBuilder, TestReplySender, open_tcp_data_channel,
+    receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
   };
 
   #[tokio::test]
@@ -149,9 +147,8 @@ mod tests {
   #[tokio::test]
   async fn not_logged_in_test() {
     let command = Command::new(Commands::Nlst, String::new());
-    let settings = CommandProcessorSettingsBuilder::default()
-      .build()
-      .expect("Settings should be valid");
+    let settings =
+      CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
     let command_processor = setup_test_command_processor_custom(&settings);
 
     let (tx, mut rx) = channel(1024);

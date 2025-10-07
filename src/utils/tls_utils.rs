@@ -5,10 +5,8 @@ use std::path::Path;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile::{certs, ec_private_keys, pkcs8_private_keys, rsa_private_keys};
 
-pub(crate) fn load_keys(path: &Path) -> Result<Vec<PrivateKeyDer>, anyhow::Error> {
-  load_ec_keys(path)
-    .or_else(|_| load_rsa_pkcks1_keys(path))
-    .or_else(|_| load_pkcs8_keys(path))
+pub(crate) fn load_keys(path: &Path) -> Result<Vec<PrivateKeyDer<'_>>, anyhow::Error> {
+  load_ec_keys(path).or_else(|_| load_rsa_pkcks1_keys(path)).or_else(|_| load_pkcs8_keys(path))
 }
 
 pub(crate) fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, anyhow::Error> {
