@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use config::Config;
 use once_cell::sync::Lazy;
-use rustls::crypto::aws_lc_rs::Ticketer;
+use rustls::ServerConfig;
 use rustls::crypto::CryptoProvider;
+use rustls::crypto::aws_lc_rs::Ticketer;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::ServerSessionMemoryCache;
-use rustls::ServerConfig;
 use sqlx::SqlitePool;
 use tokio::sync::OnceCell;
 use tracing::{info, warn};

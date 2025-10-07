@@ -2,3 +2,6 @@
 lto = "fat"
 codegen-units = 1
 debug = 0
+
+[build]
+rustflags = ["--cfg", "tokio_unstable"]

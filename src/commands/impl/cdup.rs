@@ -53,6 +53,7 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
+  use crate::io::view::View;
   use crate::utils::test_utils::{
     setup_test_command_processor_custom, CommandProcessorSettings, CommandProcessorSettingsBuilder,
     TestReplySender,
@@ -86,7 +87,7 @@ mod tests {
             .unwrap()
             .get(&settings.label.clone());
           assert!(view.is_some());
-          assert_eq!(view.unwrap().current_path, expected_path);
+          assert_eq!(view.unwrap().get_current_path(), expected_path);
           assert_eq!(root.get_current_working_directory(), expected_display_path);
         }
       }

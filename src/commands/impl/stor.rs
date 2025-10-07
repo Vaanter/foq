@@ -111,8 +111,7 @@ pub(crate) async fn stor(
 
 #[cfg(test)]
 mod tests {
-  use std::collections::HashSet;
-  use std::env::{current_dir, temp_dir};
+  use std::env::temp_dir;
   use std::path::Path;
   use std::sync::Arc;
   use std::time::Duration;
@@ -128,7 +127,6 @@ mod tests {
   use tokio_util::sync::CancellationToken;
   use uuid::Uuid;
 
-  use crate::auth::user_permission::UserPermission;
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
@@ -136,7 +134,6 @@ mod tests {
   use crate::data_channels::quic_only_data_channel_wrapper::QuicOnlyDataChannelWrapper;
   use crate::data_channels::quic_quinn_data_channel_wrapper::QuicQuinnDataChannelWrapper;
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
-  use crate::io::file_system_view::FileSystemView;
   use crate::listeners::quic_only_listener::QuicOnlyListener;
   use crate::listeners::quinn_listener::QuinnListener;
   use crate::session::command_processor::CommandProcessor;
@@ -682,31 +679,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
-    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
-
-    let label = "test";
-    let view = FileSystemView::new(
-      current_dir().unwrap(),
-      label,
-      HashSet::from([
-        UserPermission::Read,
-        UserPermission::Write,
-        UserPermission::Create,
-      ]),
-    );
-
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    session_properties
-      .write()
-      .await
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties
-      .write()
-      .await
-      .username
-      .insert("test".to_string());
-    let command_processor = CommandProcessor::new(session_properties, wrapper);
+    let (_, command_processor) = setup_test_command_processor();
 
     let command = Command::new(Commands::Stor, "NONEXISTENT".to_string());
     let (tx, mut rx) = channel(1024);
@@ -723,31 +696,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_file_specified_test() {
-    let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
-
-    let label = "test";
-    let view = FileSystemView::new(
-      current_dir().unwrap(),
-      label,
-      HashSet::from([
-        UserPermission::Read,
-        UserPermission::Write,
-        UserPermission::Create,
-      ]),
-    );
-
-    let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
-    session_properties
-      .write()
-      .await
-      .file_system_view_root
-      .set_views(vec![view]);
-    let _ = session_properties
-      .write()
-      .await
-      .username
-      .insert("test".to_string());
-    let mut command_processor = CommandProcessor::new(session_properties, wrapper);
+    let (_, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
 

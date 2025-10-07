@@ -1,6 +1,5 @@
 use anyhow::bail;
 use async_channel::{unbounded, Receiver, Sender};
-use std::error::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -36,7 +35,7 @@ impl StandardDataChannelWrapper {
   /// # Arguments
   ///
   /// - `addr`: A [`SocketAddr`] representing the address for the data channel.
-  /// The port is set to 0.
+  ///   The port is set to 0.
   ///
   /// # Returns
   ///
@@ -69,7 +68,7 @@ impl StandardDataChannelWrapper {
   /// A [`SocketAddr`] the server listens on.
   ///
   #[tracing::instrument(skip(self))]
-  async fn create_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn create_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, anyhow::Error> {
     debug!("Creating passive listener");
     let listener = TcpListener::bind(self.addr)
       .await
@@ -161,7 +160,7 @@ impl StandardDataChannelWrapper {
 #[async_trait]
 impl DataChannelWrapper for StandardDataChannelWrapper {
   /// Opens a data channel using [`StandardDataChannelWrapper::create_stream`].
-  async fn open_data_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn open_data_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, anyhow::Error> {
     self.create_stream(prot_mode).await
   }
 

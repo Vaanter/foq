@@ -107,11 +107,11 @@ impl DataSource for TestDataSource {
       .find(|&u| &u.username == login_form.username.as_ref().unwrap())
       .ok_or(AuthError::UserNotFoundError)?;
 
-    return if &user.password == login_form.password.as_ref().unwrap() {
+    if &user.password == login_form.password.as_ref().unwrap() {
       Ok(user.clone())
     } else {
       Err(AuthError::UserNotFoundError)
-    };
+    }
   }
 }
 
@@ -125,7 +125,7 @@ impl<'a> DirCleanup<'a> {
   }
 }
 
-impl<'a> Drop for DirCleanup<'a> {
+impl Drop for DirCleanup<'_> {
   fn drop(&mut self) {
     println!("Cleaning up directory '{:?}'", self.directory_path);
     if let Err(remove_result) = remove_dir_all(self.directory_path) {
@@ -143,7 +143,7 @@ impl<'a> FileCleanup<'a> {
   }
 }
 
-impl<'a> Drop for FileCleanup<'a> {
+impl Drop for FileCleanup<'_> {
   fn drop(&mut self) {
     println!("Cleaning up file '{:?}'", self.0);
     if let Err(e) = remove_file(self.0) {
@@ -340,12 +340,12 @@ pub(crate) fn setup_test_command_processor_custom(
   if let Some(username) = &settings.username {
     let view = FileSystemView::new(
       settings.view_root.clone(),
-      settings.label.clone(),
+      &settings.label,
       settings.permissions.clone(),
     );
     session_properties
       .file_system_view_root
-      .set_views(vec![view]);
+      .set_views(vec![view.into()]);
     session_properties.username.replace(username.clone());
   }
 
@@ -537,4 +537,9 @@ pub(crate) fn touch(path: &Path) -> io::Result<()> {
     .write(true)
     .open(path)
     .map(|_| println!("Touching: {:?}", path.canonicalize().unwrap()))
+}
+
+pub(crate) fn create_dir(path: &Path) -> io::Result<()> {
+  println!("Creating directory: {:?}", path);
+  std::fs::create_dir_all(path)
 }

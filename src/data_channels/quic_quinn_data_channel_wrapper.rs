@@ -1,6 +1,5 @@
 use anyhow::bail;
 use async_channel::{unbounded, Receiver, Sender};
-use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -61,7 +60,7 @@ impl QuicQuinnDataChannelWrapper {
   /// the stream in time or some other error occurs it will be logged.
   ///
   #[tracing::instrument(skip(self))]
-  async fn create_stream(&self) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn create_stream(&self) -> Result<SocketAddr, anyhow::Error> {
     debug!("Creating passive listener");
     let conn = self.connection.clone();
     let sender = self.stream_sender.clone();
@@ -101,7 +100,7 @@ impl QuicQuinnDataChannelWrapper {
 #[async_trait]
 impl DataChannelWrapper for QuicQuinnDataChannelWrapper {
   /// Opens a data channel using [`QuicQuinnDataChannelWrapper::create_stream`].
-  async fn open_data_stream(&self, _prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>> {
+  async fn open_data_stream(&self, _prot_mode: ProtMode) -> Result<SocketAddr, anyhow::Error> {
     self.create_stream().await
   }
 

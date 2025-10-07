@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
@@ -12,7 +11,7 @@ pub(crate) type DataChannel = Box<dyn AsyncReadWrite>;
 /// This trait specifies operations that can be used on a data channel.
 #[async_trait]
 pub(crate) trait DataChannelWrapper: Sync + Send {
-  async fn open_data_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, Box<dyn Error>>;
+  async fn open_data_stream(&self, prot_mode: ProtMode) -> Result<SocketAddr, anyhow::Error>;
   fn try_acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error>;
   async fn acquire(&self) -> Result<(DataChannel, CancellationToken), anyhow::Error>;
   async fn close_data_stream(&self);

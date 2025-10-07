@@ -2,20 +2,20 @@
 //! single location a user can access. This can be a disk partition or a specific directory.
 //! The user has a set of permissions which specify which operations are permitted.
 
+use async_trait::async_trait;
+use path_clean::PathClean;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, FileTimes, ReadDir};
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-
-use path_clean::PathClean;
-use tokio::fs::{File, OpenOptions};
-use tracing::{debug, trace, warn};
+use tracing::debug;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
-use crate::io::open_options_flags::{OpenOptionsWrapper, OpenOptionsWrapperBuilder};
+use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+use crate::io::view::View;
 
 /// For documentation about file system view, see [`module`] documentation.
 ///
@@ -38,9 +38,9 @@ impl FileSystemView {
   /// # Arguments
   /// - `root`: A [`PathBuf`] representing the root path of the file system view.
   /// - `label`: A type that can be converted into a [`String`], representing the label of the file
-  /// system view.
+  ///   system view.
   /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
-  /// in the view.
+  ///   in the view.
   ///
   /// # Panics
   ///
@@ -52,11 +52,7 @@ impl FileSystemView {
   /// New [`FileSystemView`] instance.
   ///
   #[cfg(test)]
-  pub(crate) fn new(
-    root: PathBuf,
-    label: impl Into<String>,
-    permissions: HashSet<UserPermission>,
-  ) -> Self {
+  pub(crate) fn new(root: PathBuf, label: &str, permissions: HashSet<UserPermission>) -> Self {
     let label = label.into();
     let root = root.canonicalize().expect("View path must exist!");
     FileSystemView {
@@ -78,9 +74,9 @@ impl FileSystemView {
   ///
   /// - `root`: A [`PathBuf`] representing the root path of the file system view.
   /// - `label`: A type that can be converted into a [`String`], representing the label of the
-  /// file system view.
+  ///   file system view.
   /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
-  /// in the view.
+  ///   in the view.
   ///
   /// # Returns
   ///
@@ -89,7 +85,7 @@ impl FileSystemView {
   ///
   pub(crate) fn new_option(
     root: PathBuf,
-    label: impl Into<String>,
+    label: &str,
     permissions: HashSet<UserPermission>,
   ) -> Result<Self, ()> {
     let label = label.into();
@@ -105,6 +101,54 @@ impl FileSystemView {
     }
   }
 
+  /// Convert the listing of objects in directory to common format.
+  ///
+  /// This function converts a raw [`ReadDir`] into a [`Vec`] of [`EntryData`] and then returns it.
+  ///
+  /// # Arguments
+  /// - `name`: A type that can be converted into a [`String`], representing the name of the
+  ///   listed directory.
+  /// - `path`: A type that can be converted into a [`String`], representing the path to the
+  ///   listed directory.
+  /// - `read_dir`: A [`ReadDir`] containing all the listed objects.
+  /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
+  ///   for the objects.
+  ///
+  /// # Returns
+  ///
+  /// A [`Vec<EntryData>`] containing the converted listing.
+  ///
+  fn create_listing(
+    name: &str,
+    path: impl AsRef<Path>,
+    read_dir: ReadDir,
+    permissions: &HashSet<UserPermission>,
+  ) -> Vec<EntryData> {
+    let mut listing = Vec::with_capacity(read_dir.size_hint().0 + 1);
+    if let Ok(meta) = path.as_ref().metadata() {
+      let mut cdir = EntryData::create_from_metadata(meta, name, permissions);
+      cdir.change_entry_type(EntryType::Cdir);
+      listing.push(cdir);
+    }
+
+    let mut entries: Vec<EntryData> = read_dir
+      .filter_map(|d| d.ok())
+      .filter_map(|e| {
+        let name = e.file_name().into_string().unwrap();
+        if let Ok(meta) = e.metadata() {
+          return Some(EntryData::create_from_metadata(meta, name, permissions));
+        }
+        None
+      })
+      .collect();
+
+    listing.append(&mut entries);
+    listing
+  }
+}
+
+#[async_trait]
+impl View for FileSystemView {
   /// Changes the current path to the specified one.
   ///
   /// This function changes the current path to `path` and returns [`Ok`] if the new path is valid,
@@ -130,13 +174,10 @@ impl FileSystemView {
   /// - [`IoError::OsError`]: If the OS reports any other error.
   /// - [`IoError::NotADirectoryError`]: If the `path` does not refer to a directory.
   /// - [`IoError::InvalidPathError`]: If the `path` refers to parent (..) but current path is
-  /// already at root.
+  ///   already at root.
   ///
-  pub(crate) fn change_working_directory(
-    &mut self,
-    path: impl Into<String>,
-  ) -> Result<bool, IoError> {
-    let path = path.into().replace('\\', "/");
+  fn change_working_directory(&mut self, path: &str) -> Result<bool, IoError> {
+    let path = path.replace('\\', "/");
     let current_path = self.current_path.clone();
     if path.is_empty() || path == "." {
       return Ok(false);
@@ -172,7 +213,7 @@ impl FileSystemView {
     } else if let Some(stripped) = path.strip_prefix('/') {
       let new_current = match self.root.join(stripped).canonicalize() {
         Ok(n) => n,
-        Err(e) => return Err(Self::map_error(e)),
+        Err(e) => return Err(IoError::map_io_error(e)),
       };
 
       self.current_path = new_current;
@@ -185,7 +226,7 @@ impl FileSystemView {
           }
           n
         }
-        Err(e) => return Err(Self::map_error(e)),
+        Err(e) => return Err(IoError::map_io_error(e)),
       };
 
       self.current_path = new_current;
@@ -194,25 +235,8 @@ impl FileSystemView {
     }
     Ok(self.current_path != current_path)
   }
-
-  fn map_error(error: Error) -> IoError {
-    debug!("Mapping error: {:#?}", error);
-    match error.kind() {
-      ErrorKind::NotFound => IoError::NotFoundError(error.to_string()),
-      ErrorKind::PermissionDenied => IoError::PermissionError,
-      _ => IoError::OsError(error),
-    }
-  }
-
-  /// Changes current path to parent.
-  ///
-  /// See [`FileSystemView::change_working_directory`].
-  pub(crate) fn change_working_directory_up(&mut self) -> Result<bool, IoError> {
-    self.change_working_directory("..")
-  }
-
-  pub(crate) fn create_directory(&self, path: impl Into<String>) -> Result<String, IoError> {
-    let mut path = path.into().replace('\\', "/");
+  fn create_directory(&self, path: &str) -> Result<String, IoError> {
+    let mut path = path.replace('\\', "/");
 
     if !self.permissions.contains(&UserPermission::Create) {
       return Err(IoError::PermissionError);
@@ -237,82 +261,21 @@ impl FileSystemView {
 
     create_dir_all(&new_directory_path)
       .map(|_| virtual_path)
-      .map_err(FileSystemView::map_error)
+      .map_err(IoError::map_io_error)
   }
 
-  /// Opens a file with the specified path and options.
-  ///
-  /// This function asynchronously opens a file using the provided `path` and `options`, and
-  /// returns a `Result` containing the opened [`File`] or an [`IoError`] if an error occurs.
-  ///
-  /// # Arguments
-  ///
-  /// - `path`: A type that can be converted into a [`String`], representing the path of the file
-  /// to be opened.
-  /// - `options`: An [`OpenOptionsWrapper`] containing the options for opening the file.
-  ///
-  /// # Returns
-  ///
-  /// A [`Result`] containing the opened [`File`] if successful, or an [`IoError`] if an error
-  /// occurs.
-  ///
-  /// # Errors
-  ///
-  /// This function can return the following [`IoError`] variants:
-  ///
-  /// - [`IoError::PermissionError`]: If the requested operation is not permitted based on the users
-  /// permissions.
-  /// - [`IoError::NotFoundError`]: If the file specified by the `path` does not exist.
-  /// - [`IoError::OsError`]: If an operating system error occurs during the file opening process.
-  /// - [`IoError::NotAFileError`]: If the specified `path` refers to a directory instead of a file.
-  ///
-  #[tracing::instrument(skip_all)]
-  pub(crate) async fn open_file(
-    &self,
-    path: impl Into<String>,
-    options: OpenOptionsWrapper,
-  ) -> Result<File, IoError> {
-    if options.read && !self.permissions.contains(&UserPermission::Read)
-      || (options.write && !self.permissions.contains(&UserPermission::Write))
-      || (options.create && !self.permissions.contains(&UserPermission::Create))
-      || (options.append && !self.permissions.contains(&UserPermission::Append))
-      || (options.truncate && !self.permissions.contains(&UserPermission::Write))
-    {
-      return Err(IoError::PermissionError);
-    }
-
-    let path = self.process_path(&path.into()).clean();
-
-    if !path.starts_with(&self.root) {
-      return Err(IoError::InvalidPathError(String::from("Invalid path!")));
-    }
-
-    debug!("Opening: {:?}", &path);
-
-    let file = OpenOptions::from(options).open(&path).await.map_err(|e| {
-      warn!("Error opening file: {}", e);
-      FileSystemView::map_error(e)
-    });
-
-    return if path.is_dir() {
-      Err(IoError::NotAFileError)
-    } else {
-      file
-    };
-  }
-
-  pub(crate) async fn delete_file(&self, path: impl Into<String>) -> Result<(), IoError> {
+  async fn delete_file(&self, path: &str) -> Result<(), IoError> {
     if !self.permissions.contains(&UserPermission::Delete) {
       return Err(IoError::PermissionError);
     }
 
-    let path = self.process_path(&path.into());
+    let path = self.process_path(path);
     let path = if !path.exists() {
       return Err(IoError::NotFoundError("File not found".to_string()));
     } else if !path.is_file() {
       return Err(IoError::NotAFileError);
     } else {
-      path.canonicalize().map_err(Self::map_error)?
+      path.canonicalize().map_err(IoError::map_io_error)?
     };
 
     if !path.starts_with(&self.root) {
@@ -323,22 +286,22 @@ impl FileSystemView {
 
     match tokio::fs::remove_file(path).await {
       Ok(()) => Ok(()),
-      Err(e) => Err(Self::map_error(e)),
+      Err(e) => Err(IoError::map_io_error(e)),
     }
   }
 
-  pub(crate) async fn delete_folder(&self, path: impl Into<String>) -> Result<(), IoError> {
+  async fn delete_folder(&self, path: &str) -> Result<(), IoError> {
     if !self.permissions.contains(&UserPermission::Delete) {
       return Err(IoError::PermissionError);
     }
 
-    let path = self.process_path(&path.into());
+    let path = self.process_path(path);
     let path = if !path.exists() {
       return Err(IoError::NotFoundError("Directory not found".to_string()));
     } else if !path.is_dir() {
       return Err(IoError::NotADirectoryError);
     } else {
-      path.canonicalize().map_err(Self::map_error)?
+      path.canonicalize().map_err(IoError::map_io_error)?
     };
 
     if !path.starts_with(&self.root) {
@@ -349,25 +312,22 @@ impl FileSystemView {
 
     match tokio::fs::remove_dir(path).await {
       Ok(()) => Ok(()),
-      Err(e) => Err(Self::map_error(e)),
+      Err(e) => Err(IoError::map_io_error(e)),
     }
   }
 
-  pub(crate) async fn delete_folder_recursive(
-    &self,
-    path: impl Into<String>,
-  ) -> Result<(), IoError> {
+  async fn delete_folder_recursive(&self, path: &str) -> Result<(), IoError> {
     if !self.permissions.contains(&UserPermission::Delete) {
       return Err(IoError::PermissionError);
     }
 
-    let path = self.process_path(&path.into());
+    let path = self.process_path(path);
     let path = if !path.exists() {
       return Err(IoError::NotFoundError("Directory not found".to_string()));
     } else if !path.is_dir() {
       return Err(IoError::NotADirectoryError);
     } else {
-      path.canonicalize().map_err(Self::map_error)?
+      path.canonicalize().map_err(IoError::map_io_error)?
     };
 
     if !path.starts_with(&self.root) {
@@ -378,15 +338,11 @@ impl FileSystemView {
 
     match tokio::fs::remove_dir_all(path).await {
       Ok(()) => Ok(()),
-      Err(e) => Err(Self::map_error(e)),
+      Err(e) => Err(IoError::map_io_error(e)),
     }
   }
 
-  pub(crate) async fn change_file_times(
-    &self,
-    new_time: FileTimes,
-    path: impl Into<String>,
-  ) -> Result<(), IoError> {
+  async fn change_file_times(&self, new_time: FileTimes, path: &str) -> Result<(), IoError> {
     if !self.permissions.contains(&UserPermission::Execute)
       || !self.permissions.contains(&UserPermission::Write)
     {
@@ -405,26 +361,10 @@ impl FileSystemView {
       .into_std()
       .await
       .set_times(new_time)
-      .map_err(Self::map_error)
+      .map_err(IoError::map_io_error)
   }
 
-  /// Creates a directory listing.
-  ///
-  /// This function lists all files and directories at `path` as [`EntryData`]. If the listing
-  /// succeeds, then it is returned, otherwise [`IoError`] is returned.
-  ///
-  /// # Arguments
-  ///
-  /// - `path` A type that can be converted into a [`String`], representing the path to directory
-  /// to list.
-  ///
-  /// # Returns
-  ///
-  /// A [`Result`] containing the listing as [`Vec<EntryData>`] if successful or an [`IoError`] if
-  /// an error occurs.
-  ///
-  pub(crate) fn list_dir(&self, path: impl Into<String>) -> Result<Vec<EntryData>, IoError> {
-    let path = path.into();
+  fn list_dir(&self, path: &str) -> Result<Vec<EntryData>, IoError> {
     if !self.permissions.contains(&UserPermission::List) {
       return Err(IoError::PermissionError);
     }
@@ -559,58 +499,24 @@ impl FileSystemView {
     }
   }
 
-  /// Convert the listing of objects in directory to common format.
-  ///
-  /// This function converts a raw [`ReadDir`] into a [`Vec`] of [`EntryData`] and then returns it.
-  ///
-  /// # Arguments
-  /// - `name`: A type that can be converted into a [`String`], representing the name of the
-  /// listed directory.
-  /// - `path`: A type that can be converted into a [`String`], representing the path to the
-  /// listed directory.
-  /// - `read_dir`: A [`ReadDir`] containing all the listed objects.
-  /// - `permissions`: A [`HashSet<UserPermission>`] containing the set of permissions the user has
-  /// for the objects.
-  ///
-  /// # Returns
-  ///
-  /// A [`Vec<EntryData>`] containing the converted listing.
-  ///
-  fn create_listing(
-    name: impl Into<String>,
-    path: impl AsRef<Path>,
-    read_dir: ReadDir,
-    permissions: &HashSet<UserPermission>,
-  ) -> Vec<EntryData> {
-    let mut listing = Vec::with_capacity(read_dir.size_hint().0 + 1);
-    let cdir = EntryData::create_from_metadata(path.as_ref().metadata(), name, permissions);
-    if let Ok(mut cdir) = cdir {
-      cdir.change_entry_type(EntryType::Cdir);
-      listing.push(cdir);
-    }
-
-    let mut entries: Vec<EntryData> = read_dir
-      .filter_map(|d| d.ok())
-      .filter_map(|e| {
-        let name = e.file_name().into_string().unwrap();
-
-        EntryData::create_from_metadata(e.metadata(), name, permissions).ok()
-      })
-      .collect();
-
-    listing.append(&mut entries);
-    listing
+  fn get_label(&self) -> &str {
+    &self.label
   }
 
-  fn process_path(&self, path: &str) -> PathBuf {
-    trace!("Processing path: {}", path);
-    if let Some(stripped) = path.strip_prefix(&format!("/{}/", &self.label)) {
-      self.root.join(stripped)
-    } else if let Some(stripped) = path.strip_prefix('/') {
-      self.root.join(stripped)
-    } else {
-      self.current_path.join(path)
-    }
+  fn get_display_path(&self) -> &str {
+    &self.display_path
+  }
+
+  fn get_permissions(&self) -> &HashSet<UserPermission> {
+    &self.permissions
+  }
+
+  fn get_current_path(&self) -> &Path {
+    &self.current_path
+  }
+
+  fn get_root_path(&self) -> &Path {
+    &self.root
   }
 }
 
@@ -629,6 +535,7 @@ pub(crate) mod tests {
   use crate::io::error::IoError;
   use crate::io::file_system_view::FileSystemView;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
+  use crate::io::view::View;
   use crate::utils::test_utils::*;
 
   #[test]
@@ -874,7 +781,7 @@ pub(crate) mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = view.delete_file(format!("/{label}/{file_name}")).await;
+    let result = view.delete_file(&format!("/{label}/{file_name}")).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -894,7 +801,7 @@ pub(crate) mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = view.delete_file(file_name).await;
+    let result = view.delete_file(&file_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -909,12 +816,12 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_file(dir_name).await;
+    let result = view.delete_file(&dir_name).await;
 
     let Err(IoError::NotAFileError) = result else {
       panic!("Expected NotAFile Error, got: {:?}", result);
@@ -935,7 +842,7 @@ pub(crate) mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = view.delete_file(file_name).await;
+    let result = view.delete_file(&file_name).await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission Error, got: {:?}", result);
     };
@@ -950,12 +857,12 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_folder(format!("/{dir_name}")).await;
+    let result = view.delete_folder(&format!("/{dir_name}")).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -970,12 +877,12 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_folder(dir_name).await;
+    let result = view.delete_folder(&dir_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -995,7 +902,7 @@ pub(crate) mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = view.delete_folder(file_name).await;
+    let result = view.delete_folder(&file_name).await;
     let Err(IoError::NotADirectoryError) = result else {
       panic!("Expected NotADirectory Error, got: {:?}", result);
     };
@@ -1010,12 +917,12 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_folder(dir_name).await;
+    let result = view.delete_folder(&dir_name).await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission Error, got: {:?}", result);
     };
@@ -1030,12 +937,12 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_folder_recursive(format!("/{dir_name}")).await;
+    let result = view.delete_folder_recursive(&format!("/{dir_name}")).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1052,14 +959,14 @@ pub(crate) mod tests {
     let dir_path = root.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
     std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
     assert!(dir_sub_path.exists());
-    let result = view.delete_folder_recursive(format!("/{dir_name}")).await;
+    let result = view.delete_folder_recursive(&format!("/{dir_name}")).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1075,12 +982,12 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_folder_recursive(dir_name).await;
+    let result = view.delete_folder_recursive(&dir_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1097,14 +1004,14 @@ pub(crate) mod tests {
     let dir_path = root.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
     std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
     assert!(dir_sub_path.exists());
-    let result = view.delete_folder_recursive(dir_name).await;
+    let result = view.delete_folder_recursive(&dir_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1125,7 +1032,7 @@ pub(crate) mod tests {
     let _cleanup = FileCleanup::new(&file_path);
 
     assert!(file_path.exists());
-    let result = view.delete_folder_recursive(file_name).await;
+    let result = view.delete_folder_recursive(&file_name).await;
     let Err(IoError::NotADirectoryError) = result else {
       panic!("Expected NotADirectory Error, got: {:?}", result);
     };
@@ -1142,13 +1049,13 @@ pub(crate) mod tests {
     let dir_path = root.join(&dir_name);
     let dir_sub_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_sub_path = dir_path.join(&dir_sub_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
     std::fs::create_dir(&dir_sub_path).expect("Creating test directory should succeed");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
-    let result = view.delete_folder_recursive(dir_name).await;
+    let result = view.delete_folder_recursive(&dir_name).await;
     let Err(IoError::PermissionError) = result else {
       panic!("Expected Permission Error, got: {:?}", result);
     };
@@ -1171,7 +1078,7 @@ pub(crate) mod tests {
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
     let result = view
-      .change_file_times(new_time, format!("/{label}/{file_name}"))
+      .change_file_times(new_time, &format!("/{label}/{file_name}"))
       .await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
@@ -1201,7 +1108,7 @@ pub(crate) mod tests {
     assert!(file_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
-    let result = view.change_file_times(new_time, file_name).await;
+    let result = view.change_file_times(new_time, &file_name).await;
     let Ok(()) = result else {
       panic!("Expected OK, got: {:?}", result);
     };
@@ -1223,14 +1130,14 @@ pub(crate) mod tests {
     let view = FileSystemView::new(root.clone(), label, permissions);
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = root.join(&dir_name);
-    std::fs::create_dir(&dir_path).expect("Creating test directory should succeed");
+    create_dir(&dir_path).expect("Test directory should exist");
 
     let _cleanup = DirCleanup::new(&dir_path);
 
     assert!(dir_path.exists());
     let timeval = Local::now().sub(TimeDelta::hours(4));
     let new_time = FileTimes::new().set_modified(timeval.into());
-    let result = view.change_file_times(new_time, dir_name).await;
+    let result = view.change_file_times(new_time, &dir_name).await;
     let Err(IoError::NotAFileError) = result else {
       panic!("Expected NotAFile Error, got: {:?}", result);
     };
@@ -1247,6 +1154,18 @@ pub(crate) mod tests {
     let listing = view.list_dir(".").unwrap();
 
     validate_listing("test_files", &listing, 4, permissions.len(), 3, 1);
+  }
+
+  #[test]
+  fn list_dir_no_permission_test() {
+    let permissions = HashSet::from([]);
+    let root = current_dir().unwrap();
+    let label = "test";
+    let view = FileSystemView::new(root.clone(), label, permissions.clone());
+    let listing = view.list_dir("test");
+    let Err(IoError::PermissionError) = listing else {
+      panic!("Expected Permission Error, got: {:?}", listing);
+    };
   }
 
   #[test]
@@ -1540,7 +1459,7 @@ pub(crate) mod tests {
     let dir_path = temp_dir().join(&path_root);
     let _cleanup = DirCleanup::new(&dir_path);
 
-    let result = view.create_directory(format!("/{}{}", &label, &path));
+    let result = view.create_directory(&format!("/{}{}", &label, &path));
     assert!(result.is_ok());
     assert_eq!(format!("/{}{}", &label, &path), result.unwrap());
     assert!(dir_path.exists());
