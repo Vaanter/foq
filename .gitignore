@@ -9,4 +9,5 @@ certs/*
 
 *.profraw
 foq.log
+foq-dev.log
 *.sqlite
