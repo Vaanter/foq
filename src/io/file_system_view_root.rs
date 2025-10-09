@@ -373,8 +373,8 @@ mod tests {
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::EntryData;
   use crate::io::error::IoError;
-  use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view::tests::validate_listing;
+  use crate::io::file_system_view::FileSystemView;
   use crate::io::file_system_view_root::FileSystemViewRoot;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
   use crate::io::view::View;

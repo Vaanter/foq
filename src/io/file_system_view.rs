@@ -80,7 +80,7 @@ impl FileSystemView {
   ///
   /// # Returns
   ///
-  /// An [`Result`] containing the new [`FileSystemView`] if successful, or [`Err`] if an error
+  /// A [`Result`] containing the new [`FileSystemView`] if successful, or [`Err`] if an error
   /// occurs.
   ///
   pub(crate) fn new_option(

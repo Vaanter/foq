@@ -1,7 +1,7 @@
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::str::FromStr;
-use tracing::{Level, debug, trace};
+use tracing::{Level, debug};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
@@ -60,12 +60,6 @@ fn main() {
   tokio::runtime::Builder::new_multi_thread()
     .worker_threads(threads as usize)
     .enable_all()
-    .on_task_spawn(|meta| {
-      trace!("Task {} spawned", meta.id());
-    })
-    .on_task_terminate(|task| {
-      trace!("Task {} terminated", task.id());
-    })
     .build()
     .unwrap()
     .block_on(async {
