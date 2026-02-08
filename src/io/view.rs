@@ -1,7 +1,7 @@
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::EntryData;
 use crate::io::error::IoError;
-use crate::io::open_options_flags::OpenOptionsWrapper;
+use crate::io::open_options_flags::{OpenOptionsWrapper, OpenOptionsWrapperBuilder};
 use async_trait::async_trait;
 use path_clean::PathClean;
 use std::collections::HashSet;
@@ -97,7 +97,23 @@ pub(crate) trait View {
   async fn delete_file(&self, path: &str) -> Result<(), IoError>;
   async fn delete_folder(&self, path: &str) -> Result<(), IoError>;
   async fn delete_folder_recursive(&self, path: &str) -> Result<(), IoError>;
-  async fn change_file_times(&self, new_time: FileTimes, path: &str) -> Result<(), IoError>;
+
+  async fn change_file_times(&self, new_time: FileTimes, path: &str) -> Result<(), IoError> {
+    if !self.get_permissions().contains(&UserPermission::Execute)
+      || !self.get_permissions().contains(&UserPermission::Write)
+    {
+      return Err(IoError::PermissionError);
+    }
+
+    self
+      .open_file(path, OpenOptionsWrapperBuilder::default().write(true).build().unwrap())
+      .await?
+      .into_std()
+      .await
+      .set_times(new_time)
+      .map_err(IoError::map_io_error)
+  }
+
   /// Creates a directory listing.
   ///
   /// This function lists all files and directories at `path` as [`EntryData`]. If the listing

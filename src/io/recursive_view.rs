@@ -131,10 +131,6 @@ impl View for RecursiveView {
     Err(IoError::SystemError)
   }
 
-  async fn change_file_times(&self, new_time: FileTimes, path: &str) -> Result<(), IoError> {
-    todo!()
-  }
-
   fn list_dir(&self, _path: &str) -> Result<Vec<EntryData>, IoError> {
     if !self.permissions.contains(&UserPermission::List) {
       return Err(IoError::PermissionError);

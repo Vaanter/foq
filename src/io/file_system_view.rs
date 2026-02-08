@@ -338,22 +338,6 @@ impl View for FileSystemView {
     }
   }
 
-  async fn change_file_times(&self, new_time: FileTimes, path: &str) -> Result<(), IoError> {
-    if !self.permissions.contains(&UserPermission::Execute)
-      || !self.permissions.contains(&UserPermission::Write)
-    {
-      return Err(IoError::PermissionError);
-    }
-
-    self
-      .open_file(path, OpenOptionsWrapperBuilder::default().write(true).build().unwrap())
-      .await?
-      .into_std()
-      .await
-      .set_times(new_time)
-      .map_err(IoError::map_io_error)
-  }
-
   fn list_dir(&self, path: &str) -> Result<Vec<EntryData>, IoError> {
     if !self.permissions.contains(&UserPermission::List) {
       return Err(IoError::PermissionError);
