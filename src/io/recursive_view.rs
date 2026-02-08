@@ -116,7 +116,7 @@ impl View for RecursiveView {
   }
 
   async fn delete_file(&self, path: &str) -> Result<(), IoError> {
-    todo!()
+    Err(IoError::SystemError)
   }
 
   async fn delete_folder(&self, path: &str) -> Result<(), IoError> {
