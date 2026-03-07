@@ -1,5 +1,6 @@
 //! Authenticates a user using the supplied [`DataSource`]s.
 
+use tracing::info;
 use crate::auth::data_source::DataSource;
 use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
@@ -32,8 +33,11 @@ impl AuthProvider {
   ///
   pub(crate) async fn authenticate(&self, login_form: LoginForm) -> Option<UserData> {
     for data_source in self.data_sources.iter() {
-      if let Ok(ud) = data_source.authenticate(&login_form).await {
-        return Some(ud);
+      match data_source.authenticate(&login_form).await {
+        Ok(ud) => return Some(ud),
+        Err(e) => {
+          info!("Failed to authenticate user: {}", e);
+        }
       }
     }
     None
