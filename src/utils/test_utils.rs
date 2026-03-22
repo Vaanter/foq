@@ -495,6 +495,40 @@ pub async fn setup_tracing() {
   let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
+pub(crate) mod macros {
+  /// Logs information during tests.
+  ///
+  /// This macro checks if a `tracing` dispatcher has been set.
+  /// If it has, it logs the message using `tracing::info!`.
+  /// Otherwise, it falls back to printing the message to standard output using `println!`.
+  #[macro_export]
+  macro_rules! tracing_print {
+    ($($arg:tt)*) => {
+        if tracing::dispatcher::has_been_set() {
+            tracing::info!($($arg)*);
+        } else {
+            println!($($arg)*);
+        }
+    };
+  }
+
+  /// Logs an error during tests.
+  ///
+  /// This macro checks if a `tracing` dispatcher has been set.
+  /// If it has, it logs the error using `tracing::error!`.
+  /// Otherwise, it falls back to printing the error to standard error using `eprintln!`.
+  #[macro_export]
+  macro_rules! tracing_error {
+    ($($arg:tt)*) => {
+        if tracing::dispatcher::has_been_set() {
+            tracing::error!($($arg)*);
+        } else {
+            eprintln!($($arg)*);
+        }
+    };
+  }
+}
+
 pub(crate) fn touch(path: &Path) -> io::Result<()> {
   OpenOptionsStd::new()
     .create(true)
