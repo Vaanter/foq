@@ -476,12 +476,14 @@ pub(crate) fn setup_quinn_client(tls_config: ClientConfig) -> Endpoint {
 }
 
 static TRACING_SETUP: AtomicBool = AtomicBool::new(false);
+static PERMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
-pub(crate) fn setup_tracing() {
-  if TRACING_SETUP.load(Ordering::SeqCst) {
+pub async fn setup_tracing() {
+  let _permit = PERMIT.acquire().await.unwrap();
+  let Ok(false) = TRACING_SETUP.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+  else {
     return;
-  }
-  TRACING_SETUP.swap(true, Ordering::SeqCst);
+  };
   let subscriber = tracing_subscriber::fmt()
     .with_env_filter(format!("foq={}", Level::TRACE))
     // .with_max_level(Level::INFO)
