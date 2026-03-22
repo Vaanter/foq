@@ -5,7 +5,7 @@
 use async_trait::async_trait;
 use path_clean::PathClean;
 use std::collections::HashSet;
-use std::fs::{FileTimes, ReadDir, create_dir_all};
+use std::fs::{ReadDir, create_dir_all};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use tracing::debug;
@@ -14,7 +14,6 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
-use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
 use crate::io::view::View;
 
 /// For documentation about file system view, see [`module`] documentation.

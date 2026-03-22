@@ -3,18 +3,18 @@
 //!
 //! [`File system view`]: crate::io::file_system_view
 
-use std::collections::HashMap;
-use std::fs::FileTimes;
-use std::time::SystemTime;
-use tokio::fs::File;
-use tracing::debug;
-
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
 use crate::io::open_options_flags::OpenOptionsWrapper;
 use crate::io::view::View;
 use crate::io::view_dispatch::ViewDispatch;
+use std::collections::HashMap;
+use std::fs::FileTimes;
+use std::time::SystemTime;
+use tokio::fs::File;
+use tracing::debug;
+use tracing_attributes::instrument;
 
 /// Contains the users file system views.
 #[derive(Debug, Default, PartialEq)]
@@ -119,7 +119,7 @@ impl FileSystemViewRoot {
   }
 
   /// Returns the path to current working directory.
-  #[tracing::instrument(skip(self))]
+  #[instrument(skip(self))]
   pub(crate) fn get_current_working_directory(&self) -> String {
     debug!("Getting current working directory path");
     if self.current_view.is_none() || self.file_system_views.is_none() {
@@ -152,7 +152,7 @@ impl FileSystemViewRoot {
   /// A [`Result`] containing the listing as [`Vec<EntryData>`] if successful or an [`IoError`] if
   /// an error occurs.
   ///
-  #[tracing::instrument(skip(self, path))]
+  #[instrument(skip(self, path))]
   pub(crate) fn list_dir(&self, path: &str) -> Result<Vec<EntryData>, IoError> {
     if self.file_system_views.is_none() {
       // not logged in
@@ -215,7 +215,7 @@ impl FileSystemViewRoot {
   /// Opens a file with the specified path and options.
   ///
   /// See: [`FileSystemView::open_file`].
-  #[tracing::instrument(skip(self, path, options))]
+  #[instrument(skip(self, path, options))]
   pub(crate) async fn open_file(
     &self,
     path: &str,
@@ -234,7 +234,7 @@ impl FileSystemViewRoot {
     }
   }
 
-  #[tracing::instrument(skip(self, path))]
+  #[instrument(skip(self, path))]
   pub(crate) async fn delete_file(&self, path: &str) -> Result<(), IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
@@ -253,7 +253,7 @@ impl FileSystemViewRoot {
     }
   }
 
-  #[tracing::instrument(skip(self, path))]
+  #[instrument(skip(self, path))]
   pub(crate) async fn delete_folder(&self, path: &str) -> Result<(), IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
@@ -272,7 +272,7 @@ impl FileSystemViewRoot {
     }
   }
 
-  #[tracing::instrument(skip(self, path))]
+  #[instrument(skip(self, path))]
   pub(crate) async fn delete_folder_recursive(&self, path: &str) -> Result<(), IoError> {
     if self.file_system_views.is_none() {
       return Err(IoError::UserError);
@@ -373,8 +373,8 @@ mod tests {
   use crate::auth::user_permission::UserPermission;
   use crate::io::entry_data::EntryData;
   use crate::io::error::IoError;
-  use crate::io::file_system_view::tests::validate_listing;
   use crate::io::file_system_view::FileSystemView;
+  use crate::io::file_system_view::tests::validate_listing;
   use crate::io::file_system_view_root::FileSystemViewRoot;
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
   use crate::io::view::View;
@@ -393,8 +393,8 @@ mod tests {
     };
   }
 
-  #[cfg(windows)]
   #[tokio::test]
+  #[cfg(windows)]
   async fn open_file_windows_like_path_test() {
     let permissions = HashSet::from([UserPermission::Read]);
 

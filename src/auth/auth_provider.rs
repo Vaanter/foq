@@ -1,9 +1,9 @@
 //! Authenticates a user using the supplied [`DataSource`]s.
 
-use tracing::info;
 use crate::auth::data_source::DataSource;
 use crate::auth::login_form::LoginForm;
 use crate::auth::user_data::UserData;
+use tracing::info;
 
 #[derive(Clone, Default)]
 pub(crate) struct AuthProvider {

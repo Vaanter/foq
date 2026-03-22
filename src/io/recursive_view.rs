@@ -4,7 +4,6 @@ use crate::io::error::IoError;
 use crate::io::view::View;
 use async_trait::async_trait;
 use std::collections::HashSet;
-use std::fs::FileTimes;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -115,7 +114,7 @@ impl View for RecursiveView {
     Err(IoError::InvalidPathError("Directory can't be created here".to_string()))
   }
 
-  async fn delete_file(&self, path: &str) -> Result<(), IoError> {
+  async fn delete_file(&self, _path: &str) -> Result<(), IoError> {
     Err(IoError::SystemError)
   }
 
