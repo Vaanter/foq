@@ -95,6 +95,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
+  use crate::tracing_print;
   use crate::utils::test_utils::{
     CommandProcessorSettingsBuilder, TestReplySender, open_tcp_data_channel,
     receive_and_verify_reply, setup_test_command_processor_custom,
@@ -136,7 +137,7 @@ mod tests {
         let file_count =
           settings.view_root.read_dir().expect("Failed to read current path!").count() + 1; // Add 1 to account for current path (.)
 
-        println!("Message:\n{}", msg);
+        tracing_print!("Message:\n{}", msg);
         assert_eq!(file_count, msg.lines().count());
       }
       Ok(Err(e)) => {

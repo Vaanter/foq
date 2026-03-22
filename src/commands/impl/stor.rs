@@ -128,6 +128,7 @@ mod tests {
   use crate::session::protection_mode::ProtMode;
   use crate::session::session_properties::SessionProperties;
   use crate::utils::test_utils::*;
+  use crate::{tracing_error, tracing_print};
 
   const TIMEOUT_SECS: u64 = 600;
 
@@ -135,7 +136,7 @@ mod tests {
     assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
-    println!("Remote file: {:?}", &remote_file_path);
+    tracing_print!("Remote file: {:?}", &remote_file_path);
 
     let _cleanup = FileCleanup::new(&remote_file_path);
 
@@ -158,7 +159,7 @@ mod tests {
     let transfer = transfer(local_file, remote_file, command, command_processor, &mut client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
-      Ok(()) => println!("Transfer complete!"),
+      Ok(()) => tracing_print!("Transfer complete!"),
       Err(_) => panic!("Transfer timed out!"),
     }
   }
@@ -167,7 +168,7 @@ mod tests {
     assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
-    println!("Remote file: {:?}", &remote_file_path);
+    tracing_print!("Remote file: {:?}", &remote_file_path);
 
     let _cleanup = FileCleanup::new(&remote_file_path);
 
@@ -209,7 +210,7 @@ mod tests {
     let transfer = transfer(local_file, remote_file, command, command_processor, client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
-      Ok(()) => println!("Transfer complete!"),
+      Ok(()) => tracing_print!("Transfer complete!"),
       Err(_) => panic!("Transfer timed out!"),
     }
   }
@@ -218,7 +219,7 @@ mod tests {
     assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
-    println!("Remote file: {:?}", &remote_file_path);
+    tracing_print!("Remote file: {:?}", &remote_file_path);
 
     let _cleanup = FileCleanup::new(&remote_file_path);
 
@@ -256,14 +257,14 @@ mod tests {
     };
 
     transfer(local_file, remote_file, command, command_processor, client_dc_send).await;
-    //println!("stats: {:#?}", connection);
+    //tracing_print!("stats: {:#?}", connection);
   }
 
   async fn common_quinn_quinn(local_file: &Path, remote_file: &str) {
     assert!(local_file.exists(), "Test file does not exist! Cannot proceed!");
 
     let remote_file_path = temp_dir().join(remote_file);
-    println!("Remote file: {:?}", &remote_file_path);
+    tracing_print!("Remote file: {:?}", &remote_file_path);
 
     let _cleanup = FileCleanup::new(&remote_file_path);
 
@@ -334,7 +335,7 @@ mod tests {
     let transfer = transfer_to(local_file, &mut client_dc, &mut sender_file_hasher);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
-      Ok(n) => println!("Transfer complete, sent: {} bytes!", n),
+      Ok(n) => tracing_print!("Transfer complete, sent: {} bytes!", n),
       Err(_) => panic!("Transfer timed out!"),
     }
 
@@ -371,7 +372,7 @@ mod tests {
         panic!("File transfer failed! {e}");
       };
       if let Err(e) = client_dc.flush().await {
-        eprintln!("Failed to flush data, {e}");
+        tracing_error!("Failed to flush data, {e}");
       };
       sends += sent_bytes;
 
@@ -381,7 +382,7 @@ mod tests {
     }
 
     if let Err(e) = client_dc.shutdown().await {
-      eprintln!("Failed to shutdown client data channels, {e}");
+      tracing_error!("Failed to shutdown client data channels, {e}");
     }
     sends
   }
@@ -414,7 +415,7 @@ mod tests {
       receiver_file_hasher.finalize(),
       "File hashes do not match!"
     );
-    println!("File hashes match!");
+    tracing_print!("File hashes match!");
   }
 
   #[tokio::test]

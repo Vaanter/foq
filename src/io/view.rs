@@ -78,6 +78,7 @@ pub(crate) trait View {
     }
 
     let path = self.process_path(path).clean();
+    trace!("Found path: {:?}", path);
 
     if !path.starts_with(self.get_root_path()) {
       return Err(IoError::InvalidPathError(String::from("Invalid path!")));
@@ -143,7 +144,7 @@ pub(crate) trait View {
   /// Relative path just joins with current_path.
   #[inline(always)]
   fn process_path(&self, path: &str) -> PathBuf {
-    trace!("Processing path: {}", path);
+    trace!("Processing path: {}, current: {:?}", path, self.get_current_path());
     if let Some(stripped) = path.strip_prefix(&format!("/{}/", self.get_label())) {
       self.get_root_path().join(stripped)
     } else if let Some(stripped) = path.strip_prefix('/') {

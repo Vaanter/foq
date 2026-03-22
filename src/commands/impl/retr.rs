@@ -129,6 +129,7 @@ mod tests {
   use crate::listeners::quinn_listener::QuinnListener;
   use crate::session::command_processor::CommandProcessor;
   use crate::session::protection_mode::ProtMode;
+  use crate::tracing_print;
   use crate::utils::test_utils::*;
 
   async fn common_tcp(root: PathBuf, argument: &str) {
@@ -270,7 +271,7 @@ mod tests {
 
     transfer(file_path, command, command_processor, cliend_dc_recv).await;
     server_connection.lock().await.close(0u32.into());
-    //println!("stats: {:#?}", connection);
+    //tracing_print!("stats: {:#?}", connection);
   }
 
   async fn transfer<T: AsyncRead + Unpin>(
@@ -279,7 +280,7 @@ mod tests {
     command_processor: CommandProcessor,
     mut client_dc: T,
   ) {
-    println!("Running transfer.");
+    tracing_print!("Running transfer.");
     const TIMEOUT_SECS: u64 = 600;
 
     let (tx, mut rx) = channel(1024);
@@ -299,7 +300,7 @@ mod tests {
     let transfer = verify_transfer(file_path, &mut client_dc);
 
     match timeout(Duration::from_secs(TIMEOUT_SECS), transfer).await {
-      Ok(()) => println!("Transfer complete!"),
+      Ok(()) => tracing_print!("Transfer complete!"),
       Err(_) => panic!("Transfer timed out!"),
     }
 
@@ -341,7 +342,7 @@ mod tests {
       sent_file_hasher.finalize(),
       "File hashes do not match!"
     );
-    println!("File hashes match! Hash: {}", sent_file_hasher.finalize());
+    tracing_print!("File hashes match! Hash: {}", sent_file_hasher.finalize());
   }
 
   #[tokio::test]

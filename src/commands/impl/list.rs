@@ -112,6 +112,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
+  use crate::tracing_print;
   use crate::utils::test_utils::*;
 
   async fn listing_common(command: Command, settings: &CommandProcessorSettings) {
@@ -139,7 +140,7 @@ mod tests {
         let file_count =
           settings.view_root.read_dir().expect("Failed to read current path!").count();
 
-        println!("Message:\n{}", msg);
+        tracing_print!("Message:\n{}", msg);
 
         let re = Regex::new(r"^[dl-](?:[r-][w-][x-]){3} 1 user group  {0,12}\d{1,20} [A-Za-z]{3} [0-3][0-9] (?:(?:[01][0-9]|2[0-4]):[0-5][0-9]|[12][0-9]{3}) .*$").unwrap();
 

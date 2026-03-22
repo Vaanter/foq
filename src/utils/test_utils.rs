@@ -55,6 +55,7 @@ use crate::listeners::quinn_listener::QuinnListener;
 use crate::session::command_processor::CommandProcessor;
 use crate::session::protection_mode::ProtMode;
 use crate::session::session_properties::SessionProperties;
+use crate::{tracing_error, tracing_print};
 
 pub(crate) struct TestReplySender {
   tx: Sender<Reply>,
@@ -69,7 +70,7 @@ impl TestReplySender {
 #[async_trait]
 impl ReplySend for TestReplySender {
   async fn send_control_message(&self, reply: Reply) {
-    println!("[TestReplySender] Received reply: {}", reply.to_string().trim_end());
+    tracing_print!("[TestReplySender] Received reply: {}", reply.to_string().trim_end());
     self.tx.send(reply).await.unwrap();
   }
 
@@ -97,7 +98,7 @@ impl TestDataSource {
 #[async_trait]
 impl DataSource for TestDataSource {
   async fn authenticate(&self, login_form: &LoginForm) -> Result<UserData, AuthError> {
-    eprintln!("[TestDataSource] Login attempt with: {:?}", login_form);
+    tracing_print!("[TestDataSource] Login attempt with: {:?}", login_form);
     let user = self
       .user_data
       .iter()
@@ -124,9 +125,9 @@ impl<'a> DirCleanup<'a> {
 
 impl Drop for DirCleanup<'_> {
   fn drop(&mut self) {
-    println!("Cleaning up directory '{:?}'", self.directory_path);
+    tracing_print!("Cleaning up directory '{:?}'", self.directory_path);
     if let Err(remove_result) = remove_dir_all(self.directory_path) {
-      eprintln!("Failed to remove directory: {}", remove_result);
+      tracing_error!("Failed to remove directory: {}", remove_result);
     }
   }
 }
@@ -142,9 +143,9 @@ impl<'a> FileCleanup<'a> {
 
 impl Drop for FileCleanup<'_> {
   fn drop(&mut self) {
-    println!("Cleaning up file '{:?}'", self.0);
+    tracing_print!("Cleaning up file '{:?}'", self.0);
     if let Err(e) = remove_file(self.0) {
-      eprintln!("Failed to remove: {:?}, {}", self.0, e);
+      tracing_error!("Failed to remove: {:?}, {}", self.0, e);
     };
   }
 }
@@ -183,7 +184,7 @@ pub(crate) async fn receive_and_verify_reply_from_buf<T: AsyncRead + Unpin>(
   let mut buffer = String::new();
   match timeout(Duration::from_secs(time), client_reader.read_line(&mut buffer)).await {
     Ok(Ok(len)) => {
-      println!("Received reply from server!: {}. Length: {}", buffer.trim(), len);
+      tracing_print!("Received reply from server: {}. Length: {}", buffer.trim(), len);
       assert!(buffer.trim().starts_with(&(expected as u32).to_string()));
       assert!(buffer.trim().contains(substring.unwrap_or("")));
     }
@@ -264,14 +265,14 @@ pub(crate) async fn open_tcp_data_channel(command_processor: &mut CommandProcess
     Err(_) => panic!("Failed to open passive data listener!"),
   };
 
-  println!("Connecting to passive listener");
+  tracing_print!("Connecting to passive listener");
   let client_dc = match TcpStream::connect(addr).await {
     Ok(c) => c,
     Err(e) => {
       panic!("Client passive connection failed: {}", e);
     }
   };
-  println!("Client passive connection successful!");
+  tracing_print!("Client passive connection successful!");
 
   client_dc
 }
@@ -284,7 +285,7 @@ pub(crate) async fn open_tls_data_channel(
     Err(_) => panic!("Failed to open passive data listener!"),
   };
 
-  println!("Connecting to passive listener");
+  tracing_print!("Connecting to passive listener");
   let client_dc = match TcpStream::connect(addr).await {
     Ok(c) => {
       let connector = TlsConnector::from(Arc::new(create_tls_client_config("ftp")));
@@ -297,7 +298,7 @@ pub(crate) async fn open_tls_data_channel(
       panic!("Client passive connection failed: {}", e);
     }
   };
-  println!("Client passive connection successful!");
+  tracing_print!("Client passive connection successful!");
 
   client_dc
 }
@@ -390,7 +391,7 @@ pub(crate) fn create_tls_client_config(alpn: &str) -> ClientConfig {
 }
 
 pub(crate) async fn generate_test_file(amount: usize, output_file: &Path) {
-  println!("Generating test file, size: {}B, path: {:?}", amount, output_file.as_os_str());
+  tracing_print!("Generating test file, size: {}B, path: {:?}", amount, output_file.as_os_str());
   const MAX_CHUNK_SIZE: usize = 32864;
   let file = OpenOptions::new()
     .create(true)
@@ -420,7 +421,7 @@ pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(
   data_channel_wrapper: T,
   root: PathBuf,
 ) -> CommandProcessor {
-  println!("Running setup.");
+  tracing_print!("Running setup.");
 
   let label = "test_files".to_string();
 
@@ -435,7 +436,7 @@ pub(crate) fn setup_transfer_command_processor<T: DataChannelWrapper + 'static>(
 
   let mut command_processor = setup_test_command_processor_custom(&settings);
   command_processor.data_wrapper = Arc::new(data_channel_wrapper);
-  println!("Setup completed.");
+  tracing_print!("Setup completed.");
   command_processor
 }
 
@@ -492,7 +493,7 @@ pub async fn setup_tracing() {
     .with_thread_ids(true)
     .with_target(false)
     .finish();
-  let _ = tracing::subscriber::set_global_default(subscriber);
+  tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
 pub(crate) mod macros {
@@ -535,10 +536,10 @@ pub(crate) fn touch(path: &Path) -> io::Result<()> {
     .truncate(true)
     .write(true)
     .open(path)
-    .map(|_| println!("Touching: {:?}", path.canonicalize().unwrap()))
+    .map(|_| tracing_print!("Touching: {:?}", path.canonicalize().unwrap()))
 }
 
 pub(crate) fn create_dir(path: &Path) -> io::Result<()> {
-  println!("Creating directory: {:?}", path);
+  tracing_print!("Creating directory: {:?}", path);
   std::fs::create_dir_all(path)
 }

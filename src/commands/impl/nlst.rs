@@ -99,6 +99,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
+  use crate::tracing_print;
   use crate::utils::test_utils::{
     CommandProcessorSettingsBuilder, TestReplySender, open_tcp_data_channel,
     receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
@@ -130,7 +131,7 @@ mod tests {
 
         let file_count = 1;
 
-        println!("Data:\n{}", msg);
+        tracing_print!("Data:\n{}", msg);
         assert_eq!(file_count, msg.lines().count());
       }
       Ok(Err(e)) => {

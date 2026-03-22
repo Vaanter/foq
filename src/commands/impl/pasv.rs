@@ -65,6 +65,7 @@ mod tests {
   use crate::commands::r#impl::pasv::create_pasv_response;
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
+  use crate::tracing_print;
   use crate::utils::test_utils::{
     CommandProcessorSettingsBuilder, TestReplySender, setup_test_command_processor_custom,
   };
@@ -119,11 +120,11 @@ mod tests {
 
     let addr = parse_socketaddr(reply);
 
-    println!("Connecting to passive listener");
+    tracing_print!("Connecting to passive listener");
     if let Err(e) = TcpStream::connect(addr).await {
       panic!("Client passive connection failed: {}", e);
     };
-    println!("Client passive connection successful!");
+    tracing_print!("Client passive connection successful!");
   }
 
   fn parse_socketaddr(reply: Reply) -> SocketAddr {

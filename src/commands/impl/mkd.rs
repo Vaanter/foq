@@ -47,6 +47,7 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
+  use crate::tracing_print;
   use crate::utils::test_utils::{
     CommandProcessorSettingsBuilder, DirCleanup, TestReplySender, receive_and_verify_reply,
     setup_test_command_processor_custom,
@@ -81,7 +82,7 @@ mod tests {
   #[tokio::test]
   async fn mkd_successful_test() {
     let new_dir_name = Uuid::new_v4().as_hyphenated().to_string();
-    println!("Dir name: {}", new_dir_name);
+    tracing_print!("Dir name: {}", new_dir_name);
 
     let label = "test".to_string();
     let virtual_path = format!("/{}/{}", label, new_dir_name);

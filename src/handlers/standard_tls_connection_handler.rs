@@ -180,7 +180,8 @@ mod tests {
   use crate::handlers::connection_handler::ConnectionHandler;
   use crate::handlers::standard_tls_connection_handler::StandardTlsConnectionHandler;
   use crate::listeners::standard_listener::StandardListener;
-  use crate::utils::test_utils::{LOCALHOST, create_test_client_config, create_test_server_config};
+  use crate::tracing_print;
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn server_hello_test() {
@@ -212,7 +213,7 @@ mod tests {
     let mut buffer = String::new();
     match timeout(Duration::from_secs(3), client_reader.read_line(&mut buffer)).await {
       Ok(Ok(len)) => {
-        println!("Received reply from server!: {}. Length: {}.", buffer.trim(), len);
+        tracing_print!("Received reply from server!: {}. Length: {}.", buffer.trim(), len);
         assert!(buffer.trim().starts_with(&(ReplyCode::ServiceReady as u32).to_string()));
         assert!(buffer.trim().contains("Hello"));
         buffer.clear();
