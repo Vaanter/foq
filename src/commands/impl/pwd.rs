@@ -48,13 +48,11 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn with_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pwd, "/test_files");
 
     let label = "test_files".to_string();
@@ -82,6 +80,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pwd, "");
 
     let settings =
@@ -102,6 +101,7 @@ mod tests {
 
   #[tokio::test]
   async fn format_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pwd, "");
 
     let label = "test_files".to_string();

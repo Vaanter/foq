@@ -87,12 +87,11 @@ mod tests {
   use crate::global_context::AUTH_PROVIDER;
   use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{
-    LOCALHOST, TestReplySender, create_test_auth_provider, receive_and_verify_reply,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn login_successful_test() {
+    setup_tracing();
     let mut session_properties = SessionProperties::new();
     let _ = session_properties.login_form.username.insert("test".to_string());
 
@@ -119,6 +118,7 @@ mod tests {
 
   #[tokio::test]
   async fn incorrect_password_test() {
+    setup_tracing();
     let mut session_properties = SessionProperties::new();
     let _ = session_properties.login_form.username.insert("test".to_string());
 
@@ -145,6 +145,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_username_test() {
+    setup_tracing();
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let command_processor = CommandProcessor::new(session_properties, wrapper);
@@ -168,6 +169,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_password_test() {
+    setup_tracing();
     let mut session_properties = SessionProperties::new();
     let _ = session_properties.login_form.username.insert("test".to_string());
 
@@ -193,8 +195,8 @@ mod tests {
   }
 
   #[tokio::test]
-  #[ignore] // Requires other tests that initialize DB to not run
   async fn database_not_setup_test() {
+    setup_tracing();
     let mut session_properties = SessionProperties::new();
     let _ = session_properties.login_form.username.insert("test".to_string());
 

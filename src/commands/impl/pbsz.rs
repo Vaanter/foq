@@ -50,10 +50,7 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
   use std::sync::Arc;
   use std::time::Duration;
   use tokio::sync::mpsc;
@@ -61,6 +58,7 @@ mod tests {
 
   #[tokio::test]
   async fn zero_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pbsz, "0");
 
     let settings =
@@ -84,6 +82,7 @@ mod tests {
 
   #[tokio::test]
   async fn non_zero_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pbsz, "10");
 
     let settings =
@@ -107,6 +106,7 @@ mod tests {
 
   #[tokio::test]
   async fn non_integer_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pbsz, "value");
 
     let settings =
@@ -130,6 +130,7 @@ mod tests {
 
   #[tokio::test]
   async fn empty_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Pbsz, "");
 
     let settings =

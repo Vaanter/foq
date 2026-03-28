@@ -162,6 +162,7 @@ mod tests {
 
   #[tokio::test]
   async fn simple_listing_tcp() {
+    setup_tracing();
     let command = Command::new(Commands::List, String::new());
 
     let label = "test_files".to_string();
@@ -179,6 +180,7 @@ mod tests {
 
   #[tokio::test]
   async fn listing_with_argument_tcp() {
+    setup_tracing();
     let command = Command::new(Commands::List, "-a".to_string());
 
     let label = "test_files".to_string();
@@ -196,6 +198,7 @@ mod tests {
 
   #[tokio::test]
   async fn listing_with_path_parameter_tcp() {
+    setup_tracing();
     let command = Command::new(Commands::List, ".".to_string());
 
     let label = "test_files".to_string();
@@ -213,6 +216,7 @@ mod tests {
 
   #[tokio::test]
   async fn listing_with_argument_with_path_parameter_tcp() {
+    setup_tracing();
     let command = Command::new(Commands::List, "-l .".to_string());
 
     let label = "test_files".to_string();
@@ -230,6 +234,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::List, String::new());
 
     let settings =
@@ -249,6 +254,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_directory_test() {
+    setup_tracing();
     let command = Command::new(Commands::List, String::from("1MiB.txt"));
 
     let label = "test_files".to_string();
@@ -277,6 +283,7 @@ mod tests {
 
   #[tokio::test]
   async fn nonexistent_test() {
+    setup_tracing();
     let command = Command::new(Commands::List, String::from("NONEXISTENT"));
 
     let label = "test_files".to_string();
@@ -305,6 +312,7 @@ mod tests {
 
   #[tokio::test]
   async fn insufficient_permissions_test() {
+    setup_tracing();
     let command = Command::new(Commands::List, String::new());
 
     let label = "test_files".to_string();
@@ -343,6 +351,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_tcp() {
+    setup_tracing();
     let command = Command::new(Commands::List, String::new());
 
     let label = "test_files".to_string();

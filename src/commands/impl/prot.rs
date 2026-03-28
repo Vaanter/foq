@@ -49,10 +49,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::session::protection_mode::ProtMode;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
   use std::sync::Arc;
   use std::time::Duration;
   use tokio::sync::mpsc::channel;
@@ -60,6 +57,7 @@ mod tests {
 
   #[tokio::test]
   async fn empty_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Prot, "");
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -84,6 +82,7 @@ mod tests {
 
   #[tokio::test]
   async fn set_private_test() {
+    setup_tracing();
     let command = Command::new(Commands::Prot, "P");
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -108,6 +107,7 @@ mod tests {
 
   #[tokio::test]
   async fn set_clear_from_private_test() {
+    setup_tracing();
     let command = Command::new(Commands::Prot, "C");
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -133,6 +133,7 @@ mod tests {
 
   #[tokio::test]
   async fn set_safe_test() {
+    setup_tracing();
     let command = Command::new(Commands::Prot, "S");
 
     let settings = CommandProcessorSettingsBuilder::default()

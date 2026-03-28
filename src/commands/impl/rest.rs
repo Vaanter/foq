@@ -67,12 +67,11 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    TestReplySender, receive_and_verify_reply, setup_test_command_processor,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn set_test() {
+    setup_tracing();
     let (_, command_processor) = setup_test_command_processor();
     let command_processor = Arc::new(command_processor);
 
@@ -102,6 +101,7 @@ mod tests {
 
   #[tokio::test]
   async fn set_not_logged_in_test() {
+    setup_tracing();
     let (_, command_processor) = setup_test_command_processor();
     let command_processor = Arc::new(command_processor);
 
@@ -124,6 +124,7 @@ mod tests {
 
   #[tokio::test]
   async fn set_no_argument_test() {
+    setup_tracing();
     let (_, command_processor) = setup_test_command_processor();
     let command_processor = Arc::new(command_processor);
 
@@ -144,6 +145,7 @@ mod tests {
 
   #[tokio::test]
   async fn set_not_a_number_test() {
+    setup_tracing();
     let (_, command_processor) = setup_test_command_processor();
     let command_processor = Arc::new(command_processor);
 

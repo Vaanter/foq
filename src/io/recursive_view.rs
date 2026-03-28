@@ -197,12 +197,13 @@ impl View for RecursiveView {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::utils::test_utils::{DirCleanup, create_dir, touch};
+  use crate::utils::test_utils::*;
   use std::env::{current_dir, temp_dir};
   use uuid::Uuid;
 
   #[test]
   fn list_dir_sanity_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::List]);
     let root = current_dir().unwrap().join("test_files");
     let label = "test";
@@ -213,6 +214,7 @@ mod tests {
 
   #[test]
   fn list_dir_no_permission_test() {
+    setup_tracing();
     let permissions = HashSet::from([]);
     let root = current_dir().unwrap().join("test_files");
     let label = "test";
@@ -225,6 +227,7 @@ mod tests {
 
   #[test]
   fn list_dir_cache_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::List]);
     let root = current_dir().unwrap().join("test_files");
     let label = "test";
@@ -237,6 +240,7 @@ mod tests {
 
   #[test]
   fn map_entries_to_entry_data_same_components_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::List]);
     let root = temp_dir();
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();

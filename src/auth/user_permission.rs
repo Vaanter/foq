@@ -54,14 +54,17 @@ mod test {
   use strum::{EnumMessage, IntoEnumIterator};
 
   use crate::auth::user_permission::UserPermission;
+  use crate::utils::test_utils::*;
 
   #[test]
   fn ensure_all_permissions_have_serialisation_test() {
+    setup_tracing();
     UserPermission::iter().for_each(|p| assert!(!p.get_serializations().is_empty()));
   }
 
   #[test]
   fn pvals_test() {
+    setup_tracing();
     let perm = UserPermission::Read;
     assert_eq!("r", perm.get_serializations()[0]);
 

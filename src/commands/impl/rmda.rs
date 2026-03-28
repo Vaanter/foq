@@ -51,6 +51,7 @@ mod tests {
 
   #[tokio::test]
   async fn rmda_absolute_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
@@ -83,6 +84,7 @@ mod tests {
 
   #[tokio::test]
   async fn rmda_relative_with_label_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
@@ -115,6 +117,7 @@ mod tests {
 
   #[tokio::test]
   async fn rmda_relative_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
@@ -148,6 +151,7 @@ mod tests {
 
   #[tokio::test]
   async fn rmda_not_logged_in_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let dir_name = Uuid::new_v4().as_hyphenated().to_string();
@@ -179,6 +183,7 @@ mod tests {
 
   #[tokio::test]
   async fn rmda_file_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());

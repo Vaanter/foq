@@ -347,18 +347,21 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/2KiB.txt";
     common_tcp(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/1MiB.txt";
     common_tcp(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_tcp(current_dir().unwrap(), FILE_NAME).await;
   }
@@ -366,6 +369,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -376,6 +380,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -385,18 +390,21 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_quic_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/2KiB.txt";
     common_quic(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_quic_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/1MiB.txt";
     common_quic(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_quic_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_quic(current_dir().unwrap(), FILE_NAME).await;
   }
@@ -404,6 +412,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -414,6 +423,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -424,6 +434,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -433,18 +444,21 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_quic_quinn_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/2KiB.txt";
     common_quic_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_quic_quinn_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/1MiB.txt";
     common_quic_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_quic_quinn_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_quic_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
@@ -452,6 +466,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quic_quinn_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -462,6 +477,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_quinn_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -472,6 +488,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_quinn_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -481,18 +498,21 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_quinn_quinn_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/2KiB.txt";
     common_quinn_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn one_mib_quinn_quinn_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/1MiB.txt";
     common_quinn_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
 
   #[tokio::test]
   async fn ten_paragraphs_quinn_quinn_test() {
+    setup_tracing();
     const FILE_NAME: &str = "test_files/lorem_10_paragraphs.txt";
     common_quinn_quinn(current_dir().unwrap(), FILE_NAME).await;
   }
@@ -500,6 +520,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn hundred_mib_quinn_quinn_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -510,6 +531,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_quinn_quinn_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -520,6 +542,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_quinn_quinn_test() {
+    setup_tracing();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
     let file_path = temp_dir().join(&file_name);
     let _cleanup = FileCleanup::new(&file_path);
@@ -529,6 +552,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::Retr, "NONEXISTENT");
 
     let label = "test_files".to_string();
@@ -553,6 +577,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
+    setup_tracing();
     let (settings, command_processor) = setup_test_command_processor();
 
     let command =
@@ -571,6 +596,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_file_specified_test() {
+    setup_tracing();
     let (_, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
@@ -589,6 +615,7 @@ mod tests {
 
   #[tokio::test]
   async fn invalid_file_test() {
+    setup_tracing();
     let (settings, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;
@@ -608,6 +635,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_read_permission_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -637,6 +665,7 @@ mod tests {
 
   #[tokio::test]
   async fn folder_specified_test() {
+    setup_tracing();
     let (settings, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;

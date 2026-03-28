@@ -26,10 +26,11 @@ mod tests {
   use crate::data_channels::standard_data_channel_wrapper::StandardDataChannelWrapper;
   use crate::session::command_processor::CommandProcessor;
   use crate::session::session_properties::SessionProperties;
-  use crate::utils::test_utils::{LOCALHOST, TestReplySender, receive_and_verify_reply};
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn response_test() {
+    setup_tracing();
     let command = Command::new(Commands::Noop, "");
 
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));

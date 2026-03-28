@@ -52,10 +52,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::io::view::View;
-  use crate::utils::test_utils::{
-    CommandProcessorSettings, CommandProcessorSettingsBuilder, TestReplySender,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   async fn common(
     settings: &CommandProcessorSettings,
@@ -87,6 +84,7 @@ mod tests {
 
   #[tokio::test]
   async fn cdup_with_argument_should_reply_501() {
+    setup_tracing();
     let path = current_dir().unwrap();
     let label = "test_files".to_string();
 
@@ -111,6 +109,7 @@ mod tests {
 
   #[tokio::test]
   async fn cdup_from_root_should_reply_550() {
+    setup_tracing();
     let path = current_dir().unwrap();
     let label = "test_files".to_string();
 
@@ -135,6 +134,7 @@ mod tests {
 
   #[tokio::test]
   async fn cdup_from_view_should_return_to_root_and_reply_250() {
+    setup_tracing();
     let path = current_dir().unwrap();
     let label = "test_files".to_string();
 
@@ -160,6 +160,7 @@ mod tests {
 
   #[tokio::test]
   async fn cdup_not_logged_in_should_reply_530() {
+    setup_tracing();
     let path = current_dir().unwrap();
 
     let settings =

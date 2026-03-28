@@ -199,6 +199,7 @@ mod tests {
 
   #[tokio::test]
   async fn server_hello_test() {
+    setup_tracing();
     let token = CancellationToken::new();
     let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 
@@ -248,6 +249,7 @@ mod tests {
 
   #[tokio::test]
   async fn server_hello_quinn_test() {
+    setup_tracing();
     let token = CancellationToken::new();
     let (handler_fut, addr) = run_quic_listener(token.clone(), LOCALHOST).await;
 

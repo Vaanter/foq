@@ -126,6 +126,7 @@ pub(crate) mod tests {
   use crate::auth::data_source::DataSource;
   use crate::auth::login_form::LoginForm;
   use crate::auth::sqlite_data_source::SqliteDataSource;
+  use crate::utils::test_utils::*;
 
   pub(crate) async fn setup_test_db(pool: &SqlitePool) -> sqlx::Result<()> {
     sqlx::query_file!("sql/schema.sql").execute(pool).await?;
@@ -135,6 +136,7 @@ pub(crate) mod tests {
 
   #[sqlx::test]
   async fn login_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_tracing();
     setup_test_db(&pool).await?;
     let data_source = SqliteDataSource::new(pool);
 
@@ -151,6 +153,7 @@ pub(crate) mod tests {
 
   #[sqlx::test]
   async fn login_invalid_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_tracing();
     setup_test_db(&pool).await?;
     let data_source = SqliteDataSource::new(pool);
 
@@ -168,6 +171,7 @@ pub(crate) mod tests {
 
   #[sqlx::test]
   async fn login_invalid_password_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_tracing();
     setup_test_db(&pool).await?;
     let data_source = SqliteDataSource::new(pool);
 
@@ -185,6 +189,7 @@ pub(crate) mod tests {
 
   #[sqlx::test]
   async fn login_corrupted_permissions_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_tracing();
     setup_test_db(&pool).await?;
     let data_source = SqliteDataSource::new(pool);
 

@@ -15,10 +15,13 @@ pub(crate) fn format_timeval(timeval: &DateTime<Local>) -> String {
 mod tests {
   use chrono::NaiveDate;
 
+  use crate::utils::test_utils::*;
+
   use super::*;
 
   #[test]
   fn valid_test() {
+    setup_tracing();
     let timeval = "20020717210715";
     let correct = Local
       .from_local_datetime(
@@ -33,6 +36,7 @@ mod tests {
 
   #[test]
   fn empty_test() {
+    setup_tracing();
     let timeval = "";
     let parsed = parse_timeval(timeval);
     assert!(parsed.is_err())
@@ -40,6 +44,7 @@ mod tests {
 
   #[test]
   fn leap_year_test() {
+    setup_tracing();
     let timeval = "20240214010203";
     let correct = Local
       .from_local_datetime(

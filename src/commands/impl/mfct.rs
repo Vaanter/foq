@@ -42,10 +42,7 @@ pub(crate) async fn mfct(
 #[cfg(test)]
 mod tests {
   use crate::io::timeval::format_timeval;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, FileCleanup, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor, setup_test_command_processor_custom, touch,
-  };
+  use crate::utils::test_utils::*;
   use chrono::{DateTime, Local, TimeDelta, Timelike};
   use std::env::temp_dir;
   use std::fs::File;
@@ -59,6 +56,7 @@ mod tests {
 
   #[tokio::test]
   async fn mfct_not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::Mfct, "20020717210715 file");
     let settings = CommandProcessorSettingsBuilder::default().build().unwrap();
     let command_processor = setup_test_command_processor_custom(&settings);
@@ -77,6 +75,7 @@ mod tests {
 
   #[tokio::test]
   async fn mfct_invalid_timeval_test() {
+    setup_tracing();
     let command = Command::new(Commands::Mfct, "INVALID file");
     let (_, command_processor) = setup_test_command_processor();
 
@@ -94,6 +93,7 @@ mod tests {
 
   #[tokio::test]
   async fn mfct_absolute_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
@@ -132,6 +132,7 @@ mod tests {
 
   #[tokio::test]
   async fn mfct_relative_with_label_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
@@ -168,6 +169,7 @@ mod tests {
 
   #[tokio::test]
   async fn mfct_relative_test() {
+    setup_tracing();
     let label = "test";
     let root = temp_dir();
     let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());

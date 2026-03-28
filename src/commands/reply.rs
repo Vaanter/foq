@@ -107,9 +107,11 @@ mod tests {
 
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
+  use crate::utils::test_utils::*;
 
   #[test]
   fn test_from_string_single_line() {
+    setup_tracing();
     let reply = Reply::new(ReplyCode::CommandOkay, "test");
     let message = reply.to_string();
     let parsed_reply = Reply::from_str(&message);
@@ -123,6 +125,7 @@ mod tests {
 
   #[test]
   fn test_from_string_multiline() {
+    setup_tracing();
     let lines = vec!["Hello", "mid", "Bye"];
     let reply = Reply::new_multiline(ReplyCode::CommandOkay, lines);
     let message = reply.to_string();
@@ -137,6 +140,7 @@ mod tests {
 
   #[test]
   fn from_string_invalid_code_test() {
+    setup_tracing();
     let message = "0 Hello";
     let parsed_reply = Reply::from_str(message);
     assert!(parsed_reply.is_err());
@@ -144,6 +148,7 @@ mod tests {
 
   #[test]
   fn from_string_invalid_no_space_or_minus_test() {
+    setup_tracing();
     let message = "220Hello";
     let parsed_reply = Reply::from_str(message);
     assert!(parsed_reply.is_err());
@@ -151,6 +156,7 @@ mod tests {
 
   #[test]
   fn from_string_invalid_no_message_test() {
+    setup_tracing();
     let message = "220";
     let parsed_reply = Reply::from_str(message);
     assert!(parsed_reply.is_err());
@@ -158,6 +164,7 @@ mod tests {
 
   #[test]
   fn from_string_invalid_no_code_test() {
+    setup_tracing();
     let message = "abc Hello";
     let parsed_reply = Reply::from_str(message);
     assert!(parsed_reply.is_err());

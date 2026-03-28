@@ -185,6 +185,7 @@ mod tests {
 
   #[tokio::test]
   async fn server_hello_test() {
+    setup_tracing();
     let token = CancellationToken::new();
     let ct = token.clone();
     let mut listener = StandardListener::new(LOCALHOST).await.unwrap();

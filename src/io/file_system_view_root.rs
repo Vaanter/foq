@@ -383,6 +383,7 @@ mod tests {
 
   #[tokio::test]
   async fn open_file_not_logged_in_test() {
+    setup_tracing();
     let root = FileSystemViewRoot::new(None);
 
     let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
@@ -396,6 +397,7 @@ mod tests {
   #[tokio::test]
   #[cfg(windows)]
   async fn open_file_windows_like_path_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -415,6 +417,7 @@ mod tests {
 
   #[tokio::test]
   async fn open_file_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -435,6 +438,7 @@ mod tests {
 
   #[tokio::test]
   async fn open_file_relative_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -455,6 +459,7 @@ mod tests {
 
   #[tokio::test]
   async fn open_file_relative_nonexistent_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -477,6 +482,7 @@ mod tests {
 
   #[test]
   fn get_cwd_not_logged_in() {
+    setup_tracing();
     let root = FileSystemViewRoot::new(None);
 
     let cwd = root.get_current_working_directory();
@@ -485,6 +491,7 @@ mod tests {
 
   #[test]
   fn get_cwd_with_view() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -498,6 +505,7 @@ mod tests {
 
   #[test]
   fn cwd_not_logged_in_test() {
+    setup_tracing();
     let mut root = FileSystemViewRoot::new(None);
     let result = root.change_working_directory("/");
     let Err(IoError::UserError) = result else {
@@ -508,6 +516,7 @@ mod tests {
 
   #[test]
   fn cwd_to_root_from_file_system_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -522,6 +531,7 @@ mod tests {
 
   #[test]
   fn cwd_to_root_from_root_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -538,6 +548,7 @@ mod tests {
 
   #[test]
   fn cwd_to_current_from_root_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -554,6 +565,7 @@ mod tests {
 
   #[test]
   fn cwd_to_file_system_from_root_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -572,6 +584,7 @@ mod tests {
 
   #[test]
   fn cwd_to_file_system_from_root_relative_multi_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -590,6 +603,7 @@ mod tests {
 
   #[test]
   fn cwd_to_file_system_from_root_invalid_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -606,6 +620,7 @@ mod tests {
 
   #[test]
   fn cwd_to_file_system_from_root_absolute_multi_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -624,6 +639,7 @@ mod tests {
 
   #[test]
   fn cwd_from_current_relative_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -643,6 +659,7 @@ mod tests {
 
   #[test]
   fn cwd_from_current_to_parent_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read]);
     let root1 = std::env::current_dir().unwrap();
     let label = "current_dir";
@@ -661,6 +678,7 @@ mod tests {
 
   #[test]
   fn create_dir_relative_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Create]);
     let root1 = temp_dir();
     let label = "test";
@@ -680,6 +698,7 @@ mod tests {
 
   #[test]
   fn create_dir_relative_multi_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Create]);
     let root1 = temp_dir();
     let label = "test";
@@ -699,6 +718,7 @@ mod tests {
 
   #[test]
   fn create_dir_relative_invalid_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Create]);
     let root1 = temp_dir();
     let label = "test";
@@ -728,6 +748,7 @@ mod tests {
 
   #[test]
   fn create_dir_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Create]);
     let root1 = temp_dir();
     let label = "test";
@@ -747,6 +768,7 @@ mod tests {
 
   #[test]
   fn create_dir_absolute_multi_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Create]);
     let root1 = temp_dir();
     let label = "test";
@@ -766,6 +788,7 @@ mod tests {
 
   #[test]
   fn create_dir_then_cwd_unicode_absolute_multi_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Create]);
     let root1 = temp_dir();
     let label = "test";
@@ -793,6 +816,7 @@ mod tests {
 
   #[test]
   fn list_dir_not_logged_in_empty_test() {
+    setup_tracing();
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("");
@@ -801,6 +825,7 @@ mod tests {
 
   #[test]
   fn list_dir_not_logged_in_relative_test() {
+    setup_tracing();
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("test_files");
@@ -809,6 +834,7 @@ mod tests {
 
   #[test]
   fn list_dir_not_logged_in_absolute_test() {
+    setup_tracing();
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("/test_files");
@@ -817,6 +843,7 @@ mod tests {
 
   #[test]
   fn list_dir_not_logged_in_parent_test() {
+    setup_tracing();
     let root = FileSystemViewRoot::new(None);
 
     let file = root.list_dir("..");
@@ -827,6 +854,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -846,6 +874,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_dot_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -866,6 +895,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_parent_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -883,6 +913,7 @@ mod tests {
 
   #[test]
   fn list_dir_current_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -906,6 +937,7 @@ mod tests {
 
   #[test]
   fn list_dir_relative_empty_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -928,6 +960,7 @@ mod tests {
 
   #[test]
   fn list_dir_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -949,6 +982,7 @@ mod tests {
 
   #[test]
   fn list_dir_root_from_view_parent_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -964,7 +998,7 @@ mod tests {
     let mut root = FileSystemViewRoot::new(Some(views));
     root.change_working_directory(&format!("/{}", label1)).unwrap();
 
-    let listing = root.list_dir("..").map_err(|e| println!("{}", e)).unwrap();
+    let listing = root.list_dir("..").map_err(|e| tracing_print!("{}", e)).unwrap();
 
     assert_eq!(3, listing.len());
     assert_eq!(HashSet::<&EntryData>::from_iter(listing.iter()).len(), listing.len());
@@ -973,6 +1007,7 @@ mod tests {
 
   #[test]
   fn list_dir_view_parent_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Read, UserPermission::List]);
 
     let mut root1 = std::env::current_dir().unwrap();
@@ -991,6 +1026,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_file_relative_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1017,6 +1053,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_file_relative_with_label_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1042,6 +1079,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_file_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1067,6 +1105,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_file_no_permission_test() {
+    setup_tracing();
     let permissions = HashSet::from([]);
 
     let root1 = temp_dir();
@@ -1092,6 +1131,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_file_folder_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1117,6 +1157,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_relative_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1143,6 +1184,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_relative_with_label_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1168,6 +1210,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1193,6 +1236,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_no_permission_test() {
+    setup_tracing();
     let permissions = HashSet::from([]);
 
     let root1 = temp_dir();
@@ -1218,6 +1262,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_file_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1243,6 +1288,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_recursive_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1269,6 +1315,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_recursive_multi_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1299,6 +1346,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_recursive_relative_with_label_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1324,6 +1372,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_recursive_file_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Delete]);
 
     let root1 = temp_dir();
@@ -1349,6 +1398,7 @@ mod tests {
 
   #[tokio::test]
   async fn delete_folder_recursive_no_permission_test() {
+    setup_tracing();
     let permissions = HashSet::from([]);
 
     let root1 = temp_dir();
@@ -1374,6 +1424,7 @@ mod tests {
 
   #[tokio::test]
   async fn change_file_times_relative_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1404,6 +1455,7 @@ mod tests {
 
   #[tokio::test]
   async fn change_file_times_relative_with_label_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1433,6 +1485,7 @@ mod tests {
 
   #[tokio::test]
   async fn change_file_times_absolute_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();
@@ -1462,6 +1515,7 @@ mod tests {
 
   #[tokio::test]
   async fn change_file_times_no_permission_test() {
+    setup_tracing();
     let permissions = HashSet::new();
 
     let root1 = temp_dir();
@@ -1488,6 +1542,7 @@ mod tests {
 
   #[tokio::test]
   async fn change_file_times_folder_test() {
+    setup_tracing();
     let permissions = HashSet::from([UserPermission::Write, UserPermission::Execute]);
 
     let root1 = temp_dir();

@@ -35,16 +35,18 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::r#impl::feat::{LINES, feat};
-  use crate::utils::test_utils::TestReplySender;
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn format_test() {
+    setup_tracing();
     assert_eq!(LINES.first().unwrap(), "Supported features:");
     assert_eq!(LINES.last().unwrap(), "END");
   }
 
   #[tokio::test]
   async fn full_reply_test() {
+    setup_tracing();
     #[cfg(not(windows))]
     const EXPECTED: &str = "211-Supported features:\r\n MLSD\r\n MFMT\r\n REST STREAM\r\n UTF8\r\n RMDA <path>\r\n211 END\r\n";
     #[cfg(windows)]

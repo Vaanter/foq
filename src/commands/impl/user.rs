@@ -43,13 +43,11 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn set_username_test() {
+    setup_tracing();
     let name = String::from("test");
     let command = Command::new(Commands::User, name.clone());
 
@@ -72,6 +70,7 @@ mod tests {
 
   #[tokio::test]
   async fn empty_username_test() {
+    setup_tracing();
     let command = Command::new(Commands::User, "");
 
     let settings =

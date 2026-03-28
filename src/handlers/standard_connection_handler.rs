@@ -183,10 +183,11 @@ mod tests {
   use crate::handlers::standard_connection_handler::StandardConnectionHandler;
   use crate::listeners::standard_listener::StandardListener;
   use crate::tracing_print;
-  use crate::utils::test_utils::LOCALHOST;
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn server_hello_test() {
+    setup_tracing();
     let mut listener = StandardListener::new(LOCALHOST).await.unwrap();
     let addr = listener.listener.local_addr().unwrap();
     let token = CancellationToken::new();

@@ -5,7 +5,7 @@ use std::io::Error;
 use std::iter::Iterator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -476,15 +476,7 @@ pub(crate) fn setup_quinn_client(tls_config: ClientConfig) -> Endpoint {
   quinn_client
 }
 
-static TRACING_SETUP: AtomicBool = AtomicBool::new(false);
-static PERMIT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
-
-pub async fn setup_tracing() {
-  let _permit = PERMIT.acquire().await.unwrap();
-  let Ok(false) = TRACING_SETUP.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-  else {
-    return;
-  };
+static TRACING_LOCK: LazyLock<()> = LazyLock::new(|| {
   let subscriber = tracing_subscriber::fmt()
     .with_env_filter(format!("foq={}", Level::TRACE))
     // .with_max_level(Level::INFO)
@@ -494,6 +486,10 @@ pub async fn setup_tracing() {
     .with_target(false)
     .finish();
   tracing::subscriber::set_global_default(subscriber).unwrap();
+});
+
+pub fn setup_tracing() {
+  LazyLock::force(&TRACING_LOCK);
 }
 
 pub(crate) mod macros {

@@ -420,6 +420,7 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/2KiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(Path::new(LOCAL_FILE), &remote_file).await;
@@ -427,6 +428,7 @@ mod tests {
 
   #[tokio::test]
   async fn one_mib_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/1MiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(Path::new(LOCAL_FILE), &remote_file).await;
@@ -435,6 +437,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file(2u64.pow(30) as usize, &file_path).await;
@@ -445,6 +448,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
@@ -454,6 +458,7 @@ mod tests {
 
   #[tokio::test]
   async fn ten_paragraphs_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/lorem_10_paragraphs.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common(Path::new(LOCAL_FILE), &remote_file).await;
@@ -461,6 +466,7 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_quic_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/2KiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic(Path::new(LOCAL_FILE), &remote_file).await;
@@ -468,6 +474,7 @@ mod tests {
 
   #[tokio::test]
   async fn one_mib_quic_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/1MiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic(Path::new(LOCAL_FILE), &remote_file).await;
@@ -476,6 +483,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file(2u64.pow(30) as usize, Path::new(&file_path)).await;
@@ -486,6 +494,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((5 * 2u64.pow(30)) as usize, Path::new(&file_path)).await;
@@ -495,6 +504,7 @@ mod tests {
 
   #[tokio::test]
   async fn ten_paragraphs_quic_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/lorem_10_paragraphs.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic(Path::new(LOCAL_FILE), &remote_file).await;
@@ -502,6 +512,7 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_quic_quinn_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/2KiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic_quinn(Path::new(LOCAL_FILE), &remote_file).await;
@@ -509,6 +520,7 @@ mod tests {
 
   #[tokio::test]
   async fn one_mib_quic_quinn_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/1MiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic_quinn(Path::new(LOCAL_FILE), &remote_file).await;
@@ -517,6 +529,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_quic_quinn_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file(2u64.pow(30) as usize, &file_path).await;
@@ -527,6 +540,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_quic_quinn_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
@@ -536,6 +550,7 @@ mod tests {
 
   #[tokio::test]
   async fn ten_paragraphs_quic_quinn_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/lorem_10_paragraphs.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quic_quinn(Path::new(LOCAL_FILE), &remote_file).await;
@@ -543,6 +558,7 @@ mod tests {
 
   #[tokio::test]
   async fn two_kib_quinn_quinn_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/2KiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quinn_quinn(Path::new(LOCAL_FILE), &remote_file).await;
@@ -550,6 +566,7 @@ mod tests {
 
   #[tokio::test]
   async fn one_mib_quinn_quinn_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/1MiB.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quinn_quinn(Path::new(LOCAL_FILE), &remote_file).await;
@@ -558,6 +575,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn one_gib_quinn_quinn_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file(2u64.pow(30) as usize, &file_path).await;
@@ -568,6 +586,7 @@ mod tests {
   #[tokio::test]
   #[ignore]
   async fn five_gib_quinn_quinn_test() {
+    setup_tracing();
     let file_path = temp_dir().join(format!("{}.test", Uuid::new_v4().as_hyphenated()));
     let _cleanup = FileCleanup::new(&file_path);
     generate_test_file((5 * 2u64.pow(30)) as usize, &file_path).await;
@@ -577,6 +596,7 @@ mod tests {
 
   #[tokio::test]
   async fn ten_paragraphs_quinn_quinn_test() {
+    setup_tracing();
     const LOCAL_FILE: &str = "test_files/lorem_10_paragraphs.txt";
     let remote_file = format!("{}.test", Uuid::new_v4().as_hyphenated());
     common_quinn_quinn(Path::new(LOCAL_FILE), &remote_file).await;
@@ -584,6 +604,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let wrapper = Arc::new(StandardDataChannelWrapper::new(LOCALHOST));
     let session_properties = Arc::new(RwLock::new(SessionProperties::new()));
     let mut command_processor = CommandProcessor::new(session_properties, wrapper);
@@ -605,6 +626,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
+    setup_tracing();
     let (_, command_processor) = setup_test_command_processor();
 
     let command = Command::new(Commands::Stor, "NONEXISTENT".to_string());
@@ -622,6 +644,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_file_specified_test() {
+    setup_tracing();
     let (_, mut command_processor) = setup_test_command_processor();
 
     let _ = open_tcp_data_channel(&mut command_processor).await;

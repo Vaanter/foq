@@ -56,9 +56,11 @@ mod tests {
   use crate::auth::login_form::LoginForm;
   use crate::auth::sqlite_data_source::SqliteDataSource;
   use crate::auth::sqlite_data_source::tests::setup_test_db;
+  use crate::utils::test_utils::*;
 
   #[sqlx::test]
   async fn authenticate_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_tracing();
     setup_test_db(&pool).await?;
     let mut provider = AuthProvider::new();
     provider.add_data_source(Box::new(SqliteDataSource::new(pool)));
@@ -71,6 +73,7 @@ mod tests {
 
   #[sqlx::test]
   async fn authenticate_invalid_test(pool: SqlitePool) -> sqlx::Result<()> {
+    setup_tracing();
     setup_test_db(&pool).await?;
     let mut provider = AuthProvider::new();
     provider.add_data_source(Box::new(SqliteDataSource::new(pool)));

@@ -122,10 +122,12 @@ impl FromStr for Command {
 mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
+  use crate::utils::test_utils::*;
   use std::str::FromStr;
 
   #[test]
   fn mlsd_test() {
+    setup_tracing();
     let parsed: Result<Command, anyhow::Error> = Command::from_str("mlsd test");
     assert!(parsed.is_ok());
     assert_eq!(Commands::Mlsd, parsed.as_ref().unwrap().command);
@@ -134,6 +136,7 @@ mod tests {
 
   #[test]
   fn noop_test() {
+    setup_tracing();
     let parsed: Result<Command, anyhow::Error> = Command::from_str("noop");
     assert!(parsed.is_ok());
     assert_eq!(Commands::Noop, parsed.as_ref().unwrap().command);
@@ -142,6 +145,7 @@ mod tests {
 
   #[test]
   fn user_test() {
+    setup_tracing();
     let parsed: Result<Command, anyhow::Error> = Command::from_str("user test");
     assert!(parsed.is_ok());
     assert_eq!(Commands::User, parsed.as_ref().unwrap().command);

@@ -50,13 +50,11 @@ mod tests {
   use crate::commands::command::Command;
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor, setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn cwd_absolute_test() {
+    setup_tracing();
     let command = Command::new(Commands::Cwd, "/test");
 
     let (_, command_processor) = setup_test_command_processor();
@@ -85,6 +83,7 @@ mod tests {
 
   #[tokio::test]
   async fn to_current_test() {
+    setup_tracing();
     let command = Command::new(Commands::Cwd, "/");
 
     let (_, command_processor) = setup_test_command_processor();
@@ -113,6 +112,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::Cwd, "/test");
 
     let settings =
@@ -143,6 +143,7 @@ mod tests {
 
   #[tokio::test]
   async fn no_argument_test() {
+    setup_tracing();
     let command = Command::new(Commands::Cwd, "");
 
     let (_, command_processor) = setup_test_command_processor();

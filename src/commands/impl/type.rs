@@ -82,13 +82,11 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::session::data_type::{DataType, SubType};
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn ascii_non_print_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -126,6 +124,7 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_no_subtype_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -163,6 +162,7 @@ mod tests {
 
   #[tokio::test]
   async fn binary_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -192,6 +192,7 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_tfe_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -226,6 +227,7 @@ mod tests {
 
   #[tokio::test]
   async fn ascii_cc_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -260,6 +262,7 @@ mod tests {
 
   #[tokio::test]
   async fn empty_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()
@@ -291,6 +294,7 @@ mod tests {
 
   #[tokio::test]
   async fn ebcdic_no_subtype_test() {
+    setup_tracing();
     let label = "test_files".to_string();
 
     let settings = CommandProcessorSettingsBuilder::default()

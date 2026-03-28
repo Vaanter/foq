@@ -48,10 +48,7 @@ mod tests {
   use crate::commands::commands::Commands;
   use crate::commands::reply_code::ReplyCode;
   use crate::tracing_print;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, DirCleanup, TestReplySender, receive_and_verify_reply,
-    setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
   use std::env::temp_dir;
   use std::sync::Arc;
   use std::time::Duration;
@@ -61,6 +58,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::Mkd, "");
 
     let settings =
@@ -81,6 +79,7 @@ mod tests {
 
   #[tokio::test]
   async fn mkd_successful_test() {
+    setup_tracing();
     let new_dir_name = Uuid::new_v4().as_hyphenated().to_string();
     tracing_print!("Dir name: {}", new_dir_name);
 

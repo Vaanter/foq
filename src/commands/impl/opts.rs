@@ -57,14 +57,13 @@ mod tests {
   use tokio::sync::mpsc::channel;
   use tokio::time::timeout;
 
-  use crate::utils::test_utils::{
-    TestReplySender, receive_and_verify_reply, setup_test_command_processor,
-  };
+  use crate::utils::test_utils::*;
 
   use super::*;
 
   #[tokio::test]
   pub async fn enable_utf8_test() {
+    setup_tracing();
     let (_, command_processor) = setup_test_command_processor();
     let command_processor = Arc::new(command_processor);
 

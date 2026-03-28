@@ -100,13 +100,11 @@ mod tests {
   use crate::commands::r#impl::shared::ACQUIRE_TIMEOUT;
   use crate::commands::reply_code::ReplyCode;
   use crate::tracing_print;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, open_tcp_data_channel,
-    receive_and_verify_reply, setup_test_command_processor, setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   #[tokio::test]
   async fn list_directory_test() {
+    setup_tracing();
     let command = Command::new(Commands::Nlst, String::new());
     let (_, mut command_processor) = setup_test_command_processor();
 
@@ -147,6 +145,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_logged_in_test() {
+    setup_tracing();
     let command = Command::new(Commands::Nlst, String::new());
     let settings =
       CommandProcessorSettingsBuilder::default().build().expect("Settings should be valid");
@@ -166,6 +165,7 @@ mod tests {
 
   #[tokio::test]
   async fn data_channel_not_open_test() {
+    setup_tracing();
     let command = Command::new(Commands::Nlst, String::new());
     let (_, command_processor) = setup_test_command_processor();
 

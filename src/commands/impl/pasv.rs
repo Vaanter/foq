@@ -66,18 +66,18 @@ mod tests {
   use crate::commands::reply::Reply;
   use crate::commands::reply_code::ReplyCode;
   use crate::tracing_print;
-  use crate::utils::test_utils::{
-    CommandProcessorSettingsBuilder, TestReplySender, setup_test_command_processor_custom,
-  };
+  use crate::utils::test_utils::*;
 
   #[test]
   fn response_test() {
+    setup_tracing();
     let ip = SocketAddrV4::new(Ipv4Addr::from([127, 0, 0, 1]), 55692);
     assert_eq!(create_pasv_response(&ip), "Entering Passive Mode (127,0,0,1,217,140)");
   }
 
   #[tokio::test]
   async fn simple_open_dc() {
+    setup_tracing();
     let command = Command::new(Commands::Pasv, String::new());
 
     let label = "test_files".to_string();
