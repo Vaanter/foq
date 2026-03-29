@@ -195,6 +195,7 @@ mod tests {
   }
 
   #[tokio::test]
+  #[ignore] // Requires other tests that initialize DB to not run
   async fn database_not_setup_test() {
     setup_tracing();
     let mut session_properties = SessionProperties::new();
