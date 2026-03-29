@@ -379,6 +379,7 @@ mod tests {
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
   use crate::io::view::View;
   use crate::io::view_dispatch::ViewDispatch;
+  use crate::{tracing_error, tracing_print};
   use crate::utils::test_utils::*;
 
   #[tokio::test]
