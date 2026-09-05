@@ -68,6 +68,21 @@ pub(crate) trait View {
   /// - [`IoError::NotAFileError`]: If the specified `path` refers to a directory instead of a file.
   ///
   async fn open_file(&self, path: &str, options: OpenOptionsWrapper) -> Result<File, IoError> {
+    let path = self.find_path(path, options)?;
+
+    if path.is_dir() {
+      return Err(IoError::NotAFileError);
+    }
+
+    debug!("Opening: {:?}", &path);
+
+    OpenOptions::from(options).open(&path).await.map_err(|e| {
+      warn!("Error opening file: {}", e);
+      IoError::map_io_error(e)
+    })
+  }
+
+  fn find_path(&self, path: &str, options: OpenOptionsWrapper) -> Result<PathBuf, IoError> {
     if options.read && !self.get_permissions().contains(&UserPermission::Read)
       || (options.write && !self.get_permissions().contains(&UserPermission::Write))
       || (options.create && !self.get_permissions().contains(&UserPermission::Create))
@@ -84,17 +99,9 @@ pub(crate) trait View {
       return Err(IoError::InvalidPathError(String::from("Invalid path!")));
     }
 
-    if path.is_dir() {
-      return Err(IoError::NotAFileError);
-    }
-
-    debug!("Opening: {:?}", &path);
-
-    OpenOptions::from(options).open(&path).await.map_err(|e| {
-      warn!("Error opening file: {}", e);
-      IoError::map_io_error(e)
-    })
+    Ok(path)
   }
+
   async fn delete_file(&self, path: &str) -> Result<(), IoError>;
   async fn delete_folder(&self, path: &str) -> Result<(), IoError>;
   async fn delete_folder_recursive(&self, path: &str) -> Result<(), IoError>;

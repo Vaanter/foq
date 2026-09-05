@@ -6,7 +6,7 @@
 use crate::auth::user_permission::UserPermission;
 use crate::io::entry_data::{EntryData, EntryType};
 use crate::io::error::IoError;
-use crate::io::open_options_flags::OpenOptionsWrapper;
+use crate::io::open_options_flags::{OpenOptionsWrapper, OpenOptionsWrapperBuilder};
 use crate::io::view::View;
 use crate::io::view_dispatch::ViewDispatch;
 use std::collections::HashMap;
@@ -316,8 +316,83 @@ impl FileSystemViewRoot {
     }
   }
 
-  fn find_view(&self, path: &str) -> Option<(ViewType<'_>, String)> {
-    let mut parts = path.split('/');
+  /// Renames a file or directory. Effectively moves an object from one path to another.
+  ///
+  /// This function looks up a view based on `from_path` and another one based on `to_path`.
+  /// Both views must be [`ViewType::Real`] (i.e. they refer to a real file system) as objects
+  /// in the virtual vies are managed by a DB and cannot be altered from outside. An object
+  /// pointed to by `from_path` must exist. Object at  `to_path` will be overwritten if it exists.
+  ///
+  /// # Arguments
+  ///
+  /// - `from_path`: A source path of an object that will be renamed and thus might no longer exist
+  /// afterward.
+  ///  - `to_path`: A target path to which the source object will be renamed/moved.
+  ///
+  /// # Returns
+  ///
+  /// An empty [`Result`] if successful, or an [`IoError`] if an error occurs.
+  ///
+  /// # Errors
+  ///
+  /// This function can return the following [`IoError`] variants:
+  ///
+  /// - [`IoError::UserError`]: If the user is not logged in.
+  /// - [`IoError::NotFoundError`]: If the source object does not exist.
+  /// - [`IoError::InvalidPathError`]: If the source and/or the target refer to an object in a
+  /// virtual view.
+  /// - Other [`IoError`] mapped from [`tokio::fs::rename`].
+  ///
+  #[instrument(skip(self))]
+  pub(crate) async fn rename_object(&self, from_path: &str, to_path: &str) -> Result<(), IoError> {
+    trace!("Renaming object");
+    if self.file_system_views.is_none() {
+      return Err(IoError::UserError);
+    }
+
+    if from_path.is_empty() || from_path == "/" || to_path.is_empty() || to_path == "/" {
+      return Err(IoError::InvalidPathError(String::from("Can not rename the root directory")));
+    }
+
+    let view_from = self.find_view(from_path);
+    let view_to = self.find_view(to_path);
+
+    match (view_from, view_to) {
+      (
+        Some((ViewType::Real(from_v), from_sub_path)),
+        Some((ViewType::Real(to_v), to_sub_path)),
+      ) => {
+        if from_sub_path.is_empty() || to_sub_path.is_empty() {
+          return Err(IoError::InvalidPathError(String::from("Renaming a view is not allowed")));
+        }
+
+        let rename_options = OpenOptionsWrapperBuilder::default()
+          .read(true)
+          .write(true)
+          .truncate(true)
+          .build()
+          .unwrap();
+        let from_pathbuf = from_v.find_path(&from_sub_path, rename_options)?;
+        if !from_pathbuf.exists() {
+          return Err(IoError::NotFoundError(String::from("Source path does not exist")));
+        }
+        let to_pathbuf = to_v.find_path(&to_sub_path, rename_options)?;
+
+        debug!("Renaming - from: {:?} to {:?}", &from_pathbuf, &to_pathbuf);
+        if let Err(e) = tokio::fs::rename(&from_pathbuf, &to_pathbuf).await {
+          debug!("Failed to rename: {:?}", e);
+          return Err(IoError::map_io_error(e));
+        }
+
+        Ok(())
+      }
+      (Some((ViewType::Virtual(_), _)), _) | (_, Some((ViewType::Virtual(_), _))) => {
+        Err(IoError::InvalidPathError(String::from("Renaming a view is not allowed")))
+      }
+      (_, _) => Err(IoError::NotFoundError(String::from("Source or target path does not exist"))),
+    }
+  }
+
   #[instrument(skip(self), fields(has_views = self.file_system_views.is_some(), in_view = self.current_view.is_some()))]
   fn find_view<'a>(&self, path: &'a str) -> Option<(ViewType<'_>, &'a str)> {
     trace!("Finding view for path");
@@ -370,11 +445,13 @@ impl FileSystemViewRoot {
 
 #[cfg(test)]
 mod tests {
+  use blake3::Hasher;
   use chrono::{DateTime, Local, TimeDelta};
   use std::collections::{HashMap, HashSet};
   use std::env::temp_dir;
   use std::fs::{File, FileTimes};
   use std::ops::Sub;
+  use tracing::info;
   use uuid::Uuid;
 
   use crate::auth::user_permission::UserPermission;
@@ -386,8 +463,8 @@ mod tests {
   use crate::io::open_options_flags::OpenOptionsWrapperBuilder;
   use crate::io::view::View;
   use crate::io::view_dispatch::ViewDispatch;
-  use crate::{tracing_error, tracing_print};
   use crate::utils::test_utils::*;
+  use crate::{tracing_error, tracing_print};
 
   #[tokio::test]
   async fn open_file_not_logged_in_test() {
@@ -1573,6 +1650,274 @@ mod tests {
     let Err(IoError::NotAFileError) = result else {
       panic!("Expected NotAFile Error, got: {:?}", result);
     };
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view1_relative_relative_test() {
+    setup_tracing();
+    rename_object_common(true, Some(true), true, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view1_relative_absolute_test() {
+    setup_tracing();
+    rename_object_common(true, Some(true), true, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view1_absolute_relative_test() {
+    setup_tracing();
+    rename_object_common(true, Some(true), false, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view1_absolute_absolute_test() {
+    setup_tracing();
+    rename_object_common(true, Some(true), false, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view2_relative_relative_test() {
+    setup_tracing();
+    rename_object_common(true, Some(false), true, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view2_relative_absolute_test() {
+    setup_tracing();
+    rename_object_common(true, Some(false), true, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view2_absolute_relative_test() {
+    setup_tracing();
+    rename_object_common(true, Some(false), false, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_view2_absolute_absolute_test() {
+    setup_tracing();
+    rename_object_common(true, Some(false), false, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_root_relative_relative_test() {
+    setup_tracing();
+    rename_object_common(true, None, true, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_root_relative_absolute_test() {
+    setup_tracing();
+    rename_object_common(true, None, true, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_root_absolute_relative_test() {
+    setup_tracing();
+    rename_object_common(true, None, false, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_same_view_in_root_absolute_absolute_test() {
+    setup_tracing();
+    rename_object_common(true, None, false, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_view1_relative_absolute_test() {
+    setup_tracing();
+    rename_object_common(false, Some(true), true, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_view1_absolute_absolute_test() {
+    setup_tracing();
+    rename_object_common(false, Some(true), false, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_view2_absolute_absolute_test() {
+    setup_tracing();
+    rename_object_common(false, Some(false), false, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_root_relative_relative_test() {
+    setup_tracing();
+    rename_object_common(false, None, true, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_root_relative_absolute_test() {
+    setup_tracing();
+    rename_object_common(false, None, true, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_root_absolute_relative_test() {
+    setup_tracing();
+    rename_object_common(false, None, false, true).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_diff_view_in_root_absolute_absolute_test() {
+    setup_tracing();
+    rename_object_common(false, None, false, false).await;
+  }
+
+  #[tokio::test]
+  async fn rename_object_insufficient_permission_test() {
+    setup_tracing();
+    let permissions = HashSet::new();
+
+    let label1 = format!("test_files1-{}", Uuid::new_v4().as_hyphenated());
+    let view1 = FileSystemView::new(temp_dir(), &label1, permissions.clone());
+    let views = create_root(vec![view1]);
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let file_name1 = format!("{}/{}_1.test", label1, Uuid::new_v4().as_hyphenated());
+    let file_name2 = format!("{}/{}_2.test", label1, Uuid::new_v4().as_hyphenated());
+    let Err(IoError::PermissionError) = root.rename_object(&file_name1, &file_name2).await else {
+      panic!("Expected permission error");
+    };
+  }
+
+  #[tokio::test]
+  async fn rename_object_nonexistent_file_test() {
+    setup_tracing();
+    let permissions =
+      HashSet::from([UserPermission::Read, UserPermission::Write, UserPermission::Delete]);
+
+    let label1 = format!("test_files1-{}", Uuid::new_v4().as_hyphenated());
+    let view1 = FileSystemView::new(temp_dir(), &label1, permissions.clone());
+    let views = create_root(vec![view1]);
+    let root = FileSystemViewRoot::new(Some(views));
+
+    let file_name1 = format!("{}/{}_1.test", label1, Uuid::new_v4().as_hyphenated());
+    let file_name2 = format!("{}/{}_2.test", label1, Uuid::new_v4().as_hyphenated());
+    let result = root.rename_object(&file_name1, &file_name2).await;
+    tracing_error!("Result: {result:?}");
+    let Err(IoError::NotFoundError(_)) = result else {
+      panic!("Expected not found error");
+    };
+  }
+
+  #[tokio::test]
+  async fn rename_object_root_test() {
+    setup_tracing();
+    let permissions =
+      HashSet::from([UserPermission::Read, UserPermission::Write, UserPermission::Delete]);
+
+    let label1 = format!("test_files1-{}", Uuid::new_v4().as_hyphenated());
+    let file_name1 = format!("test_file1-{}", Uuid::new_v4().as_hyphenated());
+    let file_path1 = temp_dir().join(&file_name1);
+    let view1 = FileSystemView::new(temp_dir(), &label1, permissions.clone());
+    let views = create_root(vec![view1]);
+    let root = FileSystemViewRoot::new(Some(views));
+
+    touch(&file_path1).unwrap();
+    let args = vec![
+      ("", file_name1.as_str()),
+      (file_name1.as_str(), ""),
+      ("", ""),
+      ("/", file_name1.as_str()),
+      (file_name1.as_str(), "/"),
+      ("/", "/"),
+    ];
+    for (file_name1, file_name2) in args {
+      let result = root.rename_object(file_name1, file_name2).await;
+      info!("Result: {result:?}");
+      let Err(IoError::InvalidPathError(_)) = result else {
+        panic!("Expected invalid path error");
+      };
+    }
+  }
+
+  /// in_view: Some(true) = in view1, Some(false) = in view2, None = in neither view
+  async fn rename_object_common(
+    same_view: bool,
+    in_view: Option<bool>,
+    path1_relative: bool,
+    path2_relative: bool,
+  ) {
+    setup_tracing();
+    let permissions =
+      HashSet::from([UserPermission::Read, UserPermission::Write, UserPermission::Delete]);
+
+    let temp_dir = temp_dir();
+
+    let label1 = format!("test_files1-{}", Uuid::new_v4().as_hyphenated());
+    let view_path1 = temp_dir.join(&label1);
+    create_dir(&view_path1).expect("Test directory 1 should exist");
+    let _cleanup_dir1 = DirCleanup::new(&view_path1);
+    let view1 = FileSystemView::new(temp_dir.join(&label1), &label1, permissions.clone());
+
+    let label2 = format!("test_files2-{}", Uuid::new_v4().as_hyphenated());
+    let view_path2 = temp_dir.join(&label2);
+    create_dir(&view_path2).expect("Test directory 2 should exist");
+    let _cleanup_dir2 = DirCleanup::new(&view_path2);
+    let view2 = FileSystemView::new(temp_dir.join(&label2), &label2, permissions.clone());
+    let views = create_root(vec![view1, view2]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    if let Some(iv) = in_view {
+      if iv {
+        assert!(root.change_working_directory(&format!("/{}", label1)).unwrap());
+      } else {
+        assert!(root.change_working_directory(&format!("/{}", label2)).unwrap());
+      }
+    }
+
+    info!("Current path: {:?}", root.get_current_working_directory());
+    let file_name1 = format!("{}_1.test", Uuid::new_v4().as_hyphenated());
+    let file_path1 = match (in_view, same_view) {
+      (Some(true), true) | (None, true) | (_, false) => view_path1.join(&file_name1),
+      (Some(false), true) => view_path2.join(&file_name1),
+    };
+    generate_test_file(2u64.pow(20) as usize, &file_path1).await;
+    let _cleanup1 = FileCleanup::new(&file_path1);
+
+    let mut hasher1 = Hasher::new();
+    hasher1.update_reader(File::open(&file_path1).unwrap()).unwrap();
+    let hash1 = hasher1.finalize();
+
+    let file_name2 = format!("{}_2.test", Uuid::new_v4().as_hyphenated());
+    let file_path2 = match (same_view, in_view) {
+      (true, Some(true)) | (true, None) => view_path1.join(&file_name2),
+      (true, Some(false)) | (false, _) => view_path2.join(&file_name2),
+    };
+    let _cleanup2 = same_view.then(|| FileCleanup::new(&file_path2));
+
+    let from_path = match (same_view, in_view, path1_relative) {
+      (true, Some(_), true) | (false, Some(true), true) => file_name1.to_string(),
+      (true, None, true) | (false, None, true) => format!("{}/{}", label1, file_name1),
+      (true, Some(false), false) => format!("/{}/{}", label2, file_name1),
+      (true, Some(_), false) | (true, _, false) | (_, _, false) => {
+        format!("/{}/{}", label1, file_name1)
+      }
+      (false, Some(false), true) => panic!("Invalid test parameters"),
+    };
+
+    let to_path = match (same_view, in_view, path2_relative) {
+      (true, Some(_), true) | (false, Some(false), true) => file_name2.to_string(),
+      (true, None, true) => format!("{}/{}", label1, file_name2),
+      (false, None, true) => format!("{}/{}", label2, file_name2),
+      (true, Some(true), false) | (true, None, false) => format!("/{}/{}", label1, file_name2),
+      (false, Some(true), true) => panic!("Invalid test parameters"),
+      (_, _, false) => format!("/{}/{}", label2, file_name2),
+    };
+
+    assert!(!file_path2.exists());
+    root.rename_object(&from_path, &to_path).await.unwrap();
+    assert!(!file_path1.exists());
+    info!("file_path2 = {:?}", &file_path2);
+
+    let mut hasher2 = Hasher::new();
+    hasher2.update_reader(File::open(&file_path2).unwrap()).unwrap();
+    let hash2 = hasher2.finalize();
+
+    assert_eq!(hash1, hash2);
   }
 
   pub(crate) fn create_root(views: Vec<FileSystemView>) -> HashMap<String, ViewDispatch> {
