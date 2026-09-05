@@ -92,10 +92,12 @@ impl FileSystemViewRoot {
           .unwrap()
           .get_mut(self.current_view.as_ref().unwrap())
           .unwrap()
-          .change_working_directory(&sub_path)
+          .change_working_directory(sub_path)
       }
       Some((ViewType::Virtual(_), _)) => Ok(self.current_view.take().is_some()),
-      None => Err(IoError::InvalidPathError(String::from("Path is not available or accessible!"))),
+      None => {
+        Err(IoError::InvalidPathError(String::from("Path is not available or inaccessible!")))
+      }
     }
   }
 
@@ -114,7 +116,7 @@ impl FileSystemViewRoot {
 
     match self.find_view(path) {
       Some((ViewType::Virtual(_), _)) => Err(IoError::SystemError),
-      Some((ViewType::Real(v), sub_path)) => v.create_directory(&sub_path),
+      Some((ViewType::Real(v), sub_path)) => v.create_directory(sub_path),
       None => Err(IoError::InvalidPathError(String::from("Directory path is invalid!"))),
     }
   }
@@ -163,7 +165,7 @@ impl FileSystemViewRoot {
     if let Some((view_type, sub_path)) = self.find_view(path) {
       match view_type {
         ViewType::Virtual(v) => v.list_root(),
-        ViewType::Real(v) => v.list_dir(&sub_path),
+        ViewType::Real(v) => v.list_dir(sub_path),
       }
     } else {
       Err(IoError::InvalidPathError(String::from("Invalid path!")))
@@ -230,7 +232,7 @@ impl FileSystemViewRoot {
       Some((ViewType::Virtual(_), _)) => {
         Err(IoError::InvalidPathError(String::from("Path references a directory, not a file!")))
       }
-      Some((ViewType::Real(v), subpath)) => v.open_file(&subpath, options).await,
+      Some((ViewType::Real(v), subpath)) => v.open_file(subpath, options).await,
       None => Err(IoError::UserError),
     }
   }
@@ -248,7 +250,7 @@ impl FileSystemViewRoot {
     let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
-      v.delete_file(&sub_path).await
+      v.delete_file(sub_path).await
     } else {
       Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
@@ -267,7 +269,7 @@ impl FileSystemViewRoot {
     let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
-      v.delete_folder(&sub_path).await
+      v.delete_folder(sub_path).await
     } else {
       Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
@@ -286,7 +288,7 @@ impl FileSystemViewRoot {
     let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
-      v.delete_folder_recursive(&sub_path).await
+      v.delete_folder_recursive(sub_path).await
     } else {
       Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
@@ -310,7 +312,7 @@ impl FileSystemViewRoot {
     let view = self.find_view(path);
 
     if let Some((ViewType::Real(v), sub_path)) = view {
-      v.change_file_times(new_time, &sub_path).await
+      v.change_file_times(new_time, sub_path).await
     } else {
       Err(IoError::NotFoundError(String::from("Path doesn't exist!")))
     }
@@ -372,11 +374,11 @@ impl FileSystemViewRoot {
           .truncate(true)
           .build()
           .unwrap();
-        let from_pathbuf = from_v.find_path(&from_sub_path, rename_options)?;
+        let from_pathbuf = from_v.find_path(from_sub_path, rename_options)?;
         if !from_pathbuf.exists() {
           return Err(IoError::NotFoundError(String::from("Source path does not exist")));
         }
-        let to_pathbuf = to_v.find_path(&to_sub_path, rename_options)?;
+        let to_pathbuf = to_v.find_path(to_sub_path, rename_options)?;
 
         debug!("Renaming - from: {:?} to {:?}", &from_pathbuf, &to_pathbuf);
         if let Err(e) = tokio::fs::rename(&from_pathbuf, &to_pathbuf).await {
@@ -774,11 +776,11 @@ mod tests {
     let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
     let _cleanup = DirCleanup::new(&dir_path);
-    let test_path = format!("{}/{}", &label, &path_start);
+    let test_path = format!("{}/{}", label, path_start);
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
-    assert_eq!(format!("/{}", &test_path), result.unwrap());
+    assert_eq!(format!("/{}", test_path), result.unwrap());
   }
 
   #[test]
@@ -794,11 +796,11 @@ mod tests {
     let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
     let _cleanup = DirCleanup::new(&dir_path);
-    let test_path = format!("{}/{}/{}", &label, &path_start, Uuid::new_v4().as_hyphenated());
+    let test_path = format!("{}/{}/{}", label, path_start, Uuid::new_v4().as_hyphenated());
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
-    assert_eq!(format!("/{}", &test_path), result.unwrap());
+    assert_eq!(format!("/{}", test_path), result.unwrap());
   }
 
   #[test]
@@ -822,7 +824,7 @@ mod tests {
     for path_start in invalid_characters {
       let dir_path = temp_dir().join(path_start);
       let _cleanup = DirCleanup::new(&dir_path);
-      let test_path = format!("{}/{}", &label, &path_start);
+      let test_path = format!("{}/{}", label, path_start);
 
       let result = root.create_directory(&test_path);
       let Err(IoError::OsError(_)) = result else {
@@ -844,11 +846,11 @@ mod tests {
     let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
     let _cleanup = DirCleanup::new(&dir_path);
-    let test_path = format!("/{}/{}", &label, &path_start);
+    let test_path = format!("/{}/{}", label, path_start);
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
-    assert_eq!(format!("{}", &test_path), result.unwrap());
+    assert_eq!(test_path.to_string(), result.unwrap());
   }
 
   #[test]
@@ -864,11 +866,11 @@ mod tests {
     let path_start = Uuid::new_v4().as_hyphenated().to_string();
     let dir_path = temp_dir().join(&path_start);
     let _cleanup = DirCleanup::new(&dir_path);
-    let test_path = format!("/{}/{}/{}", &label, &path_start, Uuid::new_v4().as_hyphenated());
+    let test_path = format!("/{}/{}/{}", label, path_start, Uuid::new_v4().as_hyphenated());
 
     let result = root.create_directory(&test_path);
     assert!(result.is_ok());
-    assert_eq!(format!("{}", &test_path), result.unwrap());
+    assert_eq!(test_path.to_string(), result.unwrap());
   }
 
   #[test]
@@ -884,13 +886,13 @@ mod tests {
     let path_start = "测试目录";
     let dir_path = temp_dir().join(path_start);
     let _cleanup = DirCleanup::new(&dir_path);
-    let test_path = format!("/{}/{}", &label, &path_start);
+    let test_path = format!("/{}/{}", label, path_start);
     let test_sub_path = "测试子目录";
-    let full_test_path = format!("{}/{}", &test_path, &test_sub_path);
+    let full_test_path = format!("{}/{}", test_path, test_sub_path);
 
     let result = root.create_directory(&full_test_path);
     assert!(result.is_ok());
-    assert_eq!(format!("{}", &full_test_path), result.unwrap());
+    assert_eq!(full_test_path.to_string(), result.unwrap());
 
     assert!(root.change_working_directory(&test_path).unwrap());
     assert!(root.change_working_directory("..").unwrap());
