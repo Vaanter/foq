@@ -13,8 +13,9 @@ use std::collections::HashMap;
 use std::fs::FileTimes;
 use std::time::SystemTime;
 use tokio::fs::File;
-use tracing::debug;
+use tracing::{debug, trace};
 use tracing_attributes::instrument;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Contains the users file system views.
 #[derive(Debug, Default, PartialEq)]
@@ -317,15 +318,18 @@ impl FileSystemViewRoot {
 
   fn find_view(&self, path: &str) -> Option<(ViewType<'_>, String)> {
     let mut parts = path.split('/');
+  #[instrument(skip(self), fields(has_views = self.file_system_views.is_some(), in_view = self.current_view.is_some()))]
+  fn find_view<'a>(&self, path: &'a str) -> Option<(ViewType<'_>, &'a str)> {
+    trace!("Finding view for path");
     if path == "/" || path == "~" {
-      Some((ViewType::Virtual(self), String::new()))
+      Some((ViewType::Virtual(self), ""))
     } else if path == ".." || path == "." {
       if let Some(ref label) = self.current_view {
         if let Some(v) = self.file_system_views.as_ref().unwrap().get(label) {
           if v.get_root_path() == v.get_current_path() && path == ".." {
-            Some((ViewType::Virtual(self), path.to_string()))
+            Some((ViewType::Virtual(self), path))
           } else {
-            Some((ViewType::Real(v), path.to_string()))
+            Some((ViewType::Real(v), path))
           }
         } else {
           None
@@ -333,30 +337,33 @@ impl FileSystemViewRoot {
       } else if path == ".." {
         None
       } else {
-        Some((ViewType::Virtual(self), ".".to_string()))
+        Some((ViewType::Virtual(self), "."))
       }
-    } else if path.starts_with('/') {
-      let label = parts.nth(1).expect("Path cannot be empty here!");
-      let mut view_path = "/".to_string();
-      view_path.push_str(&parts.collect::<Vec<&str>>().join("/"));
-      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), view_path))
+    } else if path.starts_with('/') || (self.current_view.is_none() && !path.is_empty()) {
+      // skip the starting slash
+      let offset = if path.starts_with('/') { 1 } else { 0 };
+      let mut sub_path_iter = path.graphemes(true).skip(offset);
+      let slash_idx = sub_path_iter
+        .position(|c| {
+          if c == "/" {
+            return true;
+          }
+          false
+        })
+        .map(|idx| idx + offset);
+      trace!("Slash index: {:?}", slash_idx);
+      let view = self.file_system_views.as_ref().unwrap();
+      if let Some(idx) = slash_idx {
+        view.get(&path[offset..idx]).map(|v| (ViewType::Real(v), &path[idx + offset..]))
+      } else {
+        view.get(&path[offset..]).map(|v| (ViewType::Real(v), ""))
+      }
     } else if let Some(ref label) = self.current_view {
-      self
-        .file_system_views
-        .as_ref()
-        .unwrap()
-        .get(label)
-        .map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
+      self.file_system_views.as_ref().unwrap().get(label).map(|v| (ViewType::Real(v), path))
     } else if path.is_empty() {
-      Some((ViewType::Virtual(self), String::new()))
+      Some((ViewType::Virtual(self), ""))
     } else {
-      let label = parts.next().expect("Path cannot be empty here!");
-      self
-        .file_system_views
-        .as_ref()
-        .unwrap()
-        .get(label)
-        .map(|v| (ViewType::Real(v), parts.collect::<Vec<&str>>().join("/")))
+      unreachable!("Path should have had all possibilities checked!");
     }
   }
 }
