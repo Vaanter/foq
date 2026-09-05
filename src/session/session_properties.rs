@@ -24,6 +24,7 @@ pub(crate) struct SessionProperties {
   pub(crate) utf8: bool,
   pub(crate) prot_mode: ProtMode,
   pub(crate) pbsz: Option<u32>,
+  pub(crate) rnfr: Option<String>,
 }
 
 impl SessionProperties {
