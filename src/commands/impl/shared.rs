@@ -149,6 +149,16 @@ pub(crate) fn get_modify_time_reply(
   }
 }
 
+pub(crate) fn get_rename_reply(rename_result: Result<(), IoError>) -> Reply {
+  match rename_result {
+    Ok(()) => Reply::new(ReplyCode::RequestedFileActionOkay, "File renamed"),
+    Err(IoError::NotFoundError(message)) | Err(IoError::InvalidPathError(message)) => {
+      Reply::new(ReplyCode::RequestedActionNotTakenFileNameNotAllowed, message)
+    }
+    Err(e) => map_error_to_reply(e),
+  }
+}
+
 pub(crate) async fn copy_data<F, T>(from: &mut F, to: &mut T) -> Result<(), io::Error>
 where
   F: AsyncBufRead + Unpin,

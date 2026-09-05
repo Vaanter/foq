@@ -24,6 +24,7 @@ pub(crate) mod retr;
 pub(crate) mod rmd;
 pub(crate) mod rmda;
 pub(crate) mod rnfr;
+pub(crate) mod rnto;
 pub(crate) mod shared;
 pub(crate) mod stor;
 pub(crate) mod syst;
