@@ -431,7 +431,7 @@ impl FileSystemViewRoot {
       trace!("Slash index: {:?}", slash_idx);
       let view = self.file_system_views.as_ref().unwrap();
       if let Some(idx) = slash_idx {
-        view.get(&path[offset..idx]).map(|v| (ViewType::Real(v), &path[idx + offset..]))
+        view.get(&path[offset..idx]).map(|v| (ViewType::Real(v), &path[idx..]))
       } else {
         view.get(&path[offset..]).map(|v| (ViewType::Real(v), ""))
       }
@@ -520,6 +520,33 @@ mod tests {
     let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
     let root = FileSystemViewRoot::new(Some(views));
     let file = root.open_file(&format!("/{label2}/2KiB.txt"), options).await;
+    assert!(file.is_ok());
+  }
+
+  #[tokio::test]
+  async fn open_file_absolute_view_in_path_test() {
+    setup_tracing();
+    let permissions = HashSet::from([UserPermission::Read]);
+
+    let root1 = temp_dir();
+    let label = "test";
+    let view1 = FileSystemView::new(root1.clone(), label, permissions.clone());
+    let views = create_root(vec![view1]);
+
+    let mut root = FileSystemViewRoot::new(Some(views));
+    let dir_name =  Uuid::new_v4().as_hyphenated().to_string();
+    let subdir_name = Uuid::new_v4().as_hyphenated().to_string();
+    let file_name = format!("{}.test", Uuid::new_v4().as_hyphenated());
+    let dir_path = temp_dir().join(&dir_name);
+    let dir_subpath = dir_path.join(&subdir_name);
+    let _cleanup = DirCleanup::new(&dir_path);
+    create_dir(&dir_subpath).expect("Test directory should exist");
+    let file_path = dir_subpath.join(&file_name);
+    touch(&file_path).expect("Test file must exist");
+
+    let options = OpenOptionsWrapperBuilder::default().read(true).build().unwrap();
+    assert!(root.change_working_directory(&format!("/{label}/{dir_name}")).is_ok());
+    let file = root.open_file(&format!("/{label}/{dir_name}/{subdir_name}/{file_name}"), options).await;
     assert!(file.is_ok());
   }
 
